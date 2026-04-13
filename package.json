@@ -1,0 +1,31 @@
+{
+  "name": "tokenledger",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=25"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "desktop": "tauri",
+    "compare:ts-rust": "node scripts/compare-ts-rust.mjs",
+    "package:app": "bash scripts/package-app.sh",
+    "package:desktop": "tauri build",
+    "package:mac": "tauri build",
+    "package:win": "tauri build",
+    "package:linux": "tauri build"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.9.1"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.9.1",
+    "@types/node": "^24.6.0",
+    "typescript": "^5.9.3",
+    "vite": "^7.1.7"
+  }
+}

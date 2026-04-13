@@ -1,0 +1,185 @@
+name: Release Desktop App
+
+on:
+  push:
+    tags:
+      - "v*"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+env:
+  CI: true
+
+jobs:
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Create or update release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          if gh release view "$TAG_NAME" >/dev/null 2>&1; then
+            echo "Release $TAG_NAME already exists."
+          else
+            gh release create "$TAG_NAME" \
+              --title "$TAG_NAME" \
+              --generate-notes
+          fi
+
+  build-and-upload:
+    name: Build And Upload (${{ matrix.label }})
+    needs: create-release
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            label: macOS arm64
+            asset_suffix: macos-arm64
+            bundle_root: src-tauri/target/aarch64-apple-darwin/release/bundle
+            tauri_args: --target aarch64-apple-darwin
+            rust_targets: aarch64-apple-darwin
+          - os: macos-latest
+            label: macOS x64
+            asset_suffix: macos-x64
+            bundle_root: src-tauri/target/x86_64-apple-darwin/release/bundle
+            tauri_args: --target x86_64-apple-darwin
+            rust_targets: x86_64-apple-darwin
+          - os: windows-latest
+            label: Windows x64
+            asset_suffix: windows-x64
+            bundle_root: src-tauri/target/release/bundle
+            tauri_args: ""
+            rust_targets: ""
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 25
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_targets }}
+
+      - name: Cache Rust artifacts
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Check frontend types
+        run: npm run typecheck
+
+      - name: Run Rust tests
+        working-directory: src-tauri
+        run: cargo test
+
+      - name: Build desktop bundles
+        run: npm run desktop -- build --ci --no-sign ${{ matrix.tauri_args }}
+
+      - name: Upload release assets
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG_NAME: ${{ github.ref_name }}
+          ASSET_SUFFIX: ${{ matrix.asset_suffix }}
+          BUNDLE_ROOT: ${{ matrix.bundle_root }}
+        run: |
+          shopt -s nullglob
+          upload_dir="$RUNNER_TEMP/release-assets"
+          mkdir -p "$upload_dir"
+          safe_app_name="$(node -p "JSON.parse(require('node:fs').readFileSync('src-tauri/tauri.conf.json','utf8')).productName.replace(/[^A-Za-z0-9._-]+/g, '-')")"
+
+          copy_with_suffix() {
+            local source_path="$1"
+            local suffix="$2"
+            local extension
+            local renamed
+
+            case "$source_path" in
+              *.app.tar.gz)
+                extension=".app.tar.gz"
+                ;;
+              *.tar.gz)
+                extension=".tar.gz"
+                ;;
+              *.AppImage)
+                extension=".AppImage"
+                ;;
+              *.dmg)
+                extension=".dmg"
+                ;;
+              *.deb)
+                extension=".deb"
+                ;;
+              *.rpm)
+                extension=".rpm"
+                ;;
+              *.msi)
+                extension=".msi"
+                ;;
+              *.exe)
+                extension=".exe"
+                ;;
+              *.zip)
+                extension=".zip"
+                ;;
+              *)
+                extension=""
+                ;;
+            esac
+
+            renamed="${safe_app_name}-${TAG_NAME}-${suffix}${extension}"
+            cp "$source_path" "$upload_dir/$renamed"
+          }
+
+          case "$RUNNER_OS" in
+            macOS)
+              files=(
+                "$BUNDLE_ROOT"/dmg/*.dmg
+              )
+              ;;
+            Windows)
+              files=(
+                "$BUNDLE_ROOT"/msi/*.msi
+                "$BUNDLE_ROOT"/nsis/*.exe
+                "$BUNDLE_ROOT"/nsis/*.zip
+              )
+              ;;
+            *)
+              echo "Unsupported runner OS: $RUNNER_OS" >&2
+              exit 1
+              ;;
+          esac
+
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "No release assets found for $RUNNER_OS." >&2
+            find src-tauri/target -maxdepth 5 -type f | sort || true
+            exit 1
+          fi
+
+          for file in "${files[@]}"; do
+            copy_with_suffix "$file" "$ASSET_SUFFIX"
+          done
+
+          gh release upload "$TAG_NAME" "$upload_dir"/* --clobber

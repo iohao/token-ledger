@@ -1,0 +1,54 @@
+[[permission]]
+identifier = "allow-ping"
+description = "Allows the frontend to call the ping command."
+commands.allow = ["ping"]
+
+[[permission]]
+identifier = "allow-get-dashboard"
+description = "Allows the frontend to load dashboard data from SQLite."
+commands.allow = ["get_dashboard"]
+
+[[permission]]
+identifier = "allow-get-sync-preview"
+description = "Allows the frontend to inspect the current sync preview."
+commands.allow = ["get_sync_preview"]
+
+[[permission]]
+identifier = "allow-start-sync"
+description = "Allows the frontend to start the background sync task."
+commands.allow = ["start_sync"]
+
+[[permission]]
+identifier = "allow-is-sync-running"
+description = "Allows the frontend to check whether a sync task is currently running."
+commands.allow = ["is_sync_running"]
+
+[[permission]]
+identifier = "allow-get-sync-status"
+description = "Allows the frontend to load the persisted sync status."
+commands.allow = ["get_sync_status"]
+
+[[permission]]
+identifier = "allow-get-sync-progress"
+description = "Allows the frontend to read in-memory sync progress snapshots."
+commands.allow = ["get_sync_progress"]
+
+[[permission]]
+identifier = "allow-get-app-meta"
+description = "Allows the frontend to read app metadata."
+commands.allow = ["get_app_meta"]
+
+[[permission]]
+identifier = "allow-query-daily-usage"
+description = "Allows the frontend to query daily usage within a date range."
+commands.allow = ["query_daily_usage"]
+
+[[permission]]
+identifier = "allow-set-database-path"
+description = "Allows the frontend to update the SQLite database path."
+commands.allow = ["set_database_path"]
+
+[[permission]]
+identifier = "allow-reset-database-path"
+description = "Allows the frontend to reset the SQLite database path to default."
+commands.allow = ["reset_database_path"]
