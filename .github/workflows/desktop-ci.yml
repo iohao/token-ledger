@@ -28,9 +28,6 @@ jobs:
           - os: macos-latest
             label: macOS
             artifact_name: desktop-bundle-macos
-          - os: ubuntu-22.04
-            label: Linux
-            artifact_name: desktop-bundle-linux
           - os: windows-latest
             label: Windows
             artifact_name: desktop-bundle-windows
@@ -38,21 +35,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Install Linux system dependencies
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            build-essential \
-            libssl-dev \
-            libgtk-3-dev \
-            libayatana-appindicator3-dev \
-            librsvg2-dev \
-            patchelf \
-            libfuse2 \
-            file
 
       - name: Setup Node.js
         uses: actions/setup-node@v4

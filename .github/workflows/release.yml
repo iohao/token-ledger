@@ -123,9 +123,6 @@ jobs:
               *.tar.gz)
                 extension=".tar.gz"
                 ;;
-              *.AppImage)
-                extension=".AppImage"
-                ;;
               *.dmg)
                 extension=".dmg"
                 ;;

@@ -71,12 +71,6 @@ find_built_artifact() {
       [[ -d "$app_path" ]] || fail "Expected macOS app not found at $app_path"
       printf '%s\n' "$app_path"
       ;;
-    linux)
-      local appimage_path
-      appimage_path="$(find "$bundle_root" -type f -name '*.AppImage' | head -n 1 || true)"
-      [[ -n "$appimage_path" ]] || fail "Expected Linux AppImage not found under $bundle_root"
-      printf '%s\n' "$appimage_path"
-      ;;
     *)
       fail "Unsupported platform: $platform"
       ;;
@@ -86,9 +80,8 @@ find_built_artifact() {
 platform_name() {
   case "$(uname -s)" in
     Darwin) printf 'darwin\n' ;;
-    Linux) printf 'linux\n' ;;
     *)
-      fail "This packaging script currently supports macOS and Linux only"
+      fail "This packaging script currently supports macOS only"
       ;;
   esac
 }
@@ -96,7 +89,6 @@ platform_name() {
 bundle_target() {
   case "$1" in
     darwin) printf 'app\n' ;;
-    linux) printf 'appimage\n' ;;
     *)
       fail "Unsupported platform: $1"
       ;;
@@ -175,9 +167,6 @@ case "$PLATFORM" in
   darwin)
     ARTIFACT_TARGET="$OUT_DIR/$PRODUCT_NAME.app"
     ;;
-  linux)
-    ARTIFACT_TARGET="$OUT_DIR/$(basename "$ARTIFACT_SOURCE")"
-    ;;
 esac
 
 copy_artifact "$ARTIFACT_SOURCE" "$ARTIFACT_TARGET"
@@ -186,9 +175,5 @@ log "Packaged artifact copied to:"
 printf '%s\n' "$ARTIFACT_TARGET"
 
 if [[ "$OPEN_RESULT" -eq 1 ]]; then
-  if [[ "$PLATFORM" == "darwin" ]]; then
-    open -R "$ARTIFACT_TARGET"
-  else
-    log "--open is only supported on macOS; skipping"
-  fi
+  open -R "$ARTIFACT_TARGET"
 fi

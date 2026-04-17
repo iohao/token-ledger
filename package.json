@@ -16,8 +16,7 @@
     "package:app": "bash scripts/package-app.sh",
     "package:desktop": "tauri build",
     "package:mac": "tauri build",
-    "package:win": "tauri build",
-    "package:linux": "tauri build"
+    "package:win": "tauri build"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.9.1"

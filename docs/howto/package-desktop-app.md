@@ -26,10 +26,8 @@ npm run package:app
 2. 在 macOS 上额外检查 `xcodebuild`
 3. 如果 `node_modules/` 不存在，自动执行 `npm install`
 4. 执行 `npm run typecheck`
-5. 执行当前平台所需的 Tauri build
-   macOS 只打 `app`
-   Linux 只打 `appimage`
-6. 把当前平台的可运行应用复制到固定输出目录
+5. 执行 macOS 所需的 Tauri build，只打 `app`
+6. 把可运行应用复制到固定输出目录
 
 ## 脚本会做什么
 
@@ -44,7 +42,6 @@ scripts/package-app.sh
 当前支持平台：
 
 - macOS：复制 `.app`
-- Linux：复制 `.AppImage`
 
 当前脚本没有原生支持 Windows 的 `.bat` 或 PowerShell 版本。
 
@@ -61,8 +58,6 @@ release-app/
 ```bash
 release-app/TokenLedger.app
 ```
-
-在 Linux 上，脚本会复制构建出来的 `.AppImage` 文件到同一个目录。
 
 ## 可选参数
 
@@ -103,4 +98,4 @@ OUT_DIR=./artifacts npm run package:app
 
 ### 为什么脚本没有支持 Windows
 
-当前仓库的脚本实现是 Bash 版本，适合 macOS 和 Linux。Windows 侧如果需要一键打包，建议后续补一个 `.ps1` 包装层。
+当前仓库的脚本实现是 Bash 版本，当前只覆盖 macOS。Windows 侧如果需要一键打包，建议后续补一个 `.ps1` 包装层。
