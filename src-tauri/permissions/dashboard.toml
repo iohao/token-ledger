@@ -39,6 +39,11 @@ description = "Allows the frontend to read app metadata."
 commands.allow = ["get_app_meta"]
 
 [[permission]]
+identifier = "allow-open-source-repository"
+description = "Allows the frontend to open the app source repository in the system browser."
+commands.allow = ["open_source_repository"]
+
+[[permission]]
 identifier = "allow-query-daily-usage"
 description = "Allows the frontend to query daily usage within a date range."
 commands.allow = ["query_daily_usage"]

@@ -4,6 +4,7 @@ import {
   fetchDashboard,
   fetchSyncPreview,
   isSyncRunning,
+  openSourceRepository,
   resetDatabasePath,
   queryDailyUsage,
   startSync,
@@ -51,9 +52,12 @@ const SYNC_STATUS_POLL_INTERVAL_MS = 1_000;
 const SYNC_PROGRESS_EVENT_NAME = "sync-progress";
 const DAILY_DETAIL_PAGE_SIZE = 31;
 const MAX_DAILY_DETAIL_RANGE_DAYS = 93;
+const MONTH_BUTTON_VALUES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] as const;
+const ENGLISH_MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const;
+const SOURCE_REPOSITORY_URL = "https://github.com/iohao/token-ledger";
 
 type AutoSyncModeValue = (typeof AUTO_SYNC_OPTIONS)[number]["value"];
-type AppTab = "overview" | "monthlyHistory" | "syncInfo" | "dailyDetail";
+type AppTab = "overview" | "monthlyHistory" | "monthlyDetail" | "syncInfo" | "dailyDetail";
 type InlineNoticeTone = "good" | "bad";
 
 function detectInitialTab(): AppTab {
@@ -62,7 +66,9 @@ function detectInitialTab(): AppTab {
   }
 
   const tab = new URLSearchParams(window.location.search).get("tab");
-  return tab === "overview" || tab === "monthlyHistory" || tab === "syncInfo" || tab === "dailyDetail" ? tab : "overview";
+  return tab === "overview" || tab === "monthlyHistory" || tab === "monthlyDetail" || tab === "syncInfo" || tab === "dailyDetail"
+    ? tab
+    : "overview";
 }
 
 const state = {
@@ -86,7 +92,13 @@ const state = {
   dailyDetailPage: 1,
   isLoadingDailyDetails: false,
   dailyDetailsError: null as string | null,
-  hasLoadedDailyDetails: false
+  hasLoadedDailyDetails: false,
+  monthlyDetailRows: [] as DailyUsageSummaryDTO[],
+  monthlyDetailYear: "",
+  monthlyDetailMonth: null as number | null,
+  isLoadingMonthlyDetails: false,
+  monthlyDetailsError: null as string | null,
+  hasLoadedMonthlyDetails: false
 };
 
 const numberFormatterCache = new Map<Locale, Intl.NumberFormat>();
@@ -251,6 +263,10 @@ function formatDateInputValue(date: Date, timeZone: string): string {
   return `${year}-${month}-${day}`;
 }
 
+function padNumber(value: number): string {
+  return String(value).padStart(2, "0");
+}
+
 function initializeDailyDetailRange(timeZone: string, nowValue: string): void {
   if (state.dailyDetailStartDate && state.dailyDetailEndDate) {
     return;
@@ -265,6 +281,22 @@ function initializeDailyDetailRange(timeZone: string, nowValue: string): void {
 
   if (!state.dailyDetailEndDate) {
     state.dailyDetailEndDate = endDate;
+  }
+}
+
+function initializeMonthlyDetailSelection(timeZone: string, nowValue: string): void {
+  if (state.monthlyDetailYear && state.monthlyDetailMonth !== null) {
+    return;
+  }
+
+  const currentDate = formatDateInputValue(new Date(nowValue), timeZone);
+
+  if (!state.monthlyDetailYear) {
+    state.monthlyDetailYear = currentDate.slice(0, 4);
+  }
+
+  if (state.monthlyDetailMonth === null) {
+    state.monthlyDetailMonth = Number.parseInt(currentDate.slice(5, 7), 10);
   }
 }
 
@@ -287,6 +319,38 @@ function dateRangeDayCount(startDate: string, endDate: string): number {
   const endValue = new Date(`${endDate}T00:00:00Z`).getTime();
   const dayMs = 24 * 60 * 60 * 1_000;
   return Math.floor((endValue - startValue) / dayMs) + 1;
+}
+
+function monthKeyForParts(year: string, month: number): string {
+  return `${year}-${padNumber(month)}`;
+}
+
+function dateRangeForMonth(year: string, month: number): { startDate: string; endDate: string } {
+  const endDay = new Date(Date.UTC(Number(year), month, 0)).getUTCDate();
+  return {
+    startDate: `${year}-${padNumber(month)}-01`,
+    endDate: `${year}-${padNumber(month)}-${padNumber(endDay)}`
+  };
+}
+
+function monthButtonLabel(month: number): string {
+  return state.locale === "en-US" ? ENGLISH_MONTH_LABELS[month - 1] : `${month}月`;
+}
+
+function monthlyDetailYearOptions(): string[] {
+  const years = new Set<string>();
+  const currentYear = state.dashboard?.now ? state.dashboard.now.slice(0, 4) : String(new Date().getUTCFullYear());
+  years.add(currentYear);
+
+  for (const row of state.dashboard?.monthlyHistory ?? []) {
+    years.add(row.monthKey.slice(0, 4));
+  }
+
+  if (state.monthlyDetailYear) {
+    years.add(state.monthlyDetailYear);
+  }
+
+  return [...years].sort((left, right) => Number(right) - Number(left));
 }
 
 function autoSyncIntervalForMode(mode: AutoSyncModeValue): number | null {
@@ -635,6 +699,7 @@ function applyDashboardPayload(
     state.syncProgress = null;
   }
   initializeDailyDetailRange(payload.meta.timeZone, payload.now);
+  initializeMonthlyDetailSelection(payload.meta.timeZone, payload.now);
   syncDatabasePathDraft(payload.meta.databasePath, forceDatabasePathDraft);
 }
 
@@ -650,7 +715,7 @@ function databasePathSourceLabel(source: DashboardPayloadDTO["meta"]["databasePa
 }
 
 function handleTabChange(nextTab: string): void {
-  if (nextTab !== "overview" && nextTab !== "monthlyHistory" && nextTab !== "syncInfo" && nextTab !== "dailyDetail") {
+  if (nextTab !== "overview" && nextTab !== "monthlyHistory" && nextTab !== "monthlyDetail" && nextTab !== "syncInfo" && nextTab !== "dailyDetail") {
     return;
   }
 
@@ -660,11 +725,21 @@ function handleTabChange(nextTab: string): void {
     initializeDailyDetailRange(timeZone, nowValue);
   }
 
+  if (nextTab === "monthlyDetail") {
+    const timeZone = state.dashboard?.meta.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const nowValue = state.dashboard?.now ?? new Date().toISOString();
+    initializeMonthlyDetailSelection(timeZone, nowValue);
+  }
+
   state.activeTab = nextTab;
   render();
 
   if (nextTab === "dailyDetail" && !state.hasLoadedDailyDetails && !state.isLoadingDailyDetails) {
     void loadDailyDetails();
+  }
+
+  if (nextTab === "monthlyDetail" && !state.hasLoadedMonthlyDetails && !state.isLoadingMonthlyDetails) {
+    void loadMonthlyDetails();
   }
 }
 
@@ -697,12 +772,15 @@ function handleGlobalKeydown(event: KeyboardEvent): void {
       nextTab = "overview";
       break;
     case "2":
-      nextTab = "dailyDetail";
+      nextTab = "monthlyDetail";
       break;
     case "3":
       nextTab = "monthlyHistory";
       break;
     case "4":
+      nextTab = "dailyDetail";
+      break;
+    case "5":
       nextTab = "syncInfo";
       break;
     default:
@@ -878,7 +956,7 @@ function renderUsageTable(
   `;
 }
 
-function renderDailyDetailTable(title: string, rows: DailyUsageSummaryDTO[], timeZone: string): string {
+function renderDailyDetailTable(title: string, rows: DailyUsageSummaryDTO[], timeZone: string, eyebrow: string): string {
   const totals = sumTotals(rows);
   const flatRows = rows.flatMap((row) => {
     const dateLabel = formatDateLabel(row.dateKey, timeZone);
@@ -943,7 +1021,7 @@ function renderDailyDetailTable(title: string, rows: DailyUsageSummaryDTO[], tim
     <section class="table-panel panel">
       <div class="section-head">
         <div>
-          <p class="eyebrow">${t(state.locale, "dailyUsageTitle")}</p>
+          <p class="eyebrow">${eyebrow}</p>
           <h3>${title}</h3>
         </div>
       </div>
@@ -1052,8 +1130,9 @@ function renderEmptyState(title: string, description: string): string {
 function renderSidebarNav(): string {
   const tabs: Array<{ value: AppTab; label: string; markerClass: string }> = [
     { value: "overview", label: t(state.locale, "navOverview"), markerClass: "menu-item-mark--overview" },
-    { value: "dailyDetail", label: t(state.locale, "navDailyDetail"), markerClass: "menu-item-mark--daily-detail" },
+    { value: "monthlyDetail", label: t(state.locale, "navMonthlyDetail"), markerClass: "menu-item-mark--monthly-detail" },
     { value: "monthlyHistory", label: t(state.locale, "navMonthlyHistory"), markerClass: "menu-item-mark--monthly-history" },
+    { value: "dailyDetail", label: t(state.locale, "navDailyDetail"), markerClass: "menu-item-mark--daily-detail" },
     { value: "syncInfo", label: t(state.locale, "navSyncInfo"), markerClass: "menu-item-mark--sync-info" }
   ];
 
@@ -1148,12 +1227,28 @@ function handleRootClick(event: Event): void {
     return;
   }
 
+  const sourceRepositoryLink = target.closest("[data-open-source-repository]");
+  if (sourceRepositoryLink instanceof HTMLAnchorElement) {
+    event.preventDefault();
+    void openSourceRepositoryInBrowser();
+    return;
+  }
+
   const dailyPageButton = target.closest("[data-daily-detail-page]");
   if (dailyPageButton instanceof HTMLButtonElement) {
     const nextPage = Number.parseInt(dailyPageButton.dataset.dailyDetailPage ?? "", 10);
     if (!Number.isNaN(nextPage) && nextPage !== state.dailyDetailPage) {
       state.dailyDetailPage = clampDailyDetailPage(nextPage);
       render();
+    }
+    return;
+  }
+
+  const monthlyDetailMonthButton = target.closest("[data-monthly-detail-month]");
+  if (monthlyDetailMonthButton instanceof HTMLButtonElement) {
+    const month = Number.parseInt(monthlyDetailMonthButton.dataset.monthlyDetailMonth ?? "", 10);
+    if (!Number.isNaN(month)) {
+      void loadMonthlyDetails(month);
     }
     return;
   }
@@ -1203,6 +1298,18 @@ function handleRootChange(event: Event): void {
   if (dailyEndInput instanceof HTMLInputElement) {
     state.dailyDetailEndDate = dailyEndInput.value;
     state.dailyDetailPage = 1;
+    return;
+  }
+
+  const monthlyDetailYearSelect = target.closest("[data-monthly-detail-year]");
+  if (monthlyDetailYearSelect instanceof HTMLSelectElement) {
+    state.monthlyDetailYear = monthlyDetailYearSelect.value;
+
+    if (state.activeTab === "monthlyDetail" && state.monthlyDetailMonth !== null && !state.isLoadingMonthlyDetails) {
+      void loadMonthlyDetails(state.monthlyDetailMonth);
+    } else {
+      render();
+    }
   }
 }
 
@@ -1363,6 +1470,20 @@ function renderSyncInfoView(timeZone: string, notes: string, dashboard: Dashboar
           <dd>${escapeHtml(dashboard?.meta.codexHomePath ?? "-")}</dd>
         </div>
         <div>
+          <dt>${t(state.locale, "sourceRepository")}</dt>
+          <dd>
+            <a class="meta-link" href="${SOURCE_REPOSITORY_URL}" target="_blank" rel="noreferrer">${escapeHtml(SOURCE_REPOSITORY_URL)}</a>
+            <span class="meta-link-separator"> · </span>
+            <a
+              class="meta-link"
+              href="${SOURCE_REPOSITORY_URL}"
+              target="_blank"
+              rel="noreferrer"
+              data-open-source-repository
+            >${t(state.locale, "viewSource")}</a>
+          </dd>
+        </div>
+        <div>
           <dt>${t(state.locale, "sqlite")}</dt>
           <dd>${escapeHtml(dashboard?.meta.databasePath ?? "-")}</dd>
         </div>
@@ -1444,6 +1565,16 @@ function dailyDetailTitle(): string {
   });
 }
 
+function monthlyDetailTitle(timeZone: string): string {
+  if (!state.monthlyDetailYear || state.monthlyDetailMonth === null) {
+    return t(state.locale, "monthlyDetailTitle");
+  }
+
+  return t(state.locale, "monthlyDetailSelectedTitle", {
+    month: formatMonthLabel(monthKeyForParts(state.monthlyDetailYear, state.monthlyDetailMonth), timeZone)
+  });
+}
+
 function renderDailyDetailView(timeZone: string): string {
   const queryDisabled = state.isLoadingDailyDetails || state.isLoading;
 
@@ -1461,7 +1592,7 @@ function renderDailyDetailView(timeZone: string): string {
       state.dailyDetailRows.length > 0
         ? `
             ${renderDailyDetailPagination()}
-            ${renderDailyDetailTable(dailyDetailTitle(), currentDailyDetailPageRows(), timeZone)}
+            ${renderDailyDetailTable(dailyDetailTitle(), currentDailyDetailPageRows(), timeZone, t(state.locale, "dailyUsageTitle"))}
           `
         : renderEmptyState(t(state.locale, "noDataInRangeTitle"), t(state.locale, "noDataInRangeDescription"));
   }
@@ -1490,6 +1621,74 @@ function renderDailyDetailView(timeZone: string): string {
       </form>
 
       <p class="detail-hint">${t(state.locale, "dailyUsageHint", { maxDays: formatInteger(MAX_DAILY_DETAIL_RANGE_DAYS) })}</p>
+    </section>
+
+    ${resultsMarkup}
+  `;
+}
+
+function renderMonthlyDetailView(timeZone: string): string {
+  const queryDisabled = state.isLoadingMonthlyDetails || state.isLoading;
+  const monthlyDetailRowsWithData = state.monthlyDetailRows.filter((row) => row.models.length > 0);
+  const yearOptionsMarkup = monthlyDetailYearOptions()
+    .map(
+      (year) => `<option value="${year}" ${state.monthlyDetailYear === year ? "selected" : ""}>${escapeHtml(year)}</option>`
+    )
+    .join("");
+  const monthButtonsMarkup = MONTH_BUTTON_VALUES.map(
+    (month) => `
+      <button
+        class="action detail-month-button ${state.monthlyDetailMonth === month ? "is-active" : ""}"
+        type="button"
+        data-monthly-detail-month="${month}"
+        ${queryDisabled ? "disabled" : ""}
+      >
+        ${monthButtonLabel(month)}
+      </button>
+    `
+  ).join("");
+
+  let resultsMarkup = renderEmptyState(
+    t(state.locale, "readyToQueryMonthlyDetail"),
+    t(state.locale, "readyToQueryMonthlyDetailDescription")
+  );
+
+  if (state.monthlyDetailsError) {
+    resultsMarkup = `<section class="banner bad">${escapeHtml(state.monthlyDetailsError)}</section>`;
+  } else if (state.isLoadingMonthlyDetails) {
+    resultsMarkup = `<section class="banner">${t(state.locale, "monthlyDetailLoading")}</section>`;
+  } else if (state.hasLoadedMonthlyDetails) {
+    resultsMarkup =
+      monthlyDetailRowsWithData.length > 0
+        ? renderDailyDetailTable(
+            monthlyDetailTitle(timeZone),
+            monthlyDetailRowsWithData,
+            timeZone,
+            t(state.locale, "monthlyDetailTitle")
+          )
+        : "";
+  }
+
+  return `
+    <section class="detail-filter-panel panel">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">${t(state.locale, "queryByMonth")}</p>
+          <h3>${t(state.locale, "monthlyDetailTitle")}</h3>
+        </div>
+      </div>
+
+      <div class="monthly-detail-controls">
+        <label class="detail-field monthly-detail-year-field">
+          <span>${t(state.locale, "year")}</span>
+          <select data-monthly-detail-year ${queryDisabled ? "disabled" : ""}>${yearOptionsMarkup}</select>
+        </label>
+        <div class="monthly-detail-months" role="group" aria-label="${t(state.locale, "month")}">
+          ${monthButtonsMarkup}
+        </div>
+      </div>
+
+      <p class="detail-hint">${t(state.locale, "monthlyDetailHint")}</p>
     </section>
 
     ${resultsMarkup}
@@ -1555,6 +1754,8 @@ function render(): void {
           )
         : state.activeTab === "monthlyHistory"
           ? renderMonthlyHistoryView(timeZone, dashboard)
+          : state.activeTab === "monthlyDetail"
+            ? renderMonthlyDetailView(timeZone)
           : state.activeTab === "syncInfo"
             ? renderSyncInfoView(timeZone, notes, dashboard)
             : renderDailyDetailView(timeZone)
@@ -1717,6 +1918,9 @@ async function saveDatabasePathOverride(): Promise<void> {
     state.dailyDetailRows = [];
     state.dailyDetailsError = null;
     state.hasLoadedDailyDetails = false;
+    state.monthlyDetailRows = [];
+    state.monthlyDetailsError = null;
+    state.hasLoadedMonthlyDetails = false;
     state.databasePathNotice = {
       tone: "good",
       text: t(state.locale, "sqlitePathSaved")
@@ -1748,6 +1952,9 @@ async function resetDatabasePathOverride(): Promise<void> {
     state.dailyDetailRows = [];
     state.dailyDetailsError = null;
     state.hasLoadedDailyDetails = false;
+    state.monthlyDetailRows = [];
+    state.monthlyDetailsError = null;
+    state.hasLoadedMonthlyDetails = false;
     state.databasePathNotice = {
       tone: "good",
       text: t(state.locale, "sqlitePathReset")
@@ -1786,6 +1993,41 @@ async function loadDailyDetails(): Promise<void> {
     state.dailyDetailsError = translateErrorMessage(state.locale, message);
   } finally {
     state.isLoadingDailyDetails = false;
+    render();
+  }
+}
+
+async function openSourceRepositoryInBrowser(): Promise<void> {
+  try {
+    await openSourceRepository();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    state.errorMessage = translateErrorMessage(state.locale, message);
+    render();
+  }
+}
+
+async function loadMonthlyDetails(nextMonth = state.monthlyDetailMonth): Promise<void> {
+  if (!state.monthlyDetailYear || nextMonth === null) {
+    state.monthlyDetailsError = t(state.locale, "readyToQueryMonthlyDetailDescription");
+    render();
+    return;
+  }
+
+  state.monthlyDetailMonth = nextMonth;
+  state.isLoadingMonthlyDetails = true;
+  state.monthlyDetailsError = null;
+  render();
+
+  try {
+    const { startDate, endDate } = dateRangeForMonth(state.monthlyDetailYear, nextMonth);
+    state.monthlyDetailRows = await queryDailyUsage(startDate, endDate);
+    state.hasLoadedMonthlyDetails = true;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    state.monthlyDetailsError = translateErrorMessage(state.locale, message);
+  } finally {
+    state.isLoadingMonthlyDetails = false;
     render();
   }
 }

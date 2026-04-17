@@ -13,6 +13,7 @@ fn main() {
             commands::get_sync_status,
             commands::get_sync_progress,
             commands::get_app_meta,
+            commands::open_source_repository,
             commands::query_daily_usage,
             commands::set_database_path,
             commands::reset_database_path

@@ -92,6 +92,14 @@ export function resetDatabasePath(): Promise<DashboardPayloadDTO> {
   return invoke<DashboardPayloadDTO>("reset_database_path");
 }
 
+export function openSourceRepository(): Promise<void> {
+  if (isDemoMode()) {
+    return Promise.resolve();
+  }
+
+  return invoke<void>("open_source_repository");
+}
+
 export function queryDailyUsage(startDate: string, endDate: string): Promise<DailyUsageSummaryDTO[]> {
   if (isDemoMode()) {
     void startDate;

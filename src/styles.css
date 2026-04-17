@@ -209,6 +209,13 @@ select {
   height: 8px;
 }
 
+.menu-item-mark--monthly-detail {
+  border-radius: 3px;
+  width: 12px;
+  height: 12px;
+  transform: rotate(45deg);
+}
+
 .menu-item-mark--sync-info {
   border-radius: 2px;
   transform: rotate(45deg);
@@ -624,7 +631,8 @@ h3 {
   color: rgba(21, 35, 29, 0.58);
 }
 
-.detail-field input {
+.detail-field input,
+.detail-field select {
   min-height: 58px;
   width: 100%;
   padding: 0 16px;
@@ -634,18 +642,48 @@ h3 {
   color: var(--ink);
 }
 
-.detail-field input:focus-visible {
+.detail-field input:focus-visible,
+.detail-field select:focus-visible {
   outline: 3px solid rgba(188, 137, 49, 0.72);
   outline-offset: 3px;
 }
 
-.detail-field input:disabled {
+.detail-field input:disabled,
+.detail-field select:disabled {
   opacity: 0.68;
   cursor: wait;
 }
 
 .detail-query-button {
   min-width: 184px;
+}
+
+.monthly-detail-controls {
+  display: grid;
+  gap: 16px;
+}
+
+.monthly-detail-year-field {
+  max-width: 220px;
+}
+
+.monthly-detail-months {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.detail-month-button {
+  min-height: 52px;
+  border: 1px solid rgba(21, 35, 29, 0.12);
+  background: rgba(255, 255, 255, 0.84);
+  color: var(--ink);
+}
+
+.detail-month-button.is-active {
+  border-color: rgba(64, 158, 255, 0.3);
+  background: rgba(64, 158, 255, 0.12);
+  color: #2b7cd3;
 }
 
 .detail-hint,
@@ -996,6 +1034,25 @@ h3 {
   word-break: break-all;
 }
 
+.meta-link {
+  color: #2b7cd3;
+  text-decoration: none;
+}
+
+.meta-link:hover {
+  text-decoration: underline;
+}
+
+.meta-link:focus-visible {
+  outline: 3px solid rgba(188, 137, 49, 0.72);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+.meta-link-separator {
+  color: rgba(21, 35, 29, 0.42);
+}
+
 .config-block {
   margin-top: 20px;
   padding-top: 4px;
@@ -1119,6 +1176,10 @@ h3 {
     grid-template-columns: 1fr;
   }
 
+  .monthly-detail-months {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
   .detail-pagination {
     flex-direction: column;
     align-items: stretch;
@@ -1194,6 +1255,14 @@ h3 {
 
   .summary-card {
     padding: 12px;
+  }
+
+  .monthly-detail-months {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .monthly-detail-year-field {
+    max-width: none;
   }
 
   .summary-inline {

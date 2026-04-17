@@ -1,4 +1,5 @@
 use tauri::{AppHandle, Emitter, Manager, State};
+use std::process::Command;
 
 use crate::app_state::AppState;
 use crate::models::{
@@ -6,6 +7,7 @@ use crate::models::{
 };
 
 const SYNC_PROGRESS_EVENT_NAME: &str = "sync-progress";
+const SOURCE_REPOSITORY_URL: &str = "https://github.com/iohao/token-ledger";
 
 #[tauri::command]
 pub fn ping() -> String {
@@ -95,6 +97,28 @@ pub fn get_app_meta(state: State<'_, AppState>) -> Result<DashboardMeta, String>
         .populate_dashboard_meta(&mut meta)
         .map_err(|error| error.to_string())?;
     Ok(meta)
+}
+
+#[tauri::command]
+pub fn open_source_repository() -> Result<(), String> {
+    let mut command = if cfg!(target_os = "macos") {
+        let mut command = Command::new("open");
+        command.arg(SOURCE_REPOSITORY_URL);
+        command
+    } else if cfg!(target_os = "windows") {
+        let mut command = Command::new("cmd");
+        command.args(["/C", "start", "", SOURCE_REPOSITORY_URL]);
+        command
+    } else {
+        let mut command = Command::new("xdg-open");
+        command.arg(SOURCE_REPOSITORY_URL);
+        command
+    };
+
+    command
+        .spawn()
+        .map(|_| ())
+        .map_err(|error| format!("failed to open source repository: {error}"))
 }
 
 #[tauri::command]
