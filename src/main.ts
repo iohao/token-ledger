@@ -66,6 +66,12 @@ type AutoSyncModeValue = (typeof AUTO_SYNC_OPTIONS)[number]["value"];
 type AppTab = "overview" | "monthlyHistory" | "monthlyDetail" | "syncInfo" | "dailyDetail";
 type InlineNoticeTone = "good" | "bad";
 type UpdateStatus = "idle" | "checking" | "available" | "upToDate" | "installing" | "error";
+type ActivityWallCell = {
+  dateKey: string | null;
+  totalTokens: number;
+  level: 0 | 1 | 2 | 3 | 4;
+  title: string;
+};
 
 function detectInitialTab(): AppTab {
   if (typeof window === "undefined") {
@@ -120,11 +126,13 @@ const numberFormatterCache = new Map<Locale, Intl.NumberFormat>();
 const currencyFormatterCache = new Map<Locale, Intl.NumberFormat>();
 const timestampFormatterCache = new Map<string, Intl.DateTimeFormat>();
 const dateInputFormatterCache = new Map<string, Intl.DateTimeFormat>();
+const calendarDateFormatterCache = new Map<Locale, Intl.DateTimeFormat>();
 const ui = {
   liveRegion: null as HTMLDivElement | null,
   skipLink: null as HTMLAnchorElement | null,
   sidebar: null as HTMLElement | null,
-  content: null as HTMLDivElement | null
+  content: null as HTMLDivElement | null,
+  activityTooltip: null as HTMLDivElement | null
 };
 let autoSyncTimeoutId: number | null = null;
 let autoSyncCountdownId: number | null = null;
@@ -138,6 +146,7 @@ let lastLiveRegionText = "";
 let lastSkipLinkText = "";
 let lastSidebarMarkup = "";
 let lastContentMarkup = "";
+let activeActivityTooltipDay: HTMLElement | null = null;
 const isMacLikePlatform = navigator.platform.toLowerCase().includes("mac");
 
 function escapeHtml(value: string): string {
@@ -252,6 +261,140 @@ function formatMonthLabel(monthKey: string, timeZone: string): string {
   }
 
   return monthKey;
+}
+
+function dateFromDateKey(dateKey: string): Date {
+  const [year = "0000", month = "01", day = "01"] = dateKey.split("-");
+  return new Date(Date.UTC(Number(year), Number(month) - 1, Number(day), 12));
+}
+
+function formatCalendarDate(dateKey: string): string {
+  let formatter = calendarDateFormatterCache.get(state.locale);
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat(state.locale, {
+      timeZone: "UTC",
+      year: "numeric",
+      month: "short",
+      day: "numeric"
+    });
+    calendarDateFormatterCache.set(state.locale, formatter);
+  }
+
+  return formatter.format(dateFromDateKey(dateKey));
+}
+
+function activityMonthLabel(dateKey: string): string {
+  const month = Number(dateKey.slice(5, 7));
+  return state.locale === "en-US" ? ENGLISH_MONTH_LABELS[month - 1] : `${month}月`;
+}
+
+function activityLevelThresholds(rows: DailyUsageSummaryDTO[]): [number, number, number] {
+  const positiveTotals = rows
+    .map((row) => row.totals.totalTokens)
+    .filter((value) => value > 0)
+    .sort((left, right) => left - right);
+
+  if (positiveTotals.length === 0) {
+    return [0, 0, 0];
+  }
+
+  const pick = (ratio: number): number => positiveTotals[Math.max(Math.ceil(positiveTotals.length * ratio) - 1, 0)];
+  return [pick(0.25), pick(0.5), pick(0.75)];
+}
+
+function activityLevel(totalTokens: number, thresholds: [number, number, number]): 0 | 1 | 2 | 3 | 4 {
+  if (totalTokens <= 0) {
+    return 0;
+  }
+
+  if (totalTokens <= thresholds[0]) {
+    return 1;
+  }
+
+  if (totalTokens <= thresholds[1]) {
+    return 2;
+  }
+
+  if (totalTokens <= thresholds[2]) {
+    return 3;
+  }
+
+  return 4;
+}
+
+function buildActivityWall(rows: DailyUsageSummaryDTO[]): {
+  activeDays: number;
+  totalTokens: number;
+  monthLabels: string[];
+  weeks: ActivityWallCell[][];
+} {
+  const ordered = [...rows].sort((left, right) => left.dateKey.localeCompare(right.dateKey));
+
+  if (ordered.length === 0) {
+    return {
+      activeDays: 0,
+      totalTokens: 0,
+      monthLabels: [],
+      weeks: []
+    };
+  }
+
+  const thresholds = activityLevelThresholds(ordered);
+  const leadingBlankCount = dateFromDateKey(ordered[0].dateKey).getUTCDay();
+  const trailingBlankCount = Math.max(6 - dateFromDateKey(ordered[ordered.length - 1].dateKey).getUTCDay(), 0);
+  const cells: ActivityWallCell[] = [];
+
+  for (let index = 0; index < leadingBlankCount; index += 1) {
+    cells.push({ dateKey: null, totalTokens: 0, level: 0, title: "" });
+  }
+
+  for (const row of ordered) {
+    const totalTokens = row.totals.totalTokens;
+    const label =
+      totalTokens > 0
+        ? `${formatCalendarDate(row.dateKey)} · ${t(state.locale, "total")} ${formatTokenCount(totalTokens)}`
+        : `${formatCalendarDate(row.dateKey)} · ${t(state.locale, "activityWallNoActivity")}`;
+    cells.push({
+      dateKey: row.dateKey,
+      totalTokens,
+      level: activityLevel(totalTokens, thresholds),
+      title: label
+    });
+  }
+
+  for (let index = 0; index < trailingBlankCount; index += 1) {
+    cells.push({ dateKey: null, totalTokens: 0, level: 0, title: "" });
+  }
+
+  const weeks: ActivityWallCell[][] = [];
+  for (let index = 0; index < cells.length; index += 7) {
+    weeks.push(cells.slice(index, index + 7));
+  }
+
+  const monthLabels: string[] = [];
+  let previousMonthKey = "";
+  for (const week of weeks) {
+    const firstDatedCell = week.find((cell) => cell.dateKey !== null);
+    if (!firstDatedCell?.dateKey) {
+      monthLabels.push("");
+      continue;
+    }
+
+    const monthKey = firstDatedCell.dateKey.slice(0, 7);
+    if (monthKey !== previousMonthKey) {
+      monthLabels.push(activityMonthLabel(firstDatedCell.dateKey));
+      previousMonthKey = monthKey;
+    } else {
+      monthLabels.push("");
+    }
+  }
+
+  return {
+    activeDays: ordered.filter((row) => row.totals.totalTokens > 0).length,
+    totalTokens: ordered.reduce((sum, row) => sum + row.totals.totalTokens, 0),
+    monthLabels,
+    weeks
+  };
 }
 
 function formatTimestamp(value: string | null, timeZone: string): string {
@@ -989,6 +1132,94 @@ function renderUsageTable(
   `;
 }
 
+function renderActivityWall(timeZone: string, rows: DailyUsageSummaryDTO[]): string {
+  void timeZone;
+  const { activeDays, totalTokens, monthLabels, weeks } = buildActivityWall(rows);
+  const weekdayLabels = ["", t(state.locale, "weekdayMonShort"), "", t(state.locale, "weekdayWedShort"), "", t(state.locale, "weekdayFriShort"), ""];
+  const legendMarkup = [0, 1, 2, 3, 4]
+    .map((level) => `<span class="activity-wall-cell activity-wall-cell--level-${level}" aria-hidden="true"></span>`)
+    .join("");
+  const monthMarkup = monthLabels
+    .map((label) => `<span class="activity-wall-month">${escapeHtml(label)}</span>`)
+    .join("");
+  const weekMarkup = weeks
+    .map(
+      (week) => `
+        <div class="activity-wall-week">
+          ${week
+            .map((cell) =>
+              cell.dateKey
+                ? `
+                    <span
+                      class="activity-wall-day"
+                      tabindex="0"
+                      data-activity-wall-day
+                      data-activity-tooltip="${escapeHtml(
+                        t(state.locale, "activityWallTooltipUsage", {
+                          date: formatCalendarDate(cell.dateKey),
+                          total: formatInteger(cell.totalTokens),
+                          compact: formatTokenCount(cell.totalTokens)
+                        })
+                      )}"
+                      aria-label="${escapeHtml(cell.title)}"
+                    >
+                      <span class="activity-wall-cell activity-wall-cell--level-${cell.level}"></span>
+                    </span>
+                  `
+                : `<span class="activity-wall-cell activity-wall-cell--empty" aria-hidden="true"></span>`
+            )
+            .join("")}
+        </div>
+      `
+    )
+    .join("");
+
+  return `
+    <section class="activity-wall panel">
+      <div class="section-head activity-wall-head">
+        <div>
+          <p class="eyebrow">${t(state.locale, "activityWallEyebrow")}</p>
+        </div>
+        <p class="activity-wall-summary">${t(state.locale, "activityWallSummary", {
+          count: formatInteger(activeDays),
+          total: formatTokenCount(totalTokens)
+        })}</p>
+      </div>
+      <div class="activity-wall-scroll">
+        <div
+          class="activity-wall-chart"
+          role="img"
+          aria-label="${escapeHtml(
+            t(state.locale, "activityWallAria", {
+              count: formatInteger(activeDays),
+              total: formatTokenCount(totalTokens)
+            })
+          )}"
+        >
+          <div class="activity-wall-months">
+            <span class="activity-wall-month activity-wall-month--legend-spacer"></span>
+            ${monthMarkup}
+          </div>
+          <div class="activity-wall-grid">
+            <div class="activity-wall-weekdays" aria-hidden="true">
+              ${weekdayLabels.map((label) => `<span>${escapeHtml(label)}</span>`).join("")}
+            </div>
+            <div class="activity-wall-columns">${weekMarkup}</div>
+          </div>
+        </div>
+      </div>
+      <div class="activity-wall-footer">
+        <p class="activity-wall-copy">${t(state.locale, "activityWallDescription")}</p>
+        <div class="activity-wall-legend" aria-hidden="true">
+          <span>${t(state.locale, "activityWallLegendLess")}</span>
+          ${legendMarkup}
+          <span>${t(state.locale, "activityWallLegendMore")}</span>
+        </div>
+      </div>
+    </section>
+  `;
+}
+
 function renderDailyDetailTable(title: string, rows: DailyUsageSummaryDTO[], timeZone: string, eyebrow: string): string {
   const totals = sumTotals(rows);
   const flatRows = rows.flatMap((row) => {
@@ -1299,23 +1530,159 @@ function initializeShell(): void {
         <div class="dashboard-content" data-content-slot></div>
       </section>
     </main>
+    <div class="activity-hover-tooltip" hidden data-activity-hover-tooltip></div>
   `;
 
   ui.liveRegion = appRoot.querySelector<HTMLDivElement>("[data-live-region]");
   ui.skipLink = appRoot.querySelector<HTMLAnchorElement>("[data-skip-link]");
   ui.sidebar = appRoot.querySelector<HTMLElement>("[data-sidebar-slot]");
   ui.content = appRoot.querySelector<HTMLDivElement>("[data-content-slot]");
+  ui.activityTooltip = appRoot.querySelector<HTMLDivElement>("[data-activity-hover-tooltip]");
 
-  if (!ui.liveRegion || !ui.skipLink || !ui.sidebar || !ui.content) {
+  if (!ui.liveRegion || !ui.skipLink || !ui.sidebar || !ui.content || !ui.activityTooltip) {
     throw new Error("Failed to initialize app shell");
   }
 
   appRoot.addEventListener("click", handleRootClick);
   appRoot.addEventListener("change", handleRootChange);
   appRoot.addEventListener("submit", handleRootSubmit);
+  appRoot.addEventListener("mouseover", handleRootMouseOver);
+  appRoot.addEventListener("mouseout", handleRootMouseOut);
+  appRoot.addEventListener("focusin", handleRootFocusIn);
+  appRoot.addEventListener("focusout", handleRootFocusOut);
+  appRoot.addEventListener("scroll", handleRootScroll, true);
   window.addEventListener("keydown", handleGlobalKeydown);
+  window.addEventListener("resize", handleWindowResize);
 
   hasInitializedShell = true;
+}
+
+function activityWallDayTarget(target: EventTarget | null): HTMLElement | null {
+  if (!(target instanceof Element)) {
+    return null;
+  }
+
+  const day = target.closest<HTMLElement>("[data-activity-wall-day]");
+  return day instanceof HTMLElement ? day : null;
+}
+
+function hideActivityTooltip(): void {
+  activeActivityTooltipDay = null;
+
+  if (!ui.activityTooltip) {
+    return;
+  }
+
+  ui.activityTooltip.hidden = true;
+  ui.activityTooltip.textContent = "";
+  ui.activityTooltip.removeAttribute("data-placement");
+  ui.activityTooltip.style.left = "";
+  ui.activityTooltip.style.top = "";
+}
+
+function positionActivityTooltip(day: HTMLElement): void {
+  if (!ui.activityTooltip) {
+    return;
+  }
+
+  const gap = 10;
+  const viewportPadding = 8;
+  const dayRect = day.getBoundingClientRect();
+  const tooltipRect = ui.activityTooltip.getBoundingClientRect();
+  let top = dayRect.top - tooltipRect.height - gap;
+  let placement = "top";
+
+  if (top < viewportPadding) {
+    top = dayRect.bottom + gap;
+    placement = "bottom";
+  }
+
+  let left = dayRect.left + dayRect.width / 2 - tooltipRect.width / 2;
+  left = Math.min(Math.max(left, viewportPadding), window.innerWidth - tooltipRect.width - viewportPadding);
+
+  ui.activityTooltip.dataset.placement = placement;
+  ui.activityTooltip.style.left = `${left}px`;
+  ui.activityTooltip.style.top = `${top}px`;
+}
+
+function showActivityTooltip(day: HTMLElement): void {
+  if (!ui.activityTooltip) {
+    return;
+  }
+
+  const tooltipText = day.dataset.activityTooltip ?? "";
+  if (!tooltipText) {
+    hideActivityTooltip();
+    return;
+  }
+
+  activeActivityTooltipDay = day;
+  ui.activityTooltip.textContent = tooltipText;
+  ui.activityTooltip.hidden = false;
+  positionActivityTooltip(day);
+}
+
+function handleRootMouseOver(event: Event): void {
+  const day = activityWallDayTarget(event.target);
+  if (!day) {
+    return;
+  }
+
+  const relatedDay = activityWallDayTarget((event as MouseEvent).relatedTarget);
+  if (day === relatedDay) {
+    return;
+  }
+
+  showActivityTooltip(day);
+}
+
+function handleRootMouseOut(event: Event): void {
+  const day = activityWallDayTarget(event.target);
+  if (!day) {
+    return;
+  }
+
+  const relatedDay = activityWallDayTarget((event as MouseEvent).relatedTarget);
+  if (day === relatedDay) {
+    return;
+  }
+
+  if (activeActivityTooltipDay === day) {
+    hideActivityTooltip();
+  }
+}
+
+function handleRootFocusIn(event: Event): void {
+  const day = activityWallDayTarget(event.target);
+  if (day) {
+    showActivityTooltip(day);
+  }
+}
+
+function handleRootFocusOut(event: Event): void {
+  const day = activityWallDayTarget(event.target);
+  if (!day) {
+    return;
+  }
+
+  const relatedDay = activityWallDayTarget((event as FocusEvent).relatedTarget);
+  if (day === relatedDay) {
+    return;
+  }
+
+  if (activeActivityTooltipDay === day) {
+    hideActivityTooltip();
+  }
+}
+
+function handleRootScroll(): void {
+  hideActivityTooltip();
+}
+
+function handleWindowResize(): void {
+  if (activeActivityTooltipDay) {
+    positionActivityTooltip(activeActivityTooltipDay);
+  }
 }
 
 function handleRootClick(event: Event): void {
@@ -1555,6 +1922,8 @@ function renderOverviewView(
       )}
 
       <section class="summary-grid">${summaryCards}</section>
+
+      ${renderActivityWall(timeZone, dashboard?.activityHistory ?? [])}
 
       <section class="content-grid">
         ${renderUsageTable(t(state.locale, "lastSevenDaysDisplay"), dashboard?.dailyHistory ?? [], timeZone, "daily")}

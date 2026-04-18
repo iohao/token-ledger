@@ -3,7 +3,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
-use chrono::{DateTime, NaiveDate, Utc};
+use chrono::{DateTime, Datelike, NaiveDate, Utc};
 use walkdir::WalkDir;
 
 use crate::date_keys::{add_days_to_date_key, last_n_date_keys, month_key_for};
@@ -83,6 +83,7 @@ impl UsageRepository {
                 .map(|period| self.summary_with_status(period, &status))
                 .collect::<Result<Vec<_>>>()?,
             daily_history: self.last_7_day_history_with_status(&status)?,
+            activity_history: self.activity_history_with_status(&status)?,
             monthly_history: self.monthly_history_with_status(&status)?,
             now: format_utc_timestamp(Utc::now()),
         })
@@ -362,6 +363,24 @@ impl UsageRepository {
         status: &SyncStatus,
     ) -> Result<Vec<DailyUsageSummary>> {
         let keys = last_n_date_keys(Utc::now(), &self.time_zone, 7)?;
+        self.daily_history_for_keys_with_status(&keys, status)
+    }
+
+    fn activity_history_with_status(
+        &self,
+        status: &SyncStatus,
+    ) -> Result<Vec<DailyUsageSummary>> {
+        let today_key = last_n_date_keys(Utc::now(), &self.time_zone, 1)?
+            .into_iter()
+            .next()
+            .unwrap_or_else(|| "0000-01-01".to_string());
+        let today = NaiveDate::parse_from_str(&today_key, "%Y-%m-%d")
+            .with_context(|| format!("unsupported date key: {today_key}"))?;
+        let start_key = add_days_to_date_key(
+            &today_key,
+            -((52 * 7) as i64 + i64::from(today.weekday().num_days_from_sunday())),
+        )?;
+        let keys = date_keys_descending_between(&start_key, &today_key)?;
         self.daily_history_for_keys_with_status(&keys, status)
     }
 
@@ -738,6 +757,33 @@ mod tests {
         assert_eq!(rows[1].totals.total_tokens, 110);
         assert_eq!(rows[2].date_key, "2026-04-08");
         assert_eq!(rows[2].totals.total_tokens, 0);
+    }
+
+    #[test]
+    fn dashboard_activity_history_covers_trailing_year_with_empty_days() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        write_session(&temp_dir, "2026/04/09/example.jsonl", sample_session());
+        let repository = make_repository(&temp_dir, 4);
+        repository.sync(false).expect("initial sync");
+
+        let payload = repository
+            .build_dashboard_payload(false)
+            .expect("dashboard payload");
+
+        assert!(payload.activity_history.len() >= 365);
+        assert!(payload.activity_history.len() <= 371);
+        assert_eq!(
+            payload.activity_history.first().map(|row| row.date_key.as_str()),
+            Some(payload.now[..10].as_ref())
+        );
+        assert!(payload
+            .activity_history
+            .iter()
+            .any(|row| row.date_key == "2026-04-09" && row.totals.total_tokens == 110));
+        assert!(payload
+            .activity_history
+            .iter()
+            .any(|row| row.totals.total_tokens == 0));
     }
 
     #[test]

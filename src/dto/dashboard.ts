@@ -83,6 +83,7 @@ export interface DashboardPayloadDTO {
   syncPreview: SyncPreviewDTO | null;
   summaries: UsageSummaryDTO[];
   dailyHistory: DailyUsageSummaryDTO[];
+  activityHistory: DailyUsageSummaryDTO[];
   monthlyHistory: MonthlyUsageSummaryDTO[];
   now: string;
 }

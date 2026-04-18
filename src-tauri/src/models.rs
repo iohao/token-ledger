@@ -164,6 +164,7 @@ pub struct DashboardPayload {
     pub sync_preview: Option<SyncPreview>,
     pub summaries: Vec<UsageSummary>,
     pub daily_history: Vec<DailyUsageSummary>,
+    pub activity_history: Vec<DailyUsageSummary>,
     pub monthly_history: Vec<MonthlyUsageSummary>,
     pub now: String,
 }

@@ -130,6 +130,45 @@ const DEMO_DAILY_HISTORY: DailyUsageSummaryDTO[] = [
   }
 ];
 
+function buildDemoActivityHistory(): DailyUsageSummaryDTO[] {
+  const endDate = new Date(Date.UTC(2026, 3, 12));
+  const totalDays = 365 + endDate.getUTCDay();
+
+  return Array.from({ length: totalDays }, (_, index) => {
+    const offset = totalDays - index - 1;
+    const date = new Date(endDate);
+    date.setUTCDate(endDate.getUTCDate() - offset);
+
+    const weekdayBoost = [0.12, 0.92, 1.06, 0.88, 0.98, 0.54, 0.18][date.getUTCDay()];
+    const seasonalWave = Math.max(Math.sin(index / 17) + Math.cos(index / 39) * 0.45, -0.8);
+    const burst = (index % 31 === 0 ? 1.15 : 0) + (index % 67 === 0 ? 0.75 : 0);
+    const intensity = Math.max(weekdayBoost + seasonalWave + burst - 0.58, 0);
+    const totalTokens = Math.round(intensity * 72_000);
+    const inputTokens = Math.round(totalTokens * 0.48);
+    const cachedInputTokens = Math.round(totalTokens * 0.19);
+    const outputTokens = Math.round(totalTokens * 0.24);
+    const reasoningOutputTokens = Math.max(totalTokens - inputTokens - cachedInputTokens - outputTokens, 0);
+
+    return {
+      dateKey: date.toISOString().slice(0, 10),
+      totals: totals(inputTokens, cachedInputTokens, outputTokens, reasoningOutputTokens, totalTokens / 42_000),
+      models:
+        totalTokens > 0
+          ? [
+              {
+                model: totalTokens > 96_000 ? "gpt-5.4" : "gpt-5.4-mini",
+                isFallback: false,
+                totals: totals(inputTokens, cachedInputTokens, outputTokens, reasoningOutputTokens, totalTokens / 42_000)
+              }
+            ]
+          : [],
+      lastUpdatedAt: `${date.toISOString().slice(0, 10)}T15:20:00Z`
+    };
+  }).reverse();
+}
+
+const DEMO_ACTIVITY_HISTORY: DailyUsageSummaryDTO[] = buildDemoActivityHistory();
+
 const DEMO_MONTHLY_HISTORY: MonthlyUsageSummaryDTO[] = [
   {
     monthKey: "2026-02",
@@ -163,6 +202,7 @@ let demoPayload: DashboardPayloadDTO = {
   syncPreview: DEMO_SYNC_PREVIEW,
   summaries: DEMO_SUMMARIES,
   dailyHistory: DEMO_DAILY_HISTORY,
+  activityHistory: DEMO_ACTIVITY_HISTORY,
   monthlyHistory: DEMO_MONTHLY_HISTORY,
   now: "2026-04-12T15:21:00Z"
 };
