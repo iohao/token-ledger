@@ -1,6 +1,6 @@
 {
   "name": "tokenledger",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -19,7 +19,9 @@
     "package:win": "tauri build"
   },
   "dependencies": {
-    "@tauri-apps/api": "^2.9.1"
+    "@tauri-apps/api": "^2.9.1",
+    "@tauri-apps/plugin-process": "^2.3.1",
+    "@tauri-apps/plugin-updater": "^2.10.1"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.9.1",

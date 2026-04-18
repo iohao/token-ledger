@@ -25,6 +25,7 @@
 - 将聚合结果写入 `CODEX_HOME/.codex-usage/usage.sqlite`
 - 提供概览、每日用量、每月用量、关于 4 个视图
 - 支持自动同步频率切换和 SQLite 路径覆盖
+- 支持从 GitHub Releases 检查新版并在应用内安装更新
 - 内置中英文界面切换
 
 ## 环境要求
@@ -82,3 +83,4 @@ release-app/     打包后的输出目录
 - [docs/index.md](./docs/index.md)
 - [docs/howto/use-desktop-dashboard.md](./docs/howto/use-desktop-dashboard.md)
 - [docs/howto/package-desktop-app.md](./docs/howto/package-desktop-app.md)
+- [docs/howto/auto-update.md](./docs/howto/auto-update.md)

@@ -26,6 +26,7 @@ The screenshots below were generated with the browser `?demo=1` demo mode so no 
 - Writes aggregated usage into `CODEX_HOME/.codex-usage/usage.sqlite`
 - Includes Overview, Daily usage, Monthly usage, and About views
 - Supports auto-sync interval changes and SQLite path overrides
+- Checks GitHub Releases for new versions and can install app updates in place
 - Includes built-in English and Chinese UI switching
 
 ## Requirements
@@ -96,3 +97,4 @@ release-app/     Output directory for packaged apps
 - [docs/index.md](./docs/index.md)
 - [docs/howto/use-desktop-dashboard.md](./docs/howto/use-desktop-dashboard.md)
 - [docs/howto/package-desktop-app.md](./docs/howto/package-desktop-app.md)
+- [docs/howto/auto-update.md](./docs/howto/auto-update.md)

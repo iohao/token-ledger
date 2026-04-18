@@ -590,6 +590,12 @@ h3 {
   background: rgba(255, 240, 236, 0.84);
 }
 
+.banner.good {
+  border-color: rgba(79, 107, 93, 0.24);
+  color: #294236;
+  background: rgba(237, 247, 239, 0.88);
+}
+
 .detail-filter-panel,
 .empty-panel {
   margin-top: 18px;
@@ -1058,6 +1064,50 @@ h3 {
   padding-top: 4px;
 }
 
+.update-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.update-banner p,
+.update-banner strong {
+  margin: 0;
+}
+
+.update-banner p {
+  margin-top: 4px;
+}
+
+.update-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.update-meta-item {
+  display: grid;
+  gap: 6px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(21, 35, 29, 0.08);
+}
+
+.update-meta-item span {
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(21, 35, 29, 0.58);
+}
+
+.update-meta-item strong {
+  font-size: 1rem;
+  font-variant-numeric: tabular-nums;
+}
+
 .config-form {
   display: grid;
   gap: 12px;
@@ -1129,6 +1179,16 @@ h3 {
 
 .config-feedback.bad {
   color: #9f3027;
+}
+
+.update-notes {
+  margin-top: 14px;
+}
+
+.update-notes-copy {
+  margin: 8px 0 0;
+  line-height: 1.7;
+  color: rgba(21, 35, 29, 0.82);
 }
 
 .note-stack {
@@ -1203,6 +1263,15 @@ h3 {
 
   .config-actions .action {
     width: 100%;
+  }
+
+  .update-banner {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .update-meta-grid {
+    grid-template-columns: 1fr;
   }
 }
 

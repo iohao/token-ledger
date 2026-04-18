@@ -10,6 +10,12 @@ import {
   startSync,
   updateDatabasePath
 } from "./api/tauri";
+import {
+  checkForPendingAppUpdate,
+  fetchCurrentAppVersion,
+  installPendingAppUpdate,
+  type PendingAppUpdate
+} from "./api/updater";
 import type {
   DailyUsageSummaryDTO,
   DashboardPayloadDTO,
@@ -59,6 +65,7 @@ const SOURCE_REPOSITORY_URL = "https://github.com/iohao/token-ledger";
 type AutoSyncModeValue = (typeof AUTO_SYNC_OPTIONS)[number]["value"];
 type AppTab = "overview" | "monthlyHistory" | "monthlyDetail" | "syncInfo" | "dailyDetail";
 type InlineNoticeTone = "good" | "bad";
+type UpdateStatus = "idle" | "checking" | "available" | "upToDate" | "installing" | "error";
 
 function detectInitialTab(): AppTab {
   if (typeof window === "undefined") {
@@ -98,7 +105,14 @@ const state = {
   monthlyDetailMonth: null as number | null,
   isLoadingMonthlyDetails: false,
   monthlyDetailsError: null as string | null,
-  hasLoadedMonthlyDetails: false
+  hasLoadedMonthlyDetails: false,
+  currentAppVersion: null as string | null,
+  updateStatus: "idle" as UpdateStatus,
+  updateErrorMessage: null as string | null,
+  availableUpdate: null as PendingAppUpdate | null,
+  isInstallingUpdate: false,
+  updateDownloadedBytes: 0,
+  updateContentLength: null as number | null
 };
 
 const numberFormatterCache = new Map<Locale, Intl.NumberFormat>();
@@ -203,6 +217,24 @@ function nonCachedInputTokens(totals: UsageTotalsDTO): number {
 
 function formatCurrency(value: number): string {
   return localeCurrencyFormatter(state.locale).format(value);
+}
+
+function formatByteCount(value: number): string {
+  const absolute = Math.abs(value);
+
+  if (absolute >= 1_000_000_000) {
+    return `${(value / 1_000_000_000).toFixed(2)} GB`;
+  }
+
+  if (absolute >= 1_000_000) {
+    return `${(value / 1_000_000).toFixed(2)} MB`;
+  }
+
+  if (absolute >= 1_000) {
+    return `${(value / 1_000).toFixed(1)} KB`;
+  }
+
+  return `${formatInteger(value)} B`;
 }
 
 function formatDateLabel(dateKey: string, timeZone: string): string {
@@ -1127,6 +1159,85 @@ function renderEmptyState(title: string, description: string): string {
   `;
 }
 
+function updateStatusMessage(): string {
+  if (state.updateStatus === "error" && state.updateErrorMessage) {
+    return state.updateErrorMessage;
+  }
+
+  if (state.updateStatus === "checking") {
+    return t(state.locale, "checkingForUpdates");
+  }
+
+  if (state.updateStatus === "available" && state.availableUpdate) {
+    return t(state.locale, "updateAvailableStatus", {
+      version: state.availableUpdate.version
+    });
+  }
+
+  if (state.updateStatus === "upToDate") {
+    return t(state.locale, "updateIsCurrent");
+  }
+
+  if (state.updateStatus === "installing") {
+    if (state.updateContentLength && state.updateContentLength > 0) {
+      return t(state.locale, "updateDownloadProgress", {
+        downloaded: formatByteCount(state.updateDownloadedBytes),
+        total: formatByteCount(state.updateContentLength)
+      });
+    }
+
+    return t(state.locale, "installingUpdate");
+  }
+
+  return t(state.locale, "updateChecksRunOnLaunch");
+}
+
+function updateStatusTone(): InlineNoticeTone | null {
+  if (state.updateStatus === "available" || state.updateStatus === "upToDate") {
+    return "good";
+  }
+
+  if (state.updateStatus === "error") {
+    return "bad";
+  }
+
+  return null;
+}
+
+function renderUpdateBanner(timeZone: string): string {
+  if (!state.availableUpdate) {
+    return "";
+  }
+
+  const installDisabled = state.isInstallingUpdate || state.isLoading || state.isSyncing;
+  const publishedAt = state.availableUpdate.date ? formatTimestamp(state.availableUpdate.date, timeZone) : "-";
+
+  return `
+    <section class="banner good update-banner">
+      <div>
+        <strong>${t(state.locale, "updateAvailableBanner", { version: state.availableUpdate.version })}</strong>
+        <p>${t(state.locale, "updatePublishedAt", { value: publishedAt })}</p>
+      </div>
+      <button class="action primary" type="button" data-install-update ${installDisabled ? "disabled" : ""}>
+        ${state.isInstallingUpdate ? t(state.locale, "installingUpdate") : t(state.locale, "downloadAndInstallUpdate")}
+      </button>
+    </section>
+  `;
+}
+
+function renderUpdateNotes(notes: string | null | undefined): string {
+  if (!notes) {
+    return "";
+  }
+
+  return `
+    <div class="update-notes">
+      <p class="eyebrow">${t(state.locale, "updateReleaseNotes")}</p>
+      <p class="update-notes-copy">${escapeHtml(notes).replaceAll("\n", "<br />")}</p>
+    </div>
+  `;
+}
+
 function renderSidebarNav(): string {
   const tabs: Array<{ value: AppTab; label: string; markerClass: string }> = [
     { value: "overview", label: t(state.locale, "navOverview"), markerClass: "menu-item-mark--overview" },
@@ -1224,6 +1335,18 @@ function handleRootClick(event: Event): void {
   const resetDatabasePathButton = target.closest("[data-database-path-reset]");
   if (resetDatabasePathButton instanceof HTMLButtonElement) {
     void resetDatabasePathOverride();
+    return;
+  }
+
+  const checkUpdatesButton = target.closest("[data-check-updates]");
+  if (checkUpdatesButton instanceof HTMLButtonElement) {
+    void checkForAppUpdates(true);
+    return;
+  }
+
+  const installUpdateButton = target.closest("[data-install-update]");
+  if (installUpdateButton instanceof HTMLButtonElement) {
+    void installAppUpdate();
     return;
   }
 
@@ -1454,6 +1577,13 @@ function renderSyncInfoView(timeZone: string, notes: string, dashboard: Dashboar
     dashboard && !dashboard.meta.databasePathEditable
       ? `<p class="config-note">${t(state.locale, "sqlitePathLockedByEnv")}</p>`
       : "";
+  const installDisabled =
+    !state.availableUpdate || state.isInstallingUpdate || state.updateStatus === "checking" || state.isLoading || state.isSyncing;
+  const checkDisabled = state.updateStatus === "checking" || state.isInstallingUpdate;
+  const availableVersion = state.availableUpdate?.version ?? "-";
+  const publishedAt = state.availableUpdate?.date ? formatTimestamp(state.availableUpdate.date, timeZone) : "-";
+  const updateTone = updateStatusTone();
+  const updateFeedbackClass = updateTone ? `config-feedback ${updateTone}` : "config-note";
 
   return `
     <section class="info-panel panel">
@@ -1504,6 +1634,43 @@ function renderSyncInfoView(timeZone: string, notes: string, dashboard: Dashboar
           <dd>${dashboard?.status.sessionCount ?? 0}</dd>
         </div>
       </dl>
+
+      <div class="config-block">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">${t(state.locale, "appUpdateSection")}</p>
+            <h3>${t(state.locale, "appUpdateTitle")}</h3>
+          </div>
+        </div>
+
+        <div class="update-meta-grid">
+          <div class="update-meta-item">
+            <span>${t(state.locale, "currentVersion")}</span>
+            <strong>${escapeHtml(state.currentAppVersion ?? "-")}</strong>
+          </div>
+          <div class="update-meta-item">
+            <span>${t(state.locale, "availableVersion")}</span>
+            <strong>${escapeHtml(availableVersion)}</strong>
+          </div>
+          <div class="update-meta-item">
+            <span>${t(state.locale, "updatePublishedAtLabel")}</span>
+            <strong>${escapeHtml(publishedAt)}</strong>
+          </div>
+        </div>
+
+        <div class="config-actions">
+          <button class="action" type="button" data-check-updates ${checkDisabled ? "disabled" : ""}>
+            ${state.updateStatus === "checking" ? t(state.locale, "checkingForUpdates") : t(state.locale, "checkForUpdates")}
+          </button>
+          <button class="action primary" type="button" data-install-update ${installDisabled ? "disabled" : ""}>
+            ${state.isInstallingUpdate ? t(state.locale, "installingUpdate") : t(state.locale, "downloadAndInstallUpdate")}
+          </button>
+        </div>
+
+        <p class="config-hint">${t(state.locale, "updateChecksRunOnLaunch")}</p>
+        <p class="${updateFeedbackClass}">${escapeHtml(updateStatusMessage())}</p>
+        ${renderUpdateNotes(state.availableUpdate?.body)}
+      </div>
 
       <div class="config-block">
         <div class="section-head">
@@ -1730,6 +1897,10 @@ function render(): void {
     ? state.errorMessage
     : state.isSyncing
       ? t(state.locale, "syncingShort")
+      : state.updateStatus === "available" && state.availableUpdate
+        ? t(state.locale, "updateAvailableBanner", { version: state.availableUpdate.version })
+        : state.updateStatus === "installing"
+          ? t(state.locale, "installingUpdate")
       : state.isLoading
         ? t(state.locale, "loadingDashboard")
         : dashboard
@@ -1738,6 +1909,7 @@ function render(): void {
   const skipLinkText = t(state.locale, "skipToMainContent");
   const sidebarMarkup = renderSidebarNav();
   const contentMarkup = `
+    ${renderUpdateBanner(timeZone)}
     ${state.errorMessage ? `<section class="banner bad">${escapeHtml(state.errorMessage)}</section>` : ""}
     ${state.isLoading && !dashboard ? `<section class="banner">${t(state.locale, "loadingPage")}</section>` : ""}
     ${
@@ -2007,6 +2179,82 @@ async function openSourceRepositoryInBrowser(): Promise<void> {
   }
 }
 
+async function ensureCurrentAppVersion(): Promise<void> {
+  if (state.currentAppVersion) {
+    return;
+  }
+
+  try {
+    state.currentAppVersion = await fetchCurrentAppVersion();
+    render();
+  } catch {}
+}
+
+async function checkForAppUpdates(manual: boolean): Promise<void> {
+  if (state.updateStatus === "checking" || state.isInstallingUpdate) {
+    return;
+  }
+
+  state.updateStatus = "checking";
+  state.updateErrorMessage = null;
+  render();
+
+  try {
+    if (!state.currentAppVersion) {
+      state.currentAppVersion = await fetchCurrentAppVersion();
+    }
+
+    const update = await checkForPendingAppUpdate();
+    state.availableUpdate = update;
+    state.updateDownloadedBytes = 0;
+    state.updateContentLength = null;
+    state.updateStatus = update ? "available" : "upToDate";
+  } catch (error) {
+    if (!manual) {
+      state.updateStatus = state.availableUpdate ? "available" : "idle";
+      render();
+      return;
+    }
+
+    const message = error instanceof Error ? error.message : String(error);
+    state.updateStatus = "error";
+    state.updateErrorMessage = translateErrorMessage(state.locale, message);
+  }
+
+  render();
+}
+
+async function installAppUpdate(): Promise<void> {
+  if (!state.availableUpdate || state.isInstallingUpdate || state.updateStatus === "checking") {
+    return;
+  }
+
+  state.isInstallingUpdate = true;
+  state.updateStatus = "installing";
+  state.updateErrorMessage = null;
+  state.updateDownloadedBytes = 0;
+  state.updateContentLength = null;
+  render();
+
+  try {
+    await installPendingAppUpdate(state.availableUpdate, (event) => {
+      if (event.kind === "started") {
+        state.updateContentLength = event.contentLength;
+      } else if (event.kind === "progress") {
+        state.updateDownloadedBytes += event.chunkLength;
+      }
+
+      render();
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    state.isInstallingUpdate = false;
+    state.updateStatus = "error";
+    state.updateErrorMessage = translateErrorMessage(state.locale, message);
+    render();
+  }
+}
+
 async function loadMonthlyDetails(nextMonth = state.monthlyDetailMonth): Promise<void> {
   if (!state.monthlyDetailYear || nextMonth === null) {
     state.monthlyDetailsError = t(state.locale, "readyToQueryMonthlyDetailDescription");
@@ -2123,4 +2371,8 @@ async function syncDashboard(): Promise<void> {
 
 render();
 void initializeSyncProgressListener();
+void ensureCurrentAppVersion();
+if (!import.meta.env.DEV) {
+  void checkForAppUpdates(false);
+}
 void loadDashboard();

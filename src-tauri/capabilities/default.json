@@ -1,21 +1,13 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
-  "identifier": "main-capability",
-  "description": "Capability for the main dashboard window",
-  "windows": ["main"],
+  "identifier": "default",
+  "description": "Default desktop capability set for the main window.",
+  "windows": [
+    "main"
+  ],
   "permissions": [
     "core:default",
-    "allow-ping",
-    "allow-get-dashboard",
-    "allow-get-sync-preview",
-    "allow-start-sync",
-    "allow-is-sync-running",
-    "allow-get-sync-status",
-    "allow-get-sync-progress",
-    "allow-get-app-meta",
-    "allow-open-source-repository",
-    "allow-query-daily-usage",
-    "allow-set-database-path",
-    "allow-reset-database-path"
+    "process:default",
+    "updater:default"
   ]
 }

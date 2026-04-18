@@ -46,18 +46,21 @@ jobs:
           - os: macos-latest
             label: macOS arm64
             asset_suffix: macos-arm64
+            updater_target: darwin-aarch64
             bundle_root: src-tauri/target/aarch64-apple-darwin/release/bundle
             tauri_args: --target aarch64-apple-darwin
             rust_targets: aarch64-apple-darwin
           - os: macos-latest
             label: macOS x64
             asset_suffix: macos-x64
+            updater_target: darwin-x86_64
             bundle_root: src-tauri/target/x86_64-apple-darwin/release/bundle
             tauri_args: --target x86_64-apple-darwin
             rust_targets: x86_64-apple-darwin
           - os: windows-latest
             label: Windows x64
             asset_suffix: windows-x64
+            updater_target: windows-x86_64
             bundle_root: src-tauri/target/release/bundle
             tauri_args: ""
             rust_targets: ""
@@ -94,52 +97,60 @@ jobs:
         run: cargo test
 
       - name: Build desktop bundles
-        run: npm run desktop -- build --ci --no-sign ${{ matrix.tauri_args }}
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: npm run desktop -- build --ci --config src-tauri/tauri.release.conf.json ${{ matrix.tauri_args }}
 
-      - name: Upload release assets
+      - name: Upload release assets and updater fragment
         shell: bash
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
           TAG_NAME: ${{ github.ref_name }}
           ASSET_SUFFIX: ${{ matrix.asset_suffix }}
+          UPDATER_TARGET: ${{ matrix.updater_target }}
           BUNDLE_ROOT: ${{ matrix.bundle_root }}
         run: |
           shopt -s nullglob
           upload_dir="$RUNNER_TEMP/release-assets"
-          mkdir -p "$upload_dir"
+          fragment_dir="$RUNNER_TEMP/updater-fragment"
+          mkdir -p "$upload_dir" "$fragment_dir"
           safe_app_name="$(node -p "JSON.parse(require('node:fs').readFileSync('src-tauri/tauri.conf.json','utf8')).productName.replace(/[^A-Za-z0-9._-]+/g, '-')")"
 
           copy_with_suffix() {
             local source_path="$1"
             local suffix="$2"
-            local extension
-            local renamed
+            local extension=""
+            local renamed=""
 
             case "$source_path" in
+              *.app.tar.gz.sig)
+                extension=".app.tar.gz.sig"
+                ;;
               *.app.tar.gz)
                 extension=".app.tar.gz"
                 ;;
-              *.tar.gz)
-                extension=".tar.gz"
-                ;;
-              *.dmg)
-                extension=".dmg"
-                ;;
-              *.deb)
-                extension=".deb"
-                ;;
-              *.rpm)
-                extension=".rpm"
-                ;;
-              *.msi)
-                extension=".msi"
+              *.exe.sig)
+                extension=".exe.sig"
                 ;;
               *.exe)
                 extension=".exe"
                 ;;
+              *.msi.sig)
+                extension=".msi.sig"
+                ;;
+              *.msi)
+                extension=".msi"
+                ;;
+              *.zip.sig)
+                extension=".zip.sig"
+                ;;
               *.zip)
                 extension=".zip"
+                ;;
+              *.dmg)
+                extension=".dmg"
                 ;;
               *)
                 extension=""
@@ -148,20 +159,40 @@ jobs:
 
             renamed="${safe_app_name}-${TAG_NAME}-${suffix}${extension}"
             cp "$source_path" "$upload_dir/$renamed"
+            printf '%s\n' "$renamed"
           }
+
+          updater_source=""
 
           case "$RUNNER_OS" in
             macOS)
-              files=(
+              release_files=(
                 "$BUNDLE_ROOT"/dmg/*.dmg
+                "$BUNDLE_ROOT"/macos/*.app.tar.gz
+                "$BUNDLE_ROOT"/macos/*.app.tar.gz.sig
               )
+              updater_files=("$BUNDLE_ROOT"/macos/*.app.tar.gz)
+              if [ "${#updater_files[@]}" -gt 0 ]; then
+                updater_source="${updater_files[0]}"
+              fi
               ;;
             Windows)
-              files=(
+              release_files=(
                 "$BUNDLE_ROOT"/msi/*.msi
+                "$BUNDLE_ROOT"/msi/*.msi.sig
                 "$BUNDLE_ROOT"/nsis/*.exe
+                "$BUNDLE_ROOT"/nsis/*.exe.sig
                 "$BUNDLE_ROOT"/nsis/*.zip
               )
+              updater_files=("$BUNDLE_ROOT"/nsis/*.exe)
+              if [ "${#updater_files[@]}" -gt 0 ]; then
+                updater_source="${updater_files[0]}"
+              else
+                updater_files=("$BUNDLE_ROOT"/msi/*.msi)
+                if [ "${#updater_files[@]}" -gt 0 ]; then
+                  updater_source="${updater_files[0]}"
+                fi
+              fi
               ;;
             *)
               echo "Unsupported runner OS: $RUNNER_OS" >&2
@@ -169,14 +200,88 @@ jobs:
               ;;
           esac
 
-          if [ "${#files[@]}" -eq 0 ]; then
+          if [ "${#release_files[@]}" -eq 0 ]; then
             echo "No release assets found for $RUNNER_OS." >&2
-            find src-tauri/target -maxdepth 5 -type f | sort || true
+            find src-tauri/target -maxdepth 6 -type f | sort || true
             exit 1
           fi
 
-          for file in "${files[@]}"; do
-            copy_with_suffix "$file" "$ASSET_SUFFIX"
+          for file in "${release_files[@]}"; do
+            [ -e "$file" ] || continue
+            copy_with_suffix "$file" "$ASSET_SUFFIX" >/dev/null
           done
 
+          if [ -z "$updater_source" ]; then
+            echo "Failed to resolve updater bundle for $RUNNER_OS." >&2
+            find "$BUNDLE_ROOT" -maxdepth 3 -type f | sort || true
+            exit 1
+          fi
+
+          updater_signature="${updater_source}.sig"
+          if [ ! -f "$updater_signature" ]; then
+            echo "Missing updater signature at $updater_signature" >&2
+            exit 1
+          fi
+
+          renamed_updater="$(copy_with_suffix "$updater_source" "$ASSET_SUFFIX")"
+          signature_content="$(tr -d '\r\n' < "$updater_signature")"
+
+          cat > "$fragment_dir/${UPDATER_TARGET}.json" <<EOF
+          {
+            "platform": "${UPDATER_TARGET}",
+            "url": "https://github.com/${GH_REPO}/releases/download/${TAG_NAME}/${renamed_updater}",
+            "signature": "${signature_content}"
+          }
+          EOF
+
           gh release upload "$TAG_NAME" "$upload_dir"/* --clobber
+
+      - name: Upload updater fragment artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: updater-fragment-${{ matrix.asset_suffix }}
+          path: ${{ runner.temp }}/updater-fragment/*.json
+          if-no-files-found: error
+          retention-days: 7
+
+  publish-updater-manifest:
+    name: Publish latest.json
+    needs: build-and-upload
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 25
+
+      - name: Download updater fragments
+        uses: actions/download-artifact@v4
+        with:
+          pattern: updater-fragment-*
+          path: ${{ runner.temp }}/updater-fragments
+          merge-multiple: true
+
+      - name: Build latest.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          gh release view "$TAG_NAME" --json body --jq .body > "$RUNNER_TEMP/release-notes.txt"
+          pub_date="$(gh release view "$TAG_NAME" --json publishedAt --jq .publishedAt)"
+          node scripts/build-updater-manifest.mjs \
+            --input-dir "$RUNNER_TEMP/updater-fragments" \
+            --output "$RUNNER_TEMP/latest.json" \
+            --version "${TAG_NAME#v}" \
+            --pub-date "$pub_date" \
+            --notes-file "$RUNNER_TEMP/release-notes.txt"
+
+      - name: Upload latest.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ github.ref_name }}
+        run: gh release upload "$TAG_NAME" "$RUNNER_TEMP/latest.json" --clobber

@@ -1,6 +1,6 @@
 [package]
 name = "tokenledger"
-version = "0.1.0"
+version = "0.2.0"
 description = "TokenLedger desktop app"
 authors = ["join"]
 edition = "2021"
@@ -18,6 +18,8 @@ rusqlite = { version = "0.37", features = ["bundled"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 tauri = { version = "2", features = [] }
+tauri-plugin-process = "2"
+tauri-plugin-updater = "2"
 walkdir = "2.5"
 
 [dev-dependencies]
