@@ -860,6 +860,7 @@ h3 {
 }
 
 .activity-wall-copy {
+  font-size: 0.82rem;
   line-height: 1.65;
   color: rgba(76, 72, 58, 0.28);
 }
