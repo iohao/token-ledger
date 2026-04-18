@@ -6,21 +6,24 @@
 
 ## 截图
 
-### Overview
+### 概览
 
 ![TokenLedger overview](./docs/images/readme-overview-zh.png)
 
-### Monthly Usage
+### 每月用量明细
+
+![TokenLedger monthly detail](./docs/images/readme-monthly-detail-zh.png)
+
+### 用量汇总
 
 ![TokenLedger monthly usage](./docs/images/readme-monthly-zh.png)
-
 
 
 ## 功能
 
 - 从 `CODEX_HOME/sessions/*.jsonl` 读取 Codex 会话数据
 - 将聚合结果写入 `CODEX_HOME/.codex-usage/usage.sqlite`
-- 提供概览、每日用量、每月用量、同步说明 4 个视图
+- 提供概览、每日用量、每月用量、关于 4 个视图
 - 支持自动同步频率切换和 SQLite 路径覆盖
 - 内置中英文界面切换
 

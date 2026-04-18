@@ -12,19 +12,19 @@ The screenshots below were generated with the browser `?demo=1` demo mode so no 
 
 ![TokenLedger overview](./docs/images/readme-overview.png)
 
+### Monthly Detail
+
+![TokenLedger monthly detail](./docs/images/readme-monthly-detail.png)
+
 ### Monthly Usage
 
 ![TokenLedger monthly usage](./docs/images/readme-monthly.png)
-
-### Sync Details
-
-![TokenLedger sync details](./docs/images/readme-sync.png)
 
 ## Features
 
 - Reads Codex session data from `CODEX_HOME/sessions/*.jsonl`
 - Writes aggregated usage into `CODEX_HOME/.codex-usage/usage.sqlite`
-- Includes Overview, Daily usage, Monthly usage, and Sync details views
+- Includes Overview, Daily usage, Monthly usage, and About views
 - Supports auto-sync interval changes and SQLite path overrides
 - Includes built-in English and Chinese UI switching
 
@@ -54,8 +54,9 @@ You can also open a specific view directly with `tab`:
 
 - `?demo=1&tab=overview`
 - `?demo=1&tab=monthlyHistory`
-- `?demo=1&tab=syncInfo`
+- `?demo=1&tab=monthlyDetail`
 - `?demo=1&tab=dailyDetail`
+
 
 ### Checks and tests
 
