@@ -67,10 +67,10 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 25
           cache: npm
@@ -237,7 +237,7 @@ jobs:
           gh release upload "$TAG_NAME" "$upload_dir"/* --clobber
 
       - name: Upload updater fragment artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: updater-fragment-${{ matrix.asset_suffix }}
           path: ${{ runner.temp }}/updater-fragment/*.json
@@ -251,15 +251,15 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 25
 
       - name: Download updater fragments
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           pattern: updater-fragment-*
           path: ${{ runner.temp }}/updater-fragments
