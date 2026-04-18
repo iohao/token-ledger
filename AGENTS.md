@@ -24,6 +24,8 @@ Match the existing file style instead of reformatting unrelated code. TypeScript
 
 Automated tests currently live on the Rust side as inline `#[cfg(test)]` modules, especially in `src-tauri/src/app_state.rs`, `parser.rs`, `repository.rs`, and `store.rs`. Add or extend those tests when changing parsing, storage, or aggregation behavior. Frontend changes should at minimum pass `npm run typecheck` and be manually checked in `npm run desktop -- dev`.
 
+macOS packaged builds are not yet signed with an Apple Developer ID certificate or notarized by Apple. Update checks can still work in packaged builds, but replacement apps may be blocked by Gatekeeper on first launch. For local testing, prefer the GitHub Release install package over a manually copied `.app`, and expect quarantine removal to be necessary in some cases.
+
 ## Commit & Pull Request Guidelines
 
 Recent history mostly uses conventional-style subjects such as `perf(scan): ...`, `build(packaging): ...`, and `docs(user): ...`. Prefer `<type>(<scope>): <summary>` and avoid vague messages like `ok`. Pull requests should explain user-visible impact, list verification commands, link the related issue when available, and include screenshots or short recordings for UI changes.
@@ -31,3 +33,5 @@ Recent history mostly uses conventional-style subjects such as `perf(scan): ...`
 ## Configuration Notes
 
 The app reads Codex session data from `CODEX_HOME` and can pin the SQLite path with `CODEX_USAGE_DATABASE`. When changing path handling or sync behavior, document the user impact in `docs/howto/`.
+
+Desktop releases are tag-driven. Update the version in `package.json`, `src-tauri/Cargo.toml`, and `src-tauri/tauri.conf.json`, then verify whether `src-tauri/Cargo.lock` changed as a side effect of the version bump. Pushing a tag like `v0.3.0` triggers the release workflow that uploads platform bundles and regenerates `latest.json`.
