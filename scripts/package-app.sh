@@ -4,6 +4,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 OUT_DIR="${OUT_DIR:-$ROOT_DIR/release-app}"
+LOCAL_UPDATER_KEY_PATH="$ROOT_DIR/local/tauri-updater.key"
 SKIP_INSTALL=0
 SKIP_TYPECHECK=0
 OPEN_RESULT=0
@@ -145,6 +146,16 @@ fi
 if [[ "$SKIP_TYPECHECK" -eq 0 ]]; then
   log "Running typecheck"
   (cd "$ROOT_DIR" && npm run typecheck)
+fi
+
+if [[ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" && -z "${TAURI_SIGNING_PRIVATE_KEY_PATH:-}" && -f "$LOCAL_UPDATER_KEY_PATH" ]]; then
+  log "Using local updater signing key from $LOCAL_UPDATER_KEY_PATH"
+  export TAURI_SIGNING_PRIVATE_KEY="$(cat "$LOCAL_UPDATER_KEY_PATH")"
+fi
+
+if [[ -n "${CODEX_HOME:-}" || -n "${CODEX_USAGE_DATABASE:-}" ]]; then
+  log "Detected CODEX_HOME/CODEX_USAGE_DATABASE in the current shell."
+  log "If the packaged app is launched from Finder, those environment variables may not be inherited."
 fi
 
 log "Packaging desktop app with Tauri"

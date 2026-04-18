@@ -112,7 +112,8 @@ const state = {
   availableUpdate: null as PendingAppUpdate | null,
   isInstallingUpdate: false,
   updateDownloadedBytes: 0,
-  updateContentLength: null as number | null
+  updateContentLength: null as number | null,
+  hasAttemptedInitialSync: false
 };
 
 const numberFormatterCache = new Map<Locale, Intl.NumberFormat>();
@@ -1596,6 +1597,10 @@ function renderSyncInfoView(timeZone: string, notes: string, dashboard: Dashboar
 
       <dl class="meta-list">
         <div>
+          <dt>${t(state.locale, "currentVersion")}</dt>
+          <dd>${escapeHtml(state.currentAppVersion ?? "-")}</dd>
+        </div>
+        <div>
           <dt>${t(state.locale, "codexDirectory")}</dt>
           <dd>${escapeHtml(dashboard?.meta.codexHomePath ?? "-")}</dd>
         </div>
@@ -2033,6 +2038,18 @@ async function loadSyncPreview(expectedSyncGeneration = syncGeneration): Promise
 
     state.syncPreview = preview;
     render();
+
+    if (
+      !state.hasAttemptedInitialSync &&
+      !state.isSyncing &&
+      !state.isLoading &&
+      state.dashboard?.status.lastSyncedAt === null &&
+      preview.needsSync &&
+      preview.totalSessionFiles > 0
+    ) {
+      state.hasAttemptedInitialSync = true;
+      void syncDashboard();
+    }
   } catch {}
 }
 
