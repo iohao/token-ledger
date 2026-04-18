@@ -8,6 +8,22 @@ This app now supports in-app update checks and installer downloads through Tauri
 - If a newer release is found, the UI shows an update banner and a manual install button in the `About` view.
 - Clicking `Download and install` downloads the signed updater bundle, installs it, and relaunches the app.
 
+## macOS caveat for local distribution
+
+The current release pipeline signs Tauri updater bundles, but the macOS app itself is not yet signed with an Apple Developer ID certificate or notarized by Apple.
+
+That means:
+
+- update checks can still work,
+- the app can still download a newer release,
+- but macOS may block the downloaded replacement app on first launch.
+
+If you are testing a macOS build outside a fully signed and notarized distribution flow, prefer the GitHub Release install package instead of a manually copied `.app` bundle. If macOS blocks the updated app, remove the quarantine flag from the installed app bundle:
+
+```bash
+xattr -dr com.apple.quarantine "/path/to/TokenLedger.app"
+```
+
 ## Release prerequisites
 
 Generate a Tauri updater keypair once and keep the private key secret:

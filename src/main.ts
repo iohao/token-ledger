@@ -148,6 +148,7 @@ let lastSidebarMarkup = "";
 let lastContentMarkup = "";
 let activeActivityTooltipDay: HTMLElement | null = null;
 const isMacLikePlatform = navigator.platform.toLowerCase().includes("mac");
+const isMacOS = navigator.userAgent.includes("Mac");
 
 function escapeHtml(value: string): string {
   return value
@@ -1424,6 +1425,24 @@ function updateStatusMessage(): string {
   return t(state.locale, "updateChecksRunOnLaunch");
 }
 
+function updatePlatformSupportNote(): string | null {
+  if (!isMacOS) {
+    return null;
+  }
+
+  return t(state.locale, "updateMacUnsignedHint");
+}
+
+function decorateUpdateErrorMessage(message: string): string {
+  const translated = translateErrorMessage(state.locale, message);
+
+  if (!isMacOS) {
+    return translated;
+  }
+
+  return `${translated} ${t(state.locale, "updateMacUnsignedErrorHint")}`;
+}
+
 function updateStatusTone(): InlineNoticeTone | null {
   if (state.updateStatus === "available" || state.updateStatus === "upToDate") {
     return "good";
@@ -1954,6 +1973,7 @@ function renderSyncInfoView(timeZone: string, notes: string, dashboard: Dashboar
   const publishedAt = state.availableUpdate?.date ? formatTimestamp(state.availableUpdate.date, timeZone) : "-";
   const updateTone = updateStatusTone();
   const updateFeedbackClass = updateTone ? `config-feedback ${updateTone}` : "config-note";
+  const updatePlatformNote = updatePlatformSupportNote();
 
   return `
     <section class="info-panel panel">
@@ -2043,6 +2063,7 @@ function renderSyncInfoView(timeZone: string, notes: string, dashboard: Dashboar
 
         <p class="config-hint">${t(state.locale, "updateChecksRunOnLaunch")}</p>
         <p class="${updateFeedbackClass}">${escapeHtml(updateStatusMessage())}</p>
+        ${updatePlatformNote ? `<p class="config-note">${escapeHtml(updatePlatformNote)}</p>` : ""}
         ${renderUpdateNotes(state.availableUpdate?.body)}
       </div>
 
@@ -2604,7 +2625,7 @@ async function checkForAppUpdates(manual: boolean): Promise<void> {
 
     const message = error instanceof Error ? error.message : String(error);
     state.updateStatus = "error";
-    state.updateErrorMessage = translateErrorMessage(state.locale, message);
+    state.updateErrorMessage = decorateUpdateErrorMessage(message);
   }
 
   render();
@@ -2636,7 +2657,7 @@ async function installAppUpdate(): Promise<void> {
     const message = error instanceof Error ? error.message : String(error);
     state.isInstallingUpdate = false;
     state.updateStatus = "error";
-    state.updateErrorMessage = translateErrorMessage(state.locale, message);
+    state.updateErrorMessage = decorateUpdateErrorMessage(message);
     render();
   }
 }

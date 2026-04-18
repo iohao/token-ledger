@@ -99,6 +99,10 @@ const MESSAGES = {
     updateDownloadProgress: "已下载 {downloaded} / {total}",
     updateChecksRunOnLaunch: "应用启动时会静默检查一次更新，也可以在这里手动检查。",
     updateReleaseNotes: "更新说明",
+    updateMacUnsignedHint:
+      "当前 macOS 安装包尚未做 Apple 签名与公证。检查更新通常仍可命中，但下载后的新版本可能被系统拦截，首次打开时可能需要手动移除 quarantine 或再次放行。",
+    updateMacUnsignedErrorHint:
+      "如果你运行的是未签名的 macOS 应用包，系统可能会拦截更新后的新版本。请优先用 GitHub Release 的正式安装包测试，或在替换后手动移除 quarantine。",
     databasePathSource: "当前来源: {source}",
     databasePathSourceEnv: "环境变量",
     databasePathSourceConfig: "自定义配置",
@@ -260,6 +264,10 @@ const MESSAGES = {
     updateDownloadProgress: "Downloaded {downloaded} / {total}",
     updateChecksRunOnLaunch: "The app checks quietly on launch, and you can also run a manual check here.",
     updateReleaseNotes: "Release notes",
+    updateMacUnsignedHint:
+      "This macOS app is not yet signed and notarized by Apple. Update checks can still succeed, but the downloaded replacement app may be blocked by macOS on first launch.",
+    updateMacUnsignedErrorHint:
+      "If you are running an unsigned macOS app bundle, macOS may block the updated app after replacement. Test with the GitHub Release install package first, or remove quarantine manually after update.",
     databasePathSource: "Current source: {source}",
     databasePathSourceEnv: "environment variable",
     databasePathSourceConfig: "custom setting",
@@ -399,6 +407,16 @@ export function translateErrorMessage(locale: Locale, message: string): string {
     [/^unsupported end_date: (.+)$/i, (matches) => `不支持的结束日期: ${matches[1]}`],
     [/^sync lock poisoned$/i, () => "同步锁异常，请稍后重试。"],
     [/^sync is already running$/i, () => "同步任务已在运行中。"],
+    [/^Could not fetch a valid release JSON from the remote\.?$/i, () => "无法读取更新元数据，请确认 latest.json 可访问。"],
+    [/^update endpoint did not respond with a successful status code\.?$/i, () => "更新地址返回异常状态码，请稍后重试。"],
+    [/^update endpoint returned 204 No Content\.?$/i, () => "更新地址返回空结果，当前可能没有可用更新。"],
+    [/^the `url` field was not set on the updater response\.?$/i, () => "更新元数据缺少下载地址 url 字段。"],
+    [/^the `signature` field was not set on the updater response\.?$/i, () => "更新元数据缺少签名 signature 字段。"],
+    [/^Updater does not have any endpoints set\.?$/i, () => "应用没有配置更新地址 endpoints。"],
+    [/^invalid updater binary format$/i, () => "下载的更新包格式无效。"],
+    [/^failed to extract/i, () => "更新包解压失败。"],
+    [/^failed to install/i, () => "安装更新失败。"],
+    [/^Authentication failed or was cancelled$/i, () => "系统安装授权失败或被取消。"],
     [/^database path cannot be empty$/i, () => "SQLite 路径不能为空。"],
     [
       /^database path is managed by CODEX_USAGE_DATABASE and cannot be changed in the app$/i,
