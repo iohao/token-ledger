@@ -26,9 +26,9 @@ const DEMO_META: DashboardMetaDTO = {
   databasePathSource: "default",
   databasePathEditable: true,
   timeZone: "Asia/Shanghai",
-  parseVersion: 3,
+  parseVersion: 5,
   pricingNotes: [
-    "GPT-5.4 / GPT-5.4-mini / GPT-5.3-Codex rates use OpenAI Codex Rate Card values, converted from credits with a 25 credits = 1 USD inference."
+    "GPT-5.5 / GPT-5.4 / GPT-5.4-mini / GPT-5.3-Codex rates use OpenAI Codex Rate Card values, converted from credits with a 25 credits = 1 USD inference."
   ]
 };
 

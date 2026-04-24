@@ -341,8 +341,8 @@ const MESSAGES = {
 type MessageKey = keyof (typeof MESSAGES)["zh-CN"];
 
 const ZH_PRICING_NOTE_MAP: Record<string, string> = {
-  "GPT-5.4 / GPT-5.4-mini / GPT-5.3-Codex rates use OpenAI Codex Rate Card values, converted from credits with a 25 credits = 1 USD inference.":
-    "GPT-5.4 / GPT-5.4-mini / GPT-5.3-Codex 的价格采用 OpenAI Codex Rate Card，并按 25 credits = 1 USD 推算为美元成本。",
+  "GPT-5.5 / GPT-5.4 / GPT-5.4-mini / GPT-5.3-Codex rates use OpenAI Codex Rate Card values, converted from credits with a 25 credits = 1 USD inference.":
+    "GPT-5.5 / GPT-5.4 / GPT-5.4-mini / GPT-5.3-Codex 的价格采用 OpenAI Codex Rate Card，并按 25 credits = 1 USD 推算为美元成本。",
   "GPT-5.3-Codex-Spark is still marked as not final by OpenAI; this dashboard estimates Spark cost using GPT-5.3-Codex rates.":
     "OpenAI 仍将 GPT-5.3-Codex-Spark 标记为未最终定价；本看板暂按 GPT-5.3-Codex 的费率估算 Spark 成本。",
 };
