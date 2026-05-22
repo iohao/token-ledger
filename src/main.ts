@@ -73,6 +73,37 @@ type ActivityWallCell = {
   title: string;
 };
 
+type Theme = "dark" | "light";
+const THEME_STORAGE_KEY = "tokenledger.theme";
+
+function detectInitialTheme(): Theme {
+  try {
+    const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
+    if (stored === "dark" || stored === "light") {
+      return stored;
+    }
+  } catch {}
+  try {
+    if (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches) {
+      return "light";
+    }
+  } catch {}
+  return "dark";
+}
+
+function applyTheme(theme: Theme): void {
+  try {
+    document.documentElement.setAttribute("data-theme", theme);
+    window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+  } catch {}
+}
+
+function setTheme(theme: Theme): void {
+  state.theme = theme;
+  applyTheme(theme);
+  render();
+}
+
 function detectInitialTab(): AppTab {
   if (typeof window === "undefined") {
     return "overview";
@@ -93,6 +124,7 @@ const state = {
   isUpdatingDatabasePath: false,
   errorMessage: null as string | null,
   locale: detectInitialLocale(),
+  theme: detectInitialTheme(),
   autoSyncMode: "manual" as AutoSyncModeValue,
   nextAutoSyncAt: null as number | null,
   activeTab: detectInitialTab(),
@@ -1514,6 +1546,18 @@ function renderSidebarNav(): string {
               <option value="en-US" ${state.locale === "en-US" ? "selected" : ""}>${t(state.locale, "languageEnglish")}</option>
             </select>
           </label>
+          <label class="menu-locale-field" for="theme-select" style="margin-top: 12px;">
+            <span class="menu-locale-label">${t(state.locale, "themeAppearance")}</span>
+            <select
+              id="theme-select"
+              class="menu-locale-select"
+              data-theme-select
+              aria-label="${t(state.locale, "themeSelectAria")}"
+            >
+              <option value="dark" ${state.theme === "dark" ? "selected" : ""}>${t(state.locale, "themeDark")}</option>
+              <option value="light" ${state.theme === "light" ? "selected" : ""}>${t(state.locale, "themeLight")}</option>
+            </select>
+          </label>
         </div>
         ${tabs
           .map(
@@ -1785,6 +1829,14 @@ function handleRootChange(event: Event): void {
   if (localeSelect instanceof HTMLSelectElement) {
     if (isLocale(localeSelect.value)) {
       setLocale(localeSelect.value);
+    }
+    return;
+  }
+
+  const themeSelect = target.closest("[data-theme-select]");
+  if (themeSelect instanceof HTMLSelectElement) {
+    if (themeSelect.value === "light" || themeSelect.value === "dark") {
+      setTheme(themeSelect.value);
     }
     return;
   }
@@ -2776,6 +2828,7 @@ async function syncDashboard(): Promise<void> {
   }
 }
 
+applyTheme(state.theme);
 render();
 void initializeSyncProgressListener();
 void ensureCurrentAppVersion();
