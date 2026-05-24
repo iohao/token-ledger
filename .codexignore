@@ -1,0 +1,26 @@
+# GitNexus
+.gitnexus/
+
+# Dependencies
+node_modules/
+
+# Build and release outputs
+dist/
+release-app/
+target/
+src-tauri/target/
+src-tauri/gen/
+
+# Version control and agent cache
+.git/
+.antigravitycli/
+.claude/
+CLAUDE.md
+
+# OS/Editor configs
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+*.tmp
