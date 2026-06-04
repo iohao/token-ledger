@@ -47,11 +47,12 @@ Thumbs.db
 
 local/
 
-# GitNexus
-.gitnexus/
-
 # AI Coding Assistants / Antigravity CLI
 .antigravitycli/
 .claude/settings.local.json
 .claude/CLAUDE.local.md
+
+# CodeGraph
+.codegraph/
+
 

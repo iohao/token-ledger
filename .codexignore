@@ -1,6 +1,3 @@
-# GitNexus
-.gitnexus/
-
 # Dependencies
 node_modules/
 
@@ -24,3 +21,7 @@ CLAUDE.md
 *.swp
 *.swo
 *.tmp
+
+# CodeGraph
+.codegraph/
+

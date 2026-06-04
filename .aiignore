@@ -1,6 +1,3 @@
-# GitNexus
-.gitnexus/
-
 # Dependencies
 node_modules/
 
@@ -25,3 +22,7 @@ src-tauri/gen/
 *.swp
 *.swo
 *.tmp
+
+# CodeGraph
+.codegraph/
+
