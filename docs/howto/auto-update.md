@@ -54,8 +54,14 @@ The release workflow will:
 - build the signed updater bundles,
 - upload release assets,
 - generate `latest.json`,
-- upload `latest.json` to the GitHub Release.
+- upload `latest.json` to the GitHub Release,
+- publish `latest.json` to the `release-manifest` branch to serve via CDN,
+- purge the jsDelivr CDN cache to make it effective immediately.
 
-The app checks this URL at runtime:
 
-`https://github.com/iohao/token-ledger/releases/latest/download/latest.json`
+The app checks these URLs in order at runtime to verify and fetch updates:
+
+1. `https://cdn.jsdelivr.net/gh/iohao/token-ledger@release-manifest/latest.json` (Primary endpoint via jsDelivr CDN)
+2. `https://github.com/iohao/token-ledger/releases/latest/download/latest.json` (Official GitHub Release endpoint)
+3. `https://gh-proxy.com/https://github.com/iohao/token-ledger/releases/latest/download/latest.json` (GitHub proxy endpoint fallback)
+

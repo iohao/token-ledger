@@ -1,6 +1,6 @@
 [package]
 name = "tokenledger"
-version = "0.4.1"
+version = "0.4.2"
 description = "TokenLedger desktop app"
 authors = ["join"]
 edition = "2021"
