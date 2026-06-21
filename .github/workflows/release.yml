@@ -32,6 +32,7 @@ jobs:
           else
             gh release create "$TAG_NAME" \
               --title "$TAG_NAME" \
+              --draft \
               --generate-notes
           fi
 
@@ -285,3 +286,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG_NAME: ${{ github.ref_name }}
         run: gh release upload "$TAG_NAME" "$RUNNER_TEMP/latest.json" --clobber
+
+      - name: Publish Release (undraft)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ github.ref_name }}
+        run: gh release edit "$TAG_NAME" --draft=false
