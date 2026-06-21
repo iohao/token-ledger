@@ -1,4 +1,5 @@
 import { listen } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   fetchCurrentSyncProgress,
   fetchDashboard,
@@ -2830,6 +2831,13 @@ async function syncDashboard(): Promise<void> {
 
 applyTheme(state.theme);
 render();
+
+try {
+  void getCurrentWindow().show();
+} catch (error) {
+  console.error("Failed to show window:", error);
+}
+
 void initializeSyncProgressListener();
 void ensureCurrentAppVersion();
 if (!import.meta.env.DEV) {
