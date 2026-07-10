@@ -2,85 +2,44 @@
 
 [English README](./README.md)
 
-`TokenLedger` 是一个基于 Tauri 的桌面看板，用来读取 Codex 会话数据，把统计结果同步到本地 SQLite，并按今日、近 7 日、本月、每日和每月维度查看 token 与成本变化。
+`TokenLedger` 是一个基于 Tauri 的桌面看板，用于读取 Codex 会话数据并统计 token 与成本变化趋势。
 
-## 截图
+## 功能特性
 
-### 概览
-
-![TokenLedger overview](./docs/images/readme-overview-zh.png)
-
-### 每月用量明细
-
-![TokenLedger monthly detail](./docs/images/readme-monthly-detail-zh.png)
-
-### 用量汇总
-
-![TokenLedger monthly usage](./docs/images/readme-monthly-zh.png)
-
-
-## 功能
-
-- 从 `CODEX_HOME/sessions/*.jsonl` 读取 Codex 会话数据
-- 将聚合结果写入 `CODEX_HOME/.codex-usage/usage.sqlite`
-- 提供概览、每日用量、每月用量、关于 4 个视图
-- 支持自动同步频率切换和 SQLite 路径覆盖
-- 支持从 GitHub Releases 检查新版并在应用内安装更新
-- 内置中英文界面切换
-
-## 环境要求
-
-- Node.js `>= 25`
-- Rust stable、`cargo`、`rustc`
-- macOS 打包时需要 `xcodebuild`
+- **数据读取**：从 `CODEX_HOME/sessions/*.jsonl` 读取会话数据。
+- **本地存储**：将聚合结果写入本地 SQLite 数据库（默认路径为 `CODEX_HOME/.codex-usage/usage.sqlite`）。
+- **多维视图**：支持按今日、近 7 日、本月、每日和每月等维度查看用量。
+- **版本更新**：支持检查 GitHub Releases 并在线安装更新。
+- **国际化**：内置中英文界面。
 
 ## 快速开始
 
-### 运行桌面版
+### 运行开发版本
 
 ```bash
 npm ci
 npm run desktop -- dev
 ```
 
-
-
-### 检查与测试
+### 运行测试与校验
 
 ```bash
 npm run typecheck
 cd src-tauri && cargo test
 ```
 
-### 打包桌面应用
+### 打包应用
 
 ```bash
 npm run package:app
 ```
-
-打包后的可运行产物默认会复制到 `release-app/`。详细说明见 [docs/howto/package-desktop-app.md](./docs/howto/package-desktop-app.md)。
-
-## 数据路径
-
-- 默认 Codex 目录
-  - macOS / Linux: `~/.codex`
-  - Windows: `%USERPROFILE%\\.codex`
-- 默认 SQLite 路径: `CODEX_HOME/.codex-usage/usage.sqlite`
-- 如果设置了 `CODEX_USAGE_DATABASE`，应用会优先使用该路径
+打包后的可运行文件将输出至 `release-app/` 目录。
 
 ## 项目结构
 
 ```text
-src/             Frontend UI、i18n、DTO、Tauri API bridge
-src-tauri/       Rust backend、命令、SQLite、Tauri 配置
-docs/howto/      使用与打包说明
+src/             前端 UI 及逻辑 (Vite + TypeScript)
+src-tauri/       后端逻辑及数据库 (Rust + SQLite)
 scripts/         打包与对比辅助脚本
-release-app/     打包后的输出目录
+release-app/     打包输出目录
 ```
-
-## 相关文档
-
-- [docs/index.md](./docs/index.md)
-- [docs/howto/use-desktop-dashboard.md](./docs/howto/use-desktop-dashboard.md)
-- [docs/howto/package-desktop-app.md](./docs/howto/package-desktop-app.md)
-- [docs/howto/auto-update.md](./docs/howto/auto-update.md)

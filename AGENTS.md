@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-`src/` contains the Vite + TypeScript desktop UI. Keep Tauri bridge calls in `src/api/`, shared DTOs in `src/dto/`, and UI/i18n logic close to `src/main.ts` and `src/i18n.ts`. Rust backend code lives in `src-tauri/src/` with modules such as `commands.rs`, `repository.rs`, `parser.rs`, and `store.rs`. User-facing docs are in `docs/howto/`; build and packaging helpers live in `scripts/`. Generated output in `dist/`, `release-app/`, `src-tauri/target/`, and `src-tauri/gen/` should not be committed.
+`src/` contains the Vite + TypeScript desktop UI. Keep Tauri bridge calls in `src/api/`, shared DTOs in `src/dto/`, and UI/i18n logic close to `src/main.ts` and `src/i18n.ts`. Rust backend code lives in `src-tauri/src/` with modules such as `commands.rs`, `repository.rs`, `parser.rs`, and `store.rs`. Build and packaging helpers live in `scripts/`. Generated output in `dist/`, `release-app/`, `src-tauri/target/`, and `src-tauri/gen/` should not be committed.
 
 ## Build, Test, and Development Commands
 
@@ -32,7 +32,7 @@ Recent history mostly uses conventional-style subjects such as `perf(scan): ...`
 
 ## Configuration Notes
 
-The app reads Codex session data from `CODEX_HOME` and can pin the SQLite path with `CODEX_USAGE_DATABASE`. When changing path handling or sync behavior, document the user impact in `docs/howto/`.
+The app reads Codex session data from `CODEX_HOME` and can pin the SQLite path with `CODEX_USAGE_DATABASE`.
 
 Desktop releases are tag-driven. Update the version in `package.json`, `src-tauri/Cargo.toml`, and `src-tauri/tauri.conf.json`, then verify whether `src-tauri/Cargo.lock` changed as a side effect of the version bump. Pushing a tag like `v0.3.0` triggers the release workflow that uploads platform bundles and regenerates `latest.json`.
 
