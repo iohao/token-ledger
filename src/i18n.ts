@@ -349,6 +349,8 @@ const MESSAGES = {
 type MessageKey = keyof (typeof MESSAGES)["zh-CN"];
 
 const ZH_PRICING_NOTE_MAP: Record<string, string> = {
+  "GPT-5.6 family (Sol / Terra / Luna) rates use official OpenAI API pricing ($5.00/$30.00, $2.50/$15.00, $1.00/$6.00 per million tokens respectively).":
+    "GPT-5.6 系列 (Sol / Terra / Luna) 的价格采用 OpenAI 官方 API 定价 (每百万 input/output token 分别为 $5.00/$30.00, $2.50/$15.00, $1.00/$6.00)。",
   "GPT-5.5 / GPT-5.4 / GPT-5.4-mini / GPT-5.3-Codex rates use OpenAI Codex Rate Card values, converted from credits with a 25 credits = 1 USD inference.":
     "GPT-5.5 / GPT-5.4 / GPT-5.4-mini / GPT-5.3-Codex 的价格采用 OpenAI Codex Rate Card，并按 25 credits = 1 USD 推算为美元成本。",
   "GPT-5.3-Codex-Spark is still marked as not final by OpenAI; this dashboard estimates Spark cost using GPT-5.3-Codex rates.":

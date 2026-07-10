@@ -40,6 +40,21 @@ pub fn normalize_model(raw_value: &str) -> String {
 
 fn pricing_for(model: &str) -> Option<ModelPricing> {
     match normalize_model(model).as_str() {
+        "gpt-5.6" | "gpt-5.6-sol" => Some(ModelPricing {
+            input_cost_per_million: 5.0,
+            cached_input_cost_per_million: 0.5,
+            output_cost_per_million: 30.0,
+        }),
+        "gpt-5.6-terra" => Some(ModelPricing {
+            input_cost_per_million: 2.5,
+            cached_input_cost_per_million: 0.25,
+            output_cost_per_million: 15.0,
+        }),
+        "gpt-5.6-luna" => Some(ModelPricing {
+            input_cost_per_million: 1.0,
+            cached_input_cost_per_million: 0.1,
+            output_cost_per_million: 6.0,
+        }),
         "gpt-5.5" => Some(ModelPricing {
             input_cost_per_million: 5.0,
             cached_input_cost_per_million: 0.5,
@@ -84,6 +99,7 @@ pub fn cost_for(totals: &UsageTotals, model: &str) -> f64 {
 
 pub fn pricing_notes() -> Vec<String> {
     vec![
+        "GPT-5.6 family (Sol / Terra / Luna) rates use official OpenAI API pricing ($5.00/$30.00, $2.50/$15.00, $1.00/$6.00 per million tokens respectively).".to_string(),
         "GPT-5.5 / GPT-5.4 / GPT-5.4-mini / GPT-5.3-Codex rates use OpenAI Codex Rate Card values, converted from credits with a 25 credits = 1 USD inference.".to_string(),
         "GPT-5.3-Codex-Spark is still marked as not final by OpenAI; this dashboard estimates Spark cost using GPT-5.3-Codex rates.".to_string(),
     ]
@@ -110,6 +126,21 @@ mod tests {
         let cost = cost_for(&totals(1_000_000, 200_000, 100_000), "openai/gpt-5.5");
 
         assert!((cost - 7.1).abs() < 0.000_001);
+    }
+
+    #[test]
+    fn prices_gpt_5_6_variants() {
+        let cost_sol = cost_for(&totals(1_000_000, 200_000, 100_000), "openai/gpt-5.6-sol");
+        assert!((cost_sol - 7.1).abs() < 0.000_001);
+
+        let cost_generic = cost_for(&totals(1_000_000, 200_000, 100_000), "openai/gpt-5.6");
+        assert!((cost_generic - 7.1).abs() < 0.000_001);
+
+        let cost_terra = cost_for(&totals(1_000_000, 200_000, 100_000), "openai/gpt-5.6-terra");
+        assert!((cost_terra - 3.55).abs() < 0.000_001);
+
+        let cost_luna = cost_for(&totals(1_000_000, 200_000, 100_000), "openai/gpt-5.6-luna");
+        assert!((cost_luna - 1.42).abs() < 0.000_001);
     }
 
     #[test]

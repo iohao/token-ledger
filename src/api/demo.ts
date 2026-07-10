@@ -26,8 +26,9 @@ const DEMO_META: DashboardMetaDTO = {
   databasePathSource: "default",
   databasePathEditable: true,
   timeZone: "Asia/Shanghai",
-  parseVersion: 5,
+  parseVersion: 6,
   pricingNotes: [
+    "GPT-5.6 family (Sol / Terra / Luna) rates use official OpenAI API pricing ($5.00/$30.00, $2.50/$15.00, $1.00/$6.00 per million tokens respectively).",
     "GPT-5.5 / GPT-5.4 / GPT-5.4-mini / GPT-5.3-Codex rates use OpenAI Codex Rate Card values, converted from credits with a 25 credits = 1 USD inference."
   ]
 };
