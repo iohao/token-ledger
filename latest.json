@@ -1,0 +1,18 @@
+{
+  "version": "0.4.4",
+  "notes": "**Full Changelog**: https://github.com/iohao/token-ledger/compare/v0.4.3...v0.4.4",
+  "platforms": {
+    "darwin-aarch64": {
+      "url": "https://github.com/iohao/token-ledger/releases/download/v0.4.4/TokenLedger-v0.4.4-macos-arm64.app.tar.gz",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUY0ZRamsrZ2I0bnNBc1pBTkRTOTlkZGFXenVLSWpNNmFlYkVWSG9ud3dzcG9XK1k1czNxZ1JnS2tadnFYMzRxbTJZMERZUWNBOHNWdmppQktNMGVHVE1DNnQwWjhDa1E4PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgzNzI4Nzk4CWZpbGU6VG9rZW5MZWRnZXIuYXBwLnRhci5negorSHpXVVRGOXd1WlZCMjVMdjNjRmVqbU9ZdkxOcHl1azc4bzdPK2dLU1MvZU9nR3ltK3d3NXpCam1RZFZmQ21GTXcrNDBWdnQxeE5SWWZuc0NPVDZDdz09Cg=="
+    },
+    "darwin-x86_64": {
+      "url": "https://github.com/iohao/token-ledger/releases/download/v0.4.4/TokenLedger-v0.4.4-macos-x64.app.tar.gz",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUY0ZRamsrZ2I0bnNaV0thMmZKYUg1TEJZNXltNXUvRU5jS0VWdGEvVTVNVW9hTzBUbDU1WGc1dCt5bWNqNVBtWVdaK2Y4TXhOL1Z3V0J2L3hTM0NxeWdaQmNLVi9lZEFVPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgzNzI4NzU5CWZpbGU6VG9rZW5MZWRnZXIuYXBwLnRhci5negpxZUt1a1NTTm1vUTlRVFlLQjQ2RjI5WVFsYVk2M0lRblBNRzdJTFJsVk83L2VoSWZQZEtPUE96a01BY0RNdUdCSVpmc0hIQ2JEMXVFUWpvSVVScmhBQT09Cg=="
+    },
+    "windows-x86_64": {
+      "url": "https://github.com/iohao/token-ledger/releases/download/v0.4.4/TokenLedger-v0.4.4-windows-x64.exe",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVUY0ZRamsrZ2I0bnZCMDJla0JpM25EWE1uRURoUlJlSzRMYy9DZEdLakVaMjlRbld1UjlSZGZOcEpLR2ZIa1dIUFRnVkI1Z0NiYTJ4RWJXSzFBOEhnYnN4cXJBc3FLZGdBPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzgzNzI5MDg1CWZpbGU6VG9rZW5MZWRnZXJfMC40LjRfeDY0LXNldHVwLmV4ZQprWWNSZFcxdDFlVXhnVitaKzYxbm9aa2ZSSlpmMVo5MTYwQ2pMUzZ6T1VDckVzSmVnNHI0LzliZU5taUlnU2VTNmJ0SWJFNTEzMkd5dVJqTzd2SmtEdz09Cg=="
+    }
+  }
+}
