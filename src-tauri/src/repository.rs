@@ -772,9 +772,16 @@ mod tests {
 
         assert!(payload.activity_history.len() >= 365);
         assert!(payload.activity_history.len() <= 371);
+        let parsed_now = chrono::DateTime::parse_from_rfc3339(&payload.now)
+            .expect("parse payload.now")
+            .with_timezone(&chrono::Utc);
+        let expected_today_key = super::last_n_date_keys(parsed_now, &repository.time_zone, 1)
+            .expect("today key")
+            .into_iter()
+            .next();
         assert_eq!(
             payload.activity_history.first().map(|row| row.date_key.as_str()),
-            Some(payload.now[..10].as_ref())
+            expected_today_key.as_deref()
         );
         assert!(payload
             .activity_history
