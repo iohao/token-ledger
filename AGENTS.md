@@ -36,4 +36,12 @@ The app reads Codex session data from `CODEX_HOME` and can pin the SQLite path w
 
 Desktop releases are tag-driven. Update the version in `package.json`, `src-tauri/Cargo.toml`, and `src-tauri/tauri.conf.json`, then verify whether `src-tauri/Cargo.lock` changed as a side effect of the version bump. Pushing a tag like `v0.3.0` triggers the release workflow that uploads platform bundles and regenerates `latest.json`.
 
+<!-- OPENWIKI:START -->
 
+## OpenWiki
+
+This repository uses OpenWiki for recurring code documentation. Start with `openwiki/quickstart.md`, then follow its links to architecture, workflows, domain concepts, operations, integrations, testing guidance, and source maps.
+
+The scheduled OpenWiki GitHub Actions workflow refreshes the repository wiki. Do not hand-edit generated OpenWiki pages unless explicitly asked; prefer updating source code/docs and letting OpenWiki regenerate.
+
+<!-- OPENWIKI:END -->
