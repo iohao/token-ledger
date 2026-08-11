@@ -3,10 +3,31 @@ export type UsagePeriod = "today" | "last7Days" | "monthToDate";
 export interface UsageTotalsDTO {
   inputTokens: number;
   cachedInputTokens: number;
+  cacheCreationInputTokens: number;
   outputTokens: number;
   reasoningOutputTokens: number;
   totalTokens: number;
   costUSD: number;
+}
+
+export interface ModelPricingRatesDTO {
+  inputUsdPerMillion: number;
+  outputUsdPerMillion: number;
+  cacheReadUsdPerMillion: number;
+  cacheCreationUsdPerMillion: number;
+}
+
+export interface ModelPricingOverrideDTO {
+  model: string;
+  enabled: boolean;
+  rates: ModelPricingRatesDTO;
+}
+
+export interface ModelPricingSettingDTO {
+  model: string;
+  relayEnabled: boolean;
+  officialRates: ModelPricingRatesDTO;
+  relayRates: ModelPricingRatesDTO;
 }
 
 export interface ModelUsageBreakdownDTO {
@@ -75,6 +96,7 @@ export interface DashboardMetaDTO {
   timeZone: string;
   parseVersion: number;
   pricingNotes: string[];
+  modelPricingSettings: ModelPricingSettingDTO[];
 }
 
 export interface DashboardPayloadDTO {

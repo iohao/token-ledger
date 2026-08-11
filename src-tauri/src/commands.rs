@@ -1,10 +1,11 @@
-use tauri::{AppHandle, Emitter, Manager, State};
 use std::process::Command;
+use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::app_state::AppState;
 use crate::models::{
     DailyUsageSummary, DashboardMeta, DashboardPayload, SyncPreview, SyncProgress, SyncStatus,
 };
+use crate::pricing::ModelPricingOverride;
 
 const SYNC_PROGRESS_EVENT_NAME: &str = "sync-progress";
 const SOURCE_REPOSITORY_URL: &str = "https://github.com/iohao/token-ledger";
@@ -144,6 +145,25 @@ pub fn set_database_path(
 pub fn reset_database_path(state: State<'_, AppState>) -> Result<DashboardPayload, String> {
     state
         .reset_database_path()
+        .map_err(|error| error.to_string())?;
+
+    let mut payload = state
+        .repository()
+        .and_then(|repository| repository.build_dashboard_payload(false))
+        .map_err(|error| error.to_string())?;
+    state
+        .populate_dashboard_meta(&mut payload.meta)
+        .map_err(|error| error.to_string())?;
+    Ok(payload)
+}
+
+#[tauri::command]
+pub fn set_model_pricing_settings(
+    settings: Vec<ModelPricingOverride>,
+    state: State<'_, AppState>,
+) -> Result<DashboardPayload, String> {
+    state
+        .set_model_pricing_overrides(settings)
         .map_err(|error| error.to_string())?;
 
     let mut payload = state

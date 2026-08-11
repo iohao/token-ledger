@@ -52,12 +52,12 @@ in the repository (no host paths).
 │       ├── main.rs        Binary entry; registers plugins + invoke_handler list
 │       ├── lib.rs         Public module declarations
 │       ├── app_state.rs   AppState, settings, sync guard, preview cache, tests
-│       ├── commands.rs    12 #[tauri::command] entry points
+│       ├── commands.rs    13 #[tauri::command] entry points
 │       ├── models.rs      DTOs that cross the Tauri boundary + helpers
 │       ├── parser.rs      Streaming JSONL parser + tests
 │       ├── repository.rs  Sync orchestrator + tests
 │       ├── store.rs       SQLite wrapper (migrate, replace_session_file, ...)
-│       ├── pricing.rs     Model normalize + rate card + tests
+│       ├── pricing.rs     Model normalize, rate card, relay overrides, validation + tests
 │       ├── date_keys.rs   TZ-aware date key math (last_n, add_days, month_key)
 │       └── bin/
 │           └── export_dashboard.rs   CLI: dumps DashboardPayloadDTO as JSON
@@ -108,5 +108,4 @@ in the repository (no host paths).
 - `src-tauri/gen/` contains Tauri-generated ACLs that are rewritten by
   the build.
 - `src-tauri/permissions/` is currently empty; per-command ACL is
-  generated from `capabilities/default.json`.
   generated from `capabilities/default.json`.

@@ -3,56 +3,85 @@ node_modules/
 .npm/
 .pnpm-store/
 .yarn/
+yarn.lock.bak
+bun.lockb
 
-# Frontend build output
+# Frontend build and tooling output
 dist/
+dist-ssr/
 .vite/
-coverage/
+.cache/
 *.tsbuildinfo
-release-app/
+.eslintcache
 
-# Rust / Tauri build output
+# Rust and Tauri build output
 target/
 src-tauri/target/
 src-tauri/gen/
 src-tauri/.cargo/
+release-app/
+*.app/
+*.dmg
+*.zip
 
-# Logs
+# Local databases and runtime files
+*.db
+*.db-*
+*.sqlite
+*.sqlite-*
+
+# Environment and local configuration
+.env
+.env.*
+!.env.example
+*.local
+
+# IDE and editor files
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+code-space-state/
+
+# OS-generated files
+.DS_Store
+Thumbs.db
+Desktop.ini
+.fseventsd
+
+# Local tools and agent caches
+.antigravitycli/
+.qoder/
+.claude/settings.local.json
+.claude/CLAUDE.local.md
+.claude/skills/
+.codebase-memory/
+.agents/*
+!.agents/skills/
+
+# Local scratch and release state
+local/
+_local/
+.release-state/
+openwiki/
+
+# Coverage and test output
+coverage/
+.nyc_output/
+test-results/
+
+# Logs and temporary files
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
-
-# Local databases
-*.db
-*.db-journal
-*.sqlite
-*.sqlite-*
-
-# Environment files
-.env
-.env.*
-!.env.example
-
-# Editor / OS files
-.DS_Store
-Thumbs.db
-.idea/
-.vscode/
-*.swp
-*.swo
+bun-debug.log*
 *.tmp
+*.temp
 *.orig
-
-local/
-
-# AI Coding Assistants / Antigravity CLI
-.antigravitycli/
-.claude/settings.local.json
-.claude/CLAUDE.local.md
-
-# CodeGraph
-.codegraph/
-
-
+*.rej

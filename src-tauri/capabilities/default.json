@@ -20,6 +20,7 @@
     "allow-query-daily-usage",
     "allow-set-database-path",
     "allow-reset-database-path",
+    "allow-set-model-pricing-settings",
     "process:default",
     "updater:default"
   ]

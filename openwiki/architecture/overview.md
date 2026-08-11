@@ -13,9 +13,11 @@ event channel:
 - **Frontend** — Vite + TypeScript in `src/`. No UI framework; `src/main.ts`
   (~93k bytes) renders into `#root` directly with template strings and
   cached `Intl.NumberFormat` / `Intl.DateTimeFormat` instances.
-- **Backend** — Rust + Tauri in `src-tauri/src/`. Twelve `#[tauri::command]`
+- **Backend** — Rust + Tauri in `src-tauri/src/`. Thirteen `#[tauri::command]`
   functions registered in `src-tauri/src/main.rs` are the only public API
-  to the frontend.
+  to the frontend. The thirteenth is `set_model_pricing_settings`, which
+  lets the user override pricing for the three relay models — see
+  [data-model.md](data-model.md#relay-model-pricing-overrides).
 
 A single `AppState` instance is shared across commands; it owns the SQLite
 connection (via `UsageRepository` → `UsageStore`), a sync execution guard,
@@ -76,13 +78,13 @@ is the binary entry that wires plugins and the command list.
 
 | File | Role |
 |---|---|
-| `commands.rs` | Twelve `#[tauri::command]` functions. Validates inputs and bridges to `AppState`. |
-| `app_state.rs` | Owns `codex_home_path`, settings path, current SQLite path + source, sync state, sync preview cache, session file scan cache. |
+| `commands.rs` | Thirteen `#[tauri::command]` functions. Validates inputs and bridges to `AppState`. The pricing one accepts a `Vec<ModelPricingOverride>` and returns the rebuilt `DashboardPayloadDTO`. |
+| `app_state.rs` | Owns `codex_home_path`, settings path, current SQLite path + source, model-pricing overrides, sync state, sync preview cache, session file scan cache. |
 | `models.rs` | All serde-serialized DTOs that cross the Tauri boundary, plus helper functions (`empty_usage_totals`, `add_usage_totals`, `sort_breakdowns`, …). |
 | `parser.rs` | Streaming parser for one `*.jsonl` session file: extracts model from `turn_context`, computes per-event token deltas, looks up cost via `pricing.rs`. |
 | `repository.rs` | Orchestrates scan → dirty detection → parse → DB write → aggregate rebuild. Houses the `SyncProgress` lifecycle. |
 | `store.rs` | Thin wrapper over `rusqlite::Connection` with `migrate`, `replace_session_file`, `delete_sessions`, `rebuild_aggregates_for_date_keys`, `list_daily_rows_between`, `list_monthly_rows`. |
-| `pricing.rs` | `normalize_model`, `cost_for`, `pricing_notes`. Hard-coded per-model rates. |
+| `pricing.rs` | `normalize_model`, `cost_for`, `cost_for_with_overrides`, `default_model_pricing_overrides`, `validate_pricing_overrides`, `normalize_pricing_overrides`, `model_pricing_settings`, `pricing_notes`. Hard-coded per-model rates plus the relay-model override surface. |
 | `date_keys.rs` | TZ-aware `date_key_for`, `last_n_date_keys`, `month_key_for`, `add_days_to_date_key`, `parse_timestamp`. |
 | `bin/export_dashboard.rs` | CLI helper that prints `DashboardPayloadDTO` as JSON for the `compare-ts-rust` script. |
 
@@ -98,6 +100,7 @@ allow-ping | allow-get-dashboard | allow-get-sync-preview | allow-start-sync
 allow-is-sync-running | allow-get-sync-status | allow-get-sync-progress
 allow-get-app-meta | allow-open-source-repository | allow-query-daily-usage
 allow-set-database-path | allow-reset-database-path
+allow-set-model-pricing-settings
 process:default
 updater:default
 ```
@@ -117,8 +120,9 @@ after first render`).
   `SyncProgress { phase: Preparing, … }`. A second call returns `false`
   without doing work.
 - `lock_available_operation` is the shared guard used by
-  `set_database_path` and `reset_database_path` to refuse concurrent changes
-  while a sync is running.
+  `set_database_path`, `reset_database_path`, and
+  `set_model_pricing_overrides` to refuse concurrent changes while a sync
+  is running.
 - `finish_sync` resets `running`, drops `progress`, and invalidates the
   sync preview cache and the session file scan cache.
 

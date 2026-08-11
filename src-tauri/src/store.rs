@@ -69,6 +69,7 @@ impl UsageStore {
           is_fallback INTEGER NOT NULL,
           input_tokens INTEGER NOT NULL,
           cached_input_tokens INTEGER NOT NULL,
+          cache_creation_input_tokens INTEGER NOT NULL DEFAULT 0,
           output_tokens INTEGER NOT NULL,
           reasoning_output_tokens INTEGER NOT NULL,
           total_tokens INTEGER NOT NULL,
@@ -84,6 +85,7 @@ impl UsageStore {
           is_fallback INTEGER NOT NULL,
           input_tokens INTEGER NOT NULL,
           cached_input_tokens INTEGER NOT NULL,
+          cache_creation_input_tokens INTEGER NOT NULL DEFAULT 0,
           output_tokens INTEGER NOT NULL,
           reasoning_output_tokens INTEGER NOT NULL,
           total_tokens INTEGER NOT NULL,
@@ -99,6 +101,7 @@ impl UsageStore {
           is_fallback INTEGER NOT NULL,
           input_tokens INTEGER NOT NULL,
           cached_input_tokens INTEGER NOT NULL,
+          cache_creation_input_tokens INTEGER NOT NULL DEFAULT 0,
           output_tokens INTEGER NOT NULL,
           reasoning_output_tokens INTEGER NOT NULL,
           total_tokens INTEGER NOT NULL,
@@ -112,7 +115,35 @@ impl UsageStore {
         );
         ",
             )
-            .context("failed to run sqlite migrations")
+            .context("failed to run sqlite migrations")?;
+
+        for table in ["session_daily_usage", "daily_usage", "monthly_usage"] {
+            self.ensure_cache_creation_column(table)?;
+        }
+
+        Ok(())
+    }
+
+    fn ensure_cache_creation_column(&self, table: &str) -> Result<()> {
+        let mut statement = self
+            .connection
+            .prepare(&format!("PRAGMA table_info({table})"))?;
+        let columns = statement.query_map([], |row| row.get::<_, String>(1))?;
+        for column in columns {
+            if column? == "cache_creation_input_tokens" {
+                return Ok(());
+            }
+        }
+
+        self.connection
+            .execute(
+                &format!(
+                    "ALTER TABLE {table} ADD COLUMN cache_creation_input_tokens INTEGER NOT NULL DEFAULT 0"
+                ),
+                [],
+            )
+            .with_context(|| format!("failed to add cache creation tokens to {table}"))?;
+        Ok(())
     }
 
     pub fn reset_cache(&self) -> Result<()> {
@@ -286,11 +317,12 @@ impl UsageStore {
           is_fallback,
           input_tokens,
           cached_input_tokens,
+          cache_creation_input_tokens,
           output_tokens,
           reasoning_output_tokens,
           total_tokens,
           cost_usd
-        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
         ",
             )?;
 
@@ -303,6 +335,7 @@ impl UsageStore {
                     if usage.is_fallback { 1 } else { 0 },
                     usage.totals.input_tokens,
                     usage.totals.cached_input_tokens,
+                    usage.totals.cache_creation_input_tokens,
                     usage.totals.output_tokens,
                     usage.totals.reasoning_output_tokens,
                     usage.totals.total_tokens,
@@ -397,6 +430,7 @@ impl UsageStore {
           is_fallback,
           input_tokens,
           cached_input_tokens,
+          cache_creation_input_tokens,
           output_tokens,
           reasoning_output_tokens,
           total_tokens,
@@ -408,6 +442,7 @@ impl UsageStore {
           is_fallback,
           SUM(input_tokens),
           SUM(cached_input_tokens),
+          SUM(cache_creation_input_tokens),
           SUM(output_tokens),
           SUM(reasoning_output_tokens),
           SUM(total_tokens),
@@ -433,6 +468,7 @@ impl UsageStore {
           is_fallback,
           input_tokens,
           cached_input_tokens,
+          cache_creation_input_tokens,
           output_tokens,
           reasoning_output_tokens,
           total_tokens,
@@ -444,6 +480,7 @@ impl UsageStore {
           is_fallback,
           SUM(input_tokens),
           SUM(cached_input_tokens),
+          SUM(cache_creation_input_tokens),
           SUM(output_tokens),
           SUM(reasoning_output_tokens),
           SUM(total_tokens),
@@ -478,6 +515,7 @@ impl UsageStore {
           is_fallback,
           input_tokens,
           cached_input_tokens,
+          cache_creation_input_tokens,
           output_tokens,
           reasoning_output_tokens,
           total_tokens,
@@ -512,6 +550,7 @@ impl UsageStore {
           is_fallback,
           input_tokens,
           cached_input_tokens,
+          cache_creation_input_tokens,
           output_tokens,
           reasoning_output_tokens,
           total_tokens,
@@ -577,6 +616,7 @@ fn map_totals(row: &Row<'_>) -> rusqlite::Result<UsageTotals> {
     Ok(UsageTotals {
         input_tokens: row.get("input_tokens")?,
         cached_input_tokens: row.get("cached_input_tokens")?,
+        cache_creation_input_tokens: row.get("cache_creation_input_tokens")?,
         output_tokens: row.get("output_tokens")?,
         reasoning_output_tokens: row.get("reasoning_output_tokens")?,
         total_tokens: row.get("total_tokens")?,
@@ -605,6 +645,7 @@ fn map_monthly_row(row: &Row<'_>) -> rusqlite::Result<StoredMonthlyAggregate> {
 #[cfg(test)]
 mod tests {
     use chrono::{TimeZone, Utc};
+    use rusqlite::Connection;
     use tempfile::TempDir;
 
     use super::UsageStore;
@@ -679,6 +720,7 @@ mod tests {
                     totals: UsageTotals {
                         input_tokens: 100,
                         cached_input_tokens: 20,
+                        cache_creation_input_tokens: 4,
                         output_tokens: 10,
                         reasoning_output_tokens: 5,
                         total_tokens: 110,
@@ -694,6 +736,7 @@ mod tests {
                     totals: UsageTotals {
                         input_tokens: 50,
                         cached_input_tokens: 5,
+                        cache_creation_input_tokens: 2,
                         output_tokens: 8,
                         reasoning_output_tokens: 1,
                         total_tokens: 58,
@@ -721,11 +764,86 @@ mod tests {
         assert_eq!(monthly.len(), 1);
         assert_eq!(monthly[0].month_key, "2026-04");
         assert_eq!(monthly[0].totals.total_tokens, 168);
+        assert_eq!(monthly[0].totals.cache_creation_input_tokens, 6);
         assert_eq!(
             store
                 .list_date_keys_for_sessions(&["session-a".to_string()])
                 .expect("date keys"),
             vec!["2026-04-09".to_string(), "2026-04-10".to_string()]
         );
+    }
+
+    #[test]
+    fn migrate_adds_cache_creation_column_to_existing_usage_tables() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let database_path = temp_dir.path().join("legacy.sqlite");
+        let connection = Connection::open(&database_path).expect("open legacy database");
+        connection
+            .execute_batch(
+                "
+                CREATE TABLE session_daily_usage (
+                  session_id TEXT NOT NULL,
+                  relative_path TEXT NOT NULL,
+                  usage_date TEXT NOT NULL,
+                  model TEXT NOT NULL,
+                  is_fallback INTEGER NOT NULL,
+                  input_tokens INTEGER NOT NULL,
+                  cached_input_tokens INTEGER NOT NULL,
+                  output_tokens INTEGER NOT NULL,
+                  reasoning_output_tokens INTEGER NOT NULL,
+                  total_tokens INTEGER NOT NULL,
+                  cost_usd REAL NOT NULL,
+                  PRIMARY KEY (session_id, usage_date, model, is_fallback)
+                );
+                CREATE TABLE daily_usage (
+                  usage_date TEXT NOT NULL,
+                  model TEXT NOT NULL,
+                  is_fallback INTEGER NOT NULL,
+                  input_tokens INTEGER NOT NULL,
+                  cached_input_tokens INTEGER NOT NULL,
+                  output_tokens INTEGER NOT NULL,
+                  reasoning_output_tokens INTEGER NOT NULL,
+                  total_tokens INTEGER NOT NULL,
+                  cost_usd REAL NOT NULL,
+                  PRIMARY KEY (usage_date, model, is_fallback)
+                );
+                CREATE TABLE monthly_usage (
+                  month_key TEXT NOT NULL,
+                  model TEXT NOT NULL,
+                  is_fallback INTEGER NOT NULL,
+                  input_tokens INTEGER NOT NULL,
+                  cached_input_tokens INTEGER NOT NULL,
+                  output_tokens INTEGER NOT NULL,
+                  reasoning_output_tokens INTEGER NOT NULL,
+                  total_tokens INTEGER NOT NULL,
+                  cost_usd REAL NOT NULL,
+                  PRIMARY KEY (month_key, model, is_fallback)
+                );
+                ",
+            )
+            .expect("create legacy tables");
+        drop(connection);
+
+        let store = UsageStore::new(&database_path).expect("migrate legacy database");
+        let migrated_tables = ["session_daily_usage", "daily_usage", "monthly_usage"]
+            .iter()
+            .filter(|table| {
+                let mut statement = store
+                    .connection
+                    .prepare(&format!("PRAGMA table_info({table})"))
+                    .expect("prepare table info");
+                let has_column = statement
+                    .query_map([], |row| row.get::<_, String>(1))
+                    .expect("query columns")
+                    .any(|column| {
+                        column
+                            .expect("column name")
+                            .eq("cache_creation_input_tokens")
+                    });
+                has_column
+            })
+            .count();
+
+        assert_eq!(migrated_tables, 3);
     }
 }

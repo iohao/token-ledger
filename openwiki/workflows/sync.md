@@ -81,7 +81,8 @@ This keeps the event stream light even on large session sets.
 `AppState::try_begin_sync` ensures only one sync runs at a time. If a sync
 is already running it returns `false` without doing work, and the Tauri
 command responds with `Ok(false)` so the frontend can leave the spinner in
-place. `set_database_path` and `reset_database_path` use the same guard
+place. `set_database_path`, `reset_database_path`, and
+`set_model_pricing_overrides` all use the same guard
 (`lock_available_operation`) and refuse to run while a sync is in flight.
 
 ## Frontend wiring
@@ -183,12 +184,18 @@ returned as `Vec<DailySessionModelUsage>`.
 
 ### Token totals and cost
 
-`RawUsage` carries the four token fields plus a `total_tokens` mirror.
+`RawUsage` carries the six token fields (`input_tokens`,
+`cached_input_tokens`, `cache_creation_input_tokens`, `output_tokens`,
+`reasoning_output_tokens`, `total_tokens`) and a `total_tokens` mirror.
 After mapping to `UsageTotals`, the parser calls
-`pricing::cost_for(&totals, &model)` (see the pricing table in
-[architecture/data-model.md](../architecture/data-model.md)). Cached
-input tokens are clamped to total input tokens, and reasoning tokens are
-billed as output. If a model has no rate, `cost_for` returns `0.0`.
+`pricing::cost_for(&totals, &model)` to compute the per-event `cost_usd`
+(see the pricing table in
+[architecture/data-model.md](../architecture/data-model.md)).
+Cache-read and cache-creation tokens are clamped to the remaining input
+budget, and reasoning tokens are billed as output. If a model has no
+rate, `cost_for` returns `0.0`. The repository later replaces this
+parser-side cost with `cost_for_with_overrides` so relay overrides take
+effect on the next sync.
 
 ## Adding a new model
 
@@ -205,8 +212,12 @@ This is intentional — the parser never fails on an unknown model.
 
 ## parse_version
 
-`AppState::detect()` initializes `parse_version: 6`. Bumping this constant
+`AppState::detect()` initializes `parse_version: 7`. Bumping this constant
 is how the code signals that a parsing change requires a full rescan of
 all session files: `UsageRepository::requires_full_rescan` compares the
 in-memory constant against the value persisted in `sync_context`, and
-any difference forces a full rescan on the next `start_sync` call.
+any difference forces a full rescan on the next `start_sync` call. The
+jump from 6 → 7 introduced the `cache_creation_input_tokens` column and
+the four-rate pricing math, and is verified by the
+`migrate_adds_cache_creation_column_to_existing_usage_tables` test in
+`src-tauri/src/store.rs`.

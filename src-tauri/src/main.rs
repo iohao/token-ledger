@@ -18,7 +18,8 @@ fn main() {
             commands::open_source_repository,
             commands::query_daily_usage,
             commands::set_database_path,
-            commands::reset_database_path
+            commands::reset_database_path,
+            commands::set_model_pricing_settings
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -20,6 +20,7 @@ const MODEL_KEYS: [&str; 3] = ["model", "model_slug", "model_name"];
 struct RawUsage {
     input_tokens: i64,
     cached_input_tokens: i64,
+    cache_creation_input_tokens: i64,
     output_tokens: i64,
     reasoning_output_tokens: i64,
     total_tokens: i64,
@@ -258,6 +259,10 @@ fn raw_usage_from_dictionary(value: &Value) -> Option<RawUsage> {
             .get("cached_input_tokens")
             .map(integer_value)
             .unwrap_or(0),
+        cache_creation_input_tokens: dictionary
+            .get("cache_creation_input_tokens")
+            .map(integer_value)
+            .unwrap_or(0),
         output_tokens: dictionary
             .get("output_tokens")
             .map(integer_value)
@@ -281,6 +286,9 @@ fn subtract_usage(current: &RawUsage, previous: Option<&RawUsage>) -> RawUsage {
     RawUsage {
         input_tokens: (current.input_tokens - previous.input_tokens).max(0),
         cached_input_tokens: (current.cached_input_tokens - previous.cached_input_tokens).max(0),
+        cache_creation_input_tokens: (current.cache_creation_input_tokens
+            - previous.cache_creation_input_tokens)
+            .max(0),
         output_tokens: (current.output_tokens - previous.output_tokens).max(0),
         reasoning_output_tokens: (current.reasoning_output_tokens
             - previous.reasoning_output_tokens)
@@ -293,6 +301,8 @@ fn add_raw_usage(left: &RawUsage, right: &RawUsage) -> RawUsage {
     RawUsage {
         input_tokens: left.input_tokens + right.input_tokens,
         cached_input_tokens: left.cached_input_tokens + right.cached_input_tokens,
+        cache_creation_input_tokens: left.cache_creation_input_tokens
+            + right.cache_creation_input_tokens,
         output_tokens: left.output_tokens + right.output_tokens,
         reasoning_output_tokens: left.reasoning_output_tokens + right.reasoning_output_tokens,
         total_tokens: left.total_tokens + right.total_tokens,
@@ -303,6 +313,7 @@ fn as_totals(raw_usage: &RawUsage) -> UsageTotals {
     clamp_non_negative(UsageTotals {
         input_tokens: raw_usage.input_tokens,
         cached_input_tokens: raw_usage.cached_input_tokens,
+        cache_creation_input_tokens: raw_usage.cache_creation_input_tokens,
         output_tokens: raw_usage.output_tokens,
         reasoning_output_tokens: raw_usage.reasoning_output_tokens,
         total_tokens: raw_usage.total_tokens,
@@ -381,8 +392,8 @@ mod tests {
         let session_content = r#"
 invalid json
 {"type":"turn_context","timestamp":"2026-04-09T01:00:00.000Z","payload":{"model":"openai/gpt-5.4"}}
-{"type":"event_msg","timestamp":"2026-04-09T01:02:00.000Z","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":100,"cached_input_tokens":40,"output_tokens":10,"reasoning_output_tokens":3,"total_tokens":110}}}}
-{"type":"event_msg","timestamp":"2026-04-09T01:05:00.000Z","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":50,"cached_input_tokens":10,"output_tokens":5,"reasoning_output_tokens":1,"total_tokens":55},"model":"gpt-5.4-2026-04-01"}}}
+{"type":"event_msg","timestamp":"2026-04-09T01:02:00.000Z","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":100,"cached_input_tokens":40,"cache_creation_input_tokens":5,"output_tokens":10,"reasoning_output_tokens":3,"total_tokens":110}}}}
+{"type":"event_msg","timestamp":"2026-04-09T01:05:00.000Z","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":50,"cached_input_tokens":10,"cache_creation_input_tokens":3,"output_tokens":5,"reasoning_output_tokens":1,"total_tokens":55},"model":"gpt-5.4-2026-04-01"}}}
 "#;
         let file_path = write_session(&temp_dir, "2026/04/09/example.jsonl", session_content);
         let sessions_root = temp_dir.path().join("sessions");
@@ -400,6 +411,7 @@ invalid json
         assert!(!usage.is_fallback);
         assert_eq!(usage.totals.input_tokens, 150);
         assert_eq!(usage.totals.cached_input_tokens, 50);
+        assert_eq!(usage.totals.cache_creation_input_tokens, 8);
         assert_eq!(usage.totals.output_tokens, 15);
         assert_eq!(usage.totals.reasoning_output_tokens, 4);
         assert_eq!(usage.totals.total_tokens, 165);
@@ -414,8 +426,8 @@ invalid json
     fn derives_deltas_from_total_usage_and_uses_fallback_model() {
         let temp_dir = TempDir::new().expect("temp dir");
         let session_content = r#"
-{"type":"event_msg","timestamp":"2026-04-09T02:00:00.000Z","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":100,"cached_input_tokens":20,"output_tokens":30,"reasoning_output_tokens":5,"total_tokens":130}}}}
-{"type":"event_msg","timestamp":"2026-04-09T02:10:00.000Z","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":180,"cached_input_tokens":50,"output_tokens":45,"reasoning_output_tokens":8,"total_tokens":225}}}}
+{"type":"event_msg","timestamp":"2026-04-09T02:00:00.000Z","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":100,"cached_input_tokens":20,"cache_creation_input_tokens":10,"output_tokens":30,"reasoning_output_tokens":5,"total_tokens":130}}}}
+{"type":"event_msg","timestamp":"2026-04-09T02:10:00.000Z","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":180,"cached_input_tokens":50,"cache_creation_input_tokens":25,"output_tokens":45,"reasoning_output_tokens":8,"total_tokens":225}}}}
 "#;
         let file_path = write_session(&temp_dir, "fallback/session.jsonl", session_content);
         let sessions_root = temp_dir.path().join("sessions");
@@ -429,6 +441,7 @@ invalid json
         assert!(usage.is_fallback);
         assert_eq!(usage.totals.input_tokens, 180);
         assert_eq!(usage.totals.cached_input_tokens, 50);
+        assert_eq!(usage.totals.cache_creation_input_tokens, 25);
         assert_eq!(usage.totals.output_tokens, 45);
         assert_eq!(usage.totals.reasoning_output_tokens, 8);
         assert_eq!(usage.totals.total_tokens, 225);

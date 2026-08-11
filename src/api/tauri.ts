@@ -7,13 +7,15 @@ import {
   getDemoSyncRunning,
   isDemoMode,
   resetDemoDatabasePath,
-  updateDemoDatabasePath
+  updateDemoDatabasePath,
+  updateDemoModelPricingSettings
 } from "./demo";
 
 import type {
   DailyUsageSummaryDTO,
   DashboardMetaDTO,
   DashboardPayloadDTO,
+  ModelPricingOverrideDTO,
   SyncProgressDTO,
   SyncStatusDTO,
   SyncPreviewDTO
@@ -90,6 +92,14 @@ export function resetDatabasePath(): Promise<DashboardPayloadDTO> {
   }
 
   return invoke<DashboardPayloadDTO>("reset_database_path");
+}
+
+export function updateModelPricingSettings(settings: ModelPricingOverrideDTO[]): Promise<DashboardPayloadDTO> {
+  if (isDemoMode()) {
+    return Promise.resolve(updateDemoModelPricingSettings(settings));
+  }
+
+  return invoke<DashboardPayloadDTO>("set_model_pricing_settings", { settings });
 }
 
 export function openSourceRepository(): Promise<void> {

@@ -45,6 +45,7 @@ erDiagram
       INTEGER is_fallback
       INTEGER input_tokens
       INTEGER cached_input_tokens
+      INTEGER cache_creation_input_tokens
       INTEGER output_tokens
       INTEGER reasoning_output_tokens
       INTEGER total_tokens
@@ -56,6 +57,7 @@ erDiagram
       INTEGER is_fallback
       INTEGER input_tokens
       INTEGER cached_input_tokens
+      INTEGER cache_creation_input_tokens
       INTEGER output_tokens
       INTEGER reasoning_output_tokens
       INTEGER total_tokens
@@ -67,6 +69,7 @@ erDiagram
       INTEGER is_fallback
       INTEGER input_tokens
       INTEGER cached_input_tokens
+      INTEGER cache_creation_input_tokens
       INTEGER output_tokens
       INTEGER reasoning_output_tokens
       INTEGER total_tokens
@@ -152,12 +155,17 @@ survives database resets and never bloats the schema:
 - Default path: `${CODEX_HOME}/.tokenledger/settings.json`
 - Legacy fallbacks (read once on first launch): `${CODEX_HOME}/.tokenaccount/settings.json`,
   `${CODEX_HOME}/.codex-usage-tauri/settings.json`
-- Schema: `{ "databasePath": "..." | null }` (see `AppSettings` in
-  `src-tauri/src/app_state.rs`).
+- Schema: `{ "databasePath": "..." | null, "modelPricingOverrides": [...] }` (see
+  `AppSettings` in `src-tauri/src/app_state.rs`).
 
 `set_database_path` writes the path and marks it as `DatabasePathSource::Config`;
 `reset_database_path` clears the stored value and falls back to the default
-under `DatabasePathSource::Default`.
+under `DatabasePathSource::Default`. `set_model_pricing_overrides` validates
+the supplied list, persists the validated form, and re-prices historical
+aggregates on the next dashboard read. Stored overrides that fail
+validation are dropped back to the disabled preset by
+`normalize_pricing_overrides` so the app never crashes on a stale
+`settings.json`.
 
 ## JSONL source shape
 
@@ -170,24 +178,69 @@ full schema walkthrough lives in [workflows/sync.md](../workflows/sync.md).
 `src-tauri/src/pricing.rs` is the single source of truth for cost. It
 normalizes model names by stripping prefixes (`openrouter/openai/`,
 `openai/`, `azure/`) and trailing dated snapshots (e.g.
-`gpt-5.5-2026-04-24` → `gpt-5.5`), then looks up rates per million tokens:
+`gpt-5.5-2026-04-24` → `gpt-5.5`), then looks up rates per million tokens.
+`gpt-5.6` is treated as an alias of `gpt-5.6-sol` for pricing lookup so the
+generic model name and the explicit relay variant resolve to the same
+rates. Each rate entry is a `ModelPricingRates` with **four** fields —
+input, output, cache read, and cache creation — and the model math
+subtracts the cached and cache-creation buckets from the total input
+before charging the regular input rate:
 
-| Model | Input $/M | Cached input $/M | Output $/M | Source |
+```
+regular_input = max(input_tokens − cache_read − cache_creation, 0)
+cache_read   = clamp(cached_input_tokens, 0, input_tokens)
+cache_creation = clamp(cache_creation_input_tokens, 0, input_tokens − cache_read)
+```
+
+| Model | Input $/M | Cache read $/M | Cache creation $/M | Output $/M | Source |
+|---|---|---|---|---|---|
+| `gpt-5.6`, `gpt-5.6-sol` | 5.00 | 0.50 | 5.00 | 30.00 | OpenAI API |
+| `gpt-5.6-terra` | 2.50 | 0.25 | 2.50 | 15.00 | OpenAI API |
+| `gpt-5.6-luna` | 1.00 | 0.10 | 1.00 | 6.00 | OpenAI API |
+| `gpt-5.5` | 5.00 | 0.50 | 5.00 | 30.00 | Codex rate card |
+| `gpt-5.4` | 2.50 | 0.25 | 2.50 | 15.00 | Codex rate card |
+| `gpt-5.4-mini` | 0.75 | 0.075 | 0.75 | 4.52 | Codex rate card |
+| `gpt-5.3-codex` | 1.75 | 0.175 | 1.75 | 14.00 | Codex rate card |
+| `gpt-5.3-codex-spark` | 1.75 | 0.175 | 1.75 | 14.00 | Estimated (rate card pending) |
+
+`cost_for(usage, model)` clamps each cache category to the remaining
+input budget and returns `0.0` when the model has no rate. The raw notes
+are surfaced through `DashboardMeta.pricing_notes` (see `pricing_notes()`
+and `src/api/demo.ts::DEMO_META.pricingNotes`).
+
+### Relay-model pricing overrides
+
+The three relay models (`gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`) can
+be billed at user-supplied rates instead of the official OpenAI rates, so
+operators running a private relay can record what they actually pay.
+Overrides are stored on disk in `AppSettings.model_pricing_overrides`
+(validated by `validate_pricing_overrides`, which requires **all three**
+models to be present and forbids negative / non-finite rates) and surfaced
+to the renderer via `DashboardMeta.model_pricing_settings`, which pairs
+each model's `officialRates` and `relayRates` with a `relayEnabled`
+boolean. The frontend form (see
+[workflows/dashboard-views.md → Model pricing](../workflows/dashboard-views.md#model-pricing-set_model_pricing_settings))
+lets the user toggle the boolean, edit any of the four relay rate fields,
+and persist the result through the `set_model_pricing_settings` Tauri
+command.
+
+The current relay preset (the values restored by "Restore relay preset" in
+the UI) is:
+
+| Model | Input $/M | Cache read $/M | Cache creation $/M | Output $/M |
 |---|---|---|---|---|
-| `gpt-5.6`, `gpt-5.6-sol` | 5.00 | 0.50 | 30.00 | OpenAI API |
-| `gpt-5.6-terra` | 2.50 | 0.25 | 15.00 | OpenAI API |
-| `gpt-5.6-luna` | 1.00 | 0.10 | 6.00 | OpenAI API |
-| `gpt-5.5` | 5.00 | 0.50 | 30.00 | Codex rate card |
-| `gpt-5.4` | 2.50 | 0.25 | 15.00 | Codex rate card |
-| `gpt-5.4-mini` | 0.75 | 0.075 | 4.52 | Codex rate card |
-| `gpt-5.3-codex` | 1.75 | 0.175 | 14.00 | Codex rate card |
-| `gpt-5.3-codex-spark` | 1.75 | 0.175 | 14.00 | Estimated (rate card pending) |
+| `gpt-5.6-sol` | 9.00 | 0.90 | 11.25 | 54.00 |
+| `gpt-5.6-terra` | 4.50 | 0.45 | 5.40 | 27.00 |
+| `gpt-5.6-luna` | 1.80 | 0.18 | 2.25 | 10.80 |
 
-`cost_for(usage, model)` clamps `cached_input_tokens` to `input_tokens` and
-returns `0.0` when the model is unknown. The raw notes are surfaced through
-`DashboardMeta.pricing_notes` (see `pricing_notes()` and
-`src/api/demo.ts::DEMO_META.pricingNotes`). Tests in `pricing.rs` lock the
-math for the GPT-5.5 and GPT-5.6 families.
+When `relayEnabled` is true for a model, `cost_for_with_overrides` uses the
+relay rates for that model only; every other model still falls back to
+`official_pricing_for`. The repository re-prices parsed files, daily
+rows, and monthly rows against the override list on every dashboard
+build, so editing the relay rates in the UI immediately changes the
+historical totals without a rescan. Tests in `pricing.rs` lock the
+default, the override, the generic-name alias, the input-budget clamping,
+and the validation paths.
 
 ## Where each piece lives
 

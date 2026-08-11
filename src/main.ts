@@ -9,7 +9,8 @@ import {
   resetDatabasePath,
   queryDailyUsage,
   startSync,
-  updateDatabasePath
+  updateDatabasePath,
+  updateModelPricingSettings
 } from "./api/tauri";
 import {
   checkForPendingAppUpdate,
@@ -20,6 +21,9 @@ import {
 import type {
   DailyUsageSummaryDTO,
   DashboardPayloadDTO,
+  ModelPricingOverrideDTO,
+  ModelPricingRatesDTO,
+  ModelPricingSettingDTO,
   SyncProgressDTO,
   SyncStatusDTO,
   SyncPreviewDTO,
@@ -62,11 +66,28 @@ const MAX_DAILY_DETAIL_RANGE_DAYS = 93;
 const MONTH_BUTTON_VALUES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] as const;
 const ENGLISH_MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const;
 const SOURCE_REPOSITORY_URL = "https://github.com/iohao/token-ledger";
+const PRICING_RATE_FIELDS = [
+  "inputUsdPerMillion",
+  "outputUsdPerMillion",
+  "cacheReadUsdPerMillion",
+  "cacheCreationUsdPerMillion"
+] as const;
+const RELAY_PRICING_PRESETS: Record<string, ModelPricingRatesDTO> = {
+  "gpt-5.6-sol": pricingRates(9, 54, 0.9, 11.25),
+  "gpt-5.6-terra": pricingRates(4.5, 27, 0.45, 5.4),
+  "gpt-5.6-luna": pricingRates(1.8, 10.8, 0.18, 2.25)
+};
 
 type AutoSyncModeValue = (typeof AUTO_SYNC_OPTIONS)[number]["value"];
 type AppTab = "overview" | "monthlyHistory" | "monthlyDetail" | "syncInfo" | "dailyDetail";
 type InlineNoticeTone = "good" | "bad";
 type UpdateStatus = "idle" | "checking" | "available" | "upToDate" | "installing" | "error";
+type PricingRateField = (typeof PRICING_RATE_FIELDS)[number];
+type ModelPricingDraft = {
+  model: string;
+  enabled: boolean;
+  rates: Record<PricingRateField, string>;
+};
 type ActivityWallCell = {
   dateKey: string | null;
   totalTokens: number;
@@ -123,6 +144,7 @@ const state = {
   isLoading: true,
   isSyncing: false,
   isUpdatingDatabasePath: false,
+  isUpdatingModelPricing: false,
   errorMessage: null as string | null,
   locale: detectInitialLocale(),
   theme: detectInitialTheme(),
@@ -132,6 +154,10 @@ const state = {
   databasePathDraft: "",
   databasePathDraftDirty: false,
   databasePathNotice: null as { tone: InlineNoticeTone; text: string } | null,
+  modelPricingDraft: [] as ModelPricingDraft[],
+  modelPricingDraftDirty: false,
+  modelPricingErrors: {} as Record<string, string>,
+  modelPricingNotice: null as { tone: InlineNoticeTone; text: string } | null,
   dailyDetailRows: [] as DailyUsageSummaryDTO[],
   dailyDetailStartDate: "",
   dailyDetailEndDate: "",
@@ -256,7 +282,25 @@ function renderAlignedTokenCount(value: number): string {
 }
 
 function nonCachedInputTokens(totals: UsageTotalsDTO): number {
-  return Math.max(totals.inputTokens - totals.cachedInputTokens, 0);
+  return Math.max(totals.inputTokens - totals.cachedInputTokens - totals.cacheCreationInputTokens, 0);
+}
+
+function pricingRates(
+  inputUsdPerMillion: number,
+  outputUsdPerMillion: number,
+  cacheReadUsdPerMillion: number,
+  cacheCreationUsdPerMillion: number
+): ModelPricingRatesDTO {
+  return {
+    inputUsdPerMillion,
+    outputUsdPerMillion,
+    cacheReadUsdPerMillion,
+    cacheCreationUsdPerMillion
+  };
+}
+
+function formatPricingInput(value: number): string {
+  return value.toFixed(4);
 }
 
 function formatCurrency(value: number): string {
@@ -895,6 +939,25 @@ function syncDatabasePathDraft(nextPath: string, force = false): void {
   state.databasePathDraftDirty = false;
 }
 
+function syncModelPricingDraft(settings: ModelPricingSettingDTO[], force = false): void {
+  if (!force && state.modelPricingDraftDirty) {
+    return;
+  }
+
+  state.modelPricingDraft = settings.map((setting) => ({
+    model: setting.model,
+    enabled: setting.relayEnabled,
+    rates: {
+      inputUsdPerMillion: formatPricingInput(setting.relayRates.inputUsdPerMillion),
+      outputUsdPerMillion: formatPricingInput(setting.relayRates.outputUsdPerMillion),
+      cacheReadUsdPerMillion: formatPricingInput(setting.relayRates.cacheReadUsdPerMillion),
+      cacheCreationUsdPerMillion: formatPricingInput(setting.relayRates.cacheCreationUsdPerMillion)
+    }
+  }));
+  state.modelPricingDraftDirty = false;
+  state.modelPricingErrors = {};
+}
+
 function applyDashboardPayload(
   payload: DashboardPayloadDTO,
   forceDatabasePathDraft = false,
@@ -911,6 +974,7 @@ function applyDashboardPayload(
   initializeDailyDetailRange(payload.meta.timeZone, payload.now);
   initializeMonthlyDetailSelection(payload.meta.timeZone, payload.now);
   syncDatabasePathDraft(payload.meta.databasePath, forceDatabasePathDraft);
+  syncModelPricingDraft(payload.meta.modelPricingSettings);
 }
 
 function databasePathSourceLabel(source: DashboardPayloadDTO["meta"]["databasePathSource"]): string {
@@ -1014,6 +1078,8 @@ function sumTotals(rows: Array<{ totals: UsageTotalsDTO }>): UsageTotalsDTO {
     (totals, row) => ({
       inputTokens: totals.inputTokens + row.totals.inputTokens,
       cachedInputTokens: totals.cachedInputTokens + row.totals.cachedInputTokens,
+      cacheCreationInputTokens:
+        totals.cacheCreationInputTokens + row.totals.cacheCreationInputTokens,
       outputTokens: totals.outputTokens + row.totals.outputTokens,
       reasoningOutputTokens: totals.reasoningOutputTokens + row.totals.reasoningOutputTokens,
       totalTokens: totals.totalTokens + row.totals.totalTokens,
@@ -1022,6 +1088,7 @@ function sumTotals(rows: Array<{ totals: UsageTotalsDTO }>): UsageTotalsDTO {
     {
       inputTokens: 0,
       cachedInputTokens: 0,
+      cacheCreationInputTokens: 0,
       outputTokens: 0,
       reasoningOutputTokens: 0,
       totalTokens: 0,
@@ -1118,6 +1185,7 @@ function renderUsageTable(
           <td>${formatTokenCount(row.totals.outputTokens)}</td>
           <td>${formatTokenCount(row.totals.reasoningOutputTokens)}</td>
           <td>${formatTokenCount(row.totals.cachedInputTokens)}</td>
+          <td>${formatTokenCount(row.totals.cacheCreationInputTokens)}</td>
           <td>${formatTokenCount(row.totals.totalTokens)}</td>
           <td class="cost-cell">${formatCurrency(row.totals.costUSD)}</td>
         </tr>
@@ -1143,6 +1211,7 @@ function renderUsageTable(
               <th>${t(state.locale, "output")}</th>
               <th>${t(state.locale, "reasoning")}</th>
               <th>${t(state.locale, "cachedInput")}</th>
+              <th>${t(state.locale, "cacheCreationInput")}</th>
               <th>${t(state.locale, "total")}</th>
               <th>${t(state.locale, "cost")}</th>
             </tr>
@@ -1156,6 +1225,7 @@ function renderUsageTable(
               <td>${formatTokenCount(totals.outputTokens)}</td>
               <td>${formatTokenCount(totals.reasoningOutputTokens)}</td>
               <td>${formatTokenCount(totals.cachedInputTokens)}</td>
+              <td>${formatTokenCount(totals.cacheCreationInputTokens)}</td>
               <td>${formatTokenCount(totals.totalTokens)}</td>
               <td class="cost-cell">${formatCurrency(totals.costUSD)}</td>
             </tr>
@@ -1277,6 +1347,7 @@ function renderDailyDetailTable(title: string, rows: DailyUsageSummaryDTO[], tim
               totals: {
                 inputTokens: 0,
                 cachedInputTokens: 0,
+                cacheCreationInputTokens: 0,
                 outputTokens: 0,
                 reasoningOutputTokens: 0,
                 totalTokens: 0,
@@ -1302,6 +1373,7 @@ function renderDailyDetailTable(title: string, rows: DailyUsageSummaryDTO[], tim
           <td>${renderAlignedTokenCount(nonCachedInputTokens(row.totals))}</td>
           <td>${renderAlignedTokenCount(row.totals.outputTokens)}</td>
           <td>${renderAlignedTokenCount(row.totals.cachedInputTokens)}</td>
+          <td>${renderAlignedTokenCount(row.totals.cacheCreationInputTokens)}</td>
           <td>${renderAlignedTokenCount(row.totals.reasoningOutputTokens)}</td>
           <td class="daily-detail-total-metric">${renderAlignedTokenCount(row.totals.totalTokens)}</td>
           <td class="daily-detail-model-cost-cell">${formatCurrency(row.totals.costUSD)}</td>
@@ -1333,6 +1405,7 @@ function renderDailyDetailTable(title: string, rows: DailyUsageSummaryDTO[], tim
             <col class="daily-detail-col-metric" />
             <col class="daily-detail-col-metric" />
             <col class="daily-detail-col-metric" />
+            <col class="daily-detail-col-metric" />
             <col class="daily-detail-col-model-cost" />
             <col class="daily-detail-col-total-cost" />
           </colgroup>
@@ -1343,6 +1416,7 @@ function renderDailyDetailTable(title: string, rows: DailyUsageSummaryDTO[], tim
               <th>${t(state.locale, "input")}</th>
               <th>${t(state.locale, "output")}</th>
               <th>${t(state.locale, "cachedInput")}</th>
+              <th>${t(state.locale, "cacheCreationInput")}</th>
               <th>${t(state.locale, "reasoning")}</th>
               <th>${t(state.locale, "total")}</th>
               <th class="daily-detail-model-cost-header">${t(state.locale, "modelCost")}</th>
@@ -1356,6 +1430,7 @@ function renderDailyDetailTable(title: string, rows: DailyUsageSummaryDTO[], tim
               <td>${renderAlignedTokenCount(nonCachedInputTokens(totals))}</td>
               <td>${renderAlignedTokenCount(totals.outputTokens)}</td>
               <td>${renderAlignedTokenCount(totals.cachedInputTokens)}</td>
+              <td>${renderAlignedTokenCount(totals.cacheCreationInputTokens)}</td>
               <td>${renderAlignedTokenCount(totals.reasoningOutputTokens)}</td>
               <td class="daily-detail-total-metric">${renderAlignedTokenCount(totals.totalTokens)}</td>
               <td class="daily-detail-model-cost-cell">${formatCurrency(totals.costUSD)}</td>
@@ -1770,6 +1845,12 @@ function handleRootClick(event: Event): void {
     return;
   }
 
+  const resetPricingButton = target.closest("[data-pricing-reset]");
+  if (resetPricingButton instanceof HTMLButtonElement) {
+    resetModelPricingPresetDraft();
+    return;
+  }
+
   const checkUpdatesButton = target.closest("[data-check-updates]");
   if (checkUpdatesButton instanceof HTMLButtonElement) {
     void checkForAppUpdates(true);
@@ -1850,6 +1931,44 @@ function handleRootChange(event: Event): void {
     return;
   }
 
+  const pricingEnabledInput = target.closest("[data-pricing-enabled]");
+  if (pricingEnabledInput instanceof HTMLInputElement) {
+    const draft = state.modelPricingDraft.find(
+      (candidate) => candidate.model === pricingEnabledInput.dataset.pricingModel
+    );
+    if (draft) {
+      draft.enabled = pricingEnabledInput.checked;
+      state.modelPricingDraftDirty = true;
+      state.modelPricingNotice = null;
+      render();
+    }
+    return;
+  }
+
+  const pricingRateInput = target.closest("[data-pricing-rate]");
+  if (pricingRateInput instanceof HTMLInputElement) {
+    const field = pricingRateInput.dataset.pricingRate;
+    const model = pricingRateInput.dataset.pricingModel;
+    if (model && PRICING_RATE_FIELDS.includes(field as PricingRateField)) {
+      const pricingField = field as PricingRateField;
+      const draft = state.modelPricingDraft.find((candidate) => candidate.model === model);
+      if (draft) {
+        draft.rates[pricingField] = pricingRateInput.value;
+        state.modelPricingDraftDirty = true;
+        state.modelPricingNotice = null;
+        const errorKey = pricingErrorKey(model, pricingField);
+        const error = validatePricingRate(pricingRateInput.value);
+        if (error) {
+          state.modelPricingErrors[errorKey] = error;
+        } else {
+          delete state.modelPricingErrors[errorKey];
+        }
+        render();
+      }
+    }
+    return;
+  }
+
   const dailyStartInput = target.closest("[data-daily-start]");
   if (dailyStartInput instanceof HTMLInputElement) {
     state.dailyDetailStartDate = dailyStartInput.value;
@@ -1893,6 +2012,13 @@ function handleRootSubmit(event: Event): void {
   if (databasePathForm instanceof HTMLFormElement) {
     event.preventDefault();
     void saveDatabasePathOverride();
+    return;
+  }
+
+  const modelPricingForm = target.closest("[data-model-pricing-form]");
+  if (modelPricingForm instanceof HTMLFormElement) {
+    event.preventDefault();
+    void saveModelPricingSettings();
   }
 }
 
@@ -2008,6 +2134,129 @@ function renderMonthlyHistoryView(timeZone: string, dashboard: DashboardPayloadD
   return renderUsageTable(t(state.locale, "navMonthlyHistory"), dashboard?.monthlyHistory ?? [], timeZone, "monthly");
 }
 
+function pricingFieldLabel(field: PricingRateField): string {
+  switch (field) {
+    case "inputUsdPerMillion":
+      return t(state.locale, "pricingInput");
+    case "outputUsdPerMillion":
+      return t(state.locale, "pricingOutput");
+    case "cacheReadUsdPerMillion":
+      return t(state.locale, "pricingCacheRead");
+    case "cacheCreationUsdPerMillion":
+      return t(state.locale, "pricingCacheCreation");
+  }
+}
+
+function pricingErrorKey(model: string, field: PricingRateField): string {
+  return `${model}:${field}`;
+}
+
+function renderModelPricingBlock(dashboard: DashboardPayloadDTO | null): string {
+  const settings = dashboard?.meta.modelPricingSettings ?? [];
+  const disabled = state.isLoading || state.isSyncing || state.isUpdatingModelPricing;
+  const rows = state.modelPricingDraft
+    .map((draft) => {
+      const setting = settings.find((candidate) => candidate.model === draft.model);
+      if (!setting) {
+        return "";
+      }
+
+      const modelId = draft.model.replaceAll(".", "-");
+      const officialValues = PRICING_RATE_FIELDS.map(
+        (field) => `
+          <span>
+            <small>${pricingFieldLabel(field)}</small>
+            <strong>$${formatPricingInput(setting.officialRates[field])}</strong>
+          </span>
+        `
+      ).join("");
+      const fields = PRICING_RATE_FIELDS.map((field) => {
+        const errorKey = pricingErrorKey(draft.model, field);
+        const error = state.modelPricingErrors[errorKey];
+        const inputId = `pricing-${modelId}-${field}`;
+        const errorId = `${inputId}-error`;
+        return `
+          <label class="pricing-field" for="${inputId}">
+            <span>${pricingFieldLabel(field)}</span>
+            <div class="pricing-input-wrap">
+              <span aria-hidden="true">$</span>
+              <input
+                id="${inputId}"
+                type="number"
+                min="0"
+                step="0.0001"
+                inputmode="decimal"
+                value="${escapeHtml(draft.rates[field])}"
+                data-pricing-rate="${field}"
+                data-pricing-model="${escapeHtml(draft.model)}"
+                ${error ? `aria-invalid="true" aria-describedby="${errorId}"` : ""}
+                ${disabled || !draft.enabled ? "disabled" : ""}
+              />
+              <span>${t(state.locale, "perMillionTokens")}</span>
+            </div>
+            ${error ? `<small class="field-error" id="${errorId}" role="alert">${escapeHtml(error)}</small>` : ""}
+          </label>
+        `;
+      }).join("");
+
+      return `
+        <fieldset class="pricing-model-group">
+          <legend class="sr-only">${escapeHtml(draft.model)}</legend>
+          <div class="pricing-model-head">
+            <div>
+              <strong>${escapeHtml(draft.model)}</strong>
+              <span>${draft.enabled ? t(state.locale, "relayPricingActive") : t(state.locale, "officialPricingActive")}</span>
+            </div>
+            <label class="pricing-toggle">
+              <input
+                type="checkbox"
+                data-pricing-enabled
+                data-pricing-model="${escapeHtml(draft.model)}"
+                ${draft.enabled ? "checked" : ""}
+                ${disabled ? "disabled" : ""}
+              />
+              <span>${t(state.locale, "useRelayPricing")}</span>
+            </label>
+          </div>
+          <div class="pricing-official" aria-label="${t(state.locale, "officialPricingReference")}">
+            <p>${t(state.locale, "officialPricingReference")}</p>
+            <div>${officialValues}</div>
+          </div>
+          <div class="pricing-rate-grid">${fields}</div>
+        </fieldset>
+      `;
+    })
+    .join("");
+  const feedback = state.modelPricingNotice
+    ? `<p class="config-feedback ${state.modelPricingNotice.tone}" role="status">${escapeHtml(state.modelPricingNotice.text)}</p>`
+    : "";
+
+  return `
+    <div class="config-block pricing-config-block">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">${t(state.locale, "pricingSection")}</p>
+          <h3>${t(state.locale, "modelPricingTitle")}</h3>
+        </div>
+      </div>
+      <p class="config-hint pricing-intro">${t(state.locale, "modelPricingHint")}</p>
+      <form class="config-form pricing-form" data-model-pricing-form novalidate>
+        <div class="pricing-model-list">${rows}</div>
+        <div class="config-actions">
+          <button class="action primary" type="submit" ${disabled || rows.length === 0 ? "disabled" : ""}>
+            ${state.isUpdatingModelPricing ? t(state.locale, "savingPricing") : t(state.locale, "savePricing")}
+          </button>
+          <button class="action" type="button" data-pricing-reset ${disabled || rows.length === 0 ? "disabled" : ""}>
+            ${t(state.locale, "restoreRelayPreset")}
+          </button>
+        </div>
+      </form>
+      <p class="config-note">${t(state.locale, "cacheCreationAvailabilityNote")}</p>
+      ${feedback}
+    </div>
+  `;
+}
+
 function renderSyncInfoView(timeZone: string, notes: string, dashboard: DashboardPayloadDTO | null): string {
   const databasePathEditable = dashboard?.meta.databasePathEditable ?? false;
   const databasePathDisabled = state.isLoading || state.isSyncing || state.isUpdatingDatabasePath || !databasePathEditable;
@@ -2119,6 +2368,8 @@ function renderSyncInfoView(timeZone: string, notes: string, dashboard: Dashboar
         ${updatePlatformNote ? `<p class="config-note">${escapeHtml(updatePlatformNote)}</p>` : ""}
         ${renderUpdateNotes(state.availableUpdate?.body)}
       </div>
+
+      ${renderModelPricingBlock(dashboard)}
 
       <div class="config-block">
         <div class="section-head">
@@ -2523,6 +2774,110 @@ async function initializeSyncProgressListener(): Promise<void> {
     });
   } catch {
     hasInitializedSyncProgressListener = false;
+  }
+}
+
+function validatePricingRate(value: string): string | null {
+  if (!value.trim()) {
+    return t(state.locale, "pricingRequiredError");
+  }
+
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return t(state.locale, "pricingInvalidError");
+  }
+
+  return null;
+}
+
+function modelPricingOverridesFromDraft(): ModelPricingOverrideDTO[] | null {
+  const errors: Record<string, string> = {};
+  const settings = state.modelPricingDraft.map((draft) => {
+    const rates = {} as ModelPricingRatesDTO;
+    for (const field of PRICING_RATE_FIELDS) {
+      const error = validatePricingRate(draft.rates[field]);
+      if (error) {
+        errors[pricingErrorKey(draft.model, field)] = error;
+      }
+      rates[field] = Number(draft.rates[field]);
+    }
+
+    return {
+      model: draft.model,
+      enabled: draft.enabled,
+      rates
+    };
+  });
+
+  state.modelPricingErrors = errors;
+  return Object.keys(errors).length === 0 ? settings : null;
+}
+
+function resetModelPricingPresetDraft(): void {
+  if (state.isLoading || state.isSyncing || state.isUpdatingModelPricing) {
+    return;
+  }
+
+  state.modelPricingDraft = state.modelPricingDraft.map((draft) => {
+    const preset = RELAY_PRICING_PRESETS[draft.model];
+    if (!preset) {
+      return draft;
+    }
+    return {
+      ...draft,
+      rates: {
+        inputUsdPerMillion: formatPricingInput(preset.inputUsdPerMillion),
+        outputUsdPerMillion: formatPricingInput(preset.outputUsdPerMillion),
+        cacheReadUsdPerMillion: formatPricingInput(preset.cacheReadUsdPerMillion),
+        cacheCreationUsdPerMillion: formatPricingInput(preset.cacheCreationUsdPerMillion)
+      }
+    };
+  });
+  state.modelPricingDraftDirty = true;
+  state.modelPricingErrors = {};
+  state.modelPricingNotice = null;
+  render();
+}
+
+async function saveModelPricingSettings(): Promise<void> {
+  if (state.isLoading || state.isSyncing || state.isUpdatingModelPricing) {
+    return;
+  }
+
+  const settings = modelPricingOverridesFromDraft();
+  if (!settings) {
+    state.modelPricingNotice = { tone: "bad", text: t(state.locale, "pricingValidationError") };
+    render();
+    window.setTimeout(() => {
+      appRoot.querySelector<HTMLInputElement>('[data-pricing-rate][aria-invalid="true"]')?.focus();
+    });
+    return;
+  }
+
+  state.isUpdatingModelPricing = true;
+  state.modelPricingNotice = null;
+  render();
+
+  try {
+    const payload = await updateModelPricingSettings(settings);
+    state.modelPricingDraftDirty = false;
+    applyDashboardPayload(payload, false, true);
+    state.dailyDetailRows = [];
+    state.dailyDetailsError = null;
+    state.hasLoadedDailyDetails = false;
+    state.monthlyDetailRows = [];
+    state.monthlyDetailsError = null;
+    state.hasLoadedMonthlyDetails = false;
+    state.modelPricingNotice = { tone: "good", text: t(state.locale, "pricingSaved") };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    state.modelPricingNotice = {
+      tone: "bad",
+      text: translateErrorMessage(state.locale, message)
+    };
+  } finally {
+    state.isUpdatingModelPricing = false;
+    render();
   }
 }
 

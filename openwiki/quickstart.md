@@ -27,8 +27,11 @@ new bundles from GitHub Releases.
    then derives the per-event delta.
 3. Aggregates per `(date_key, model, is_fallback)` in SQLite, then rebuilds
    daily and monthly rollups for any affected date keys.
-4. Exposes the aggregates to a Vite/TypeScript single-page UI through twelve
-   Tauri commands and a `sync-progress` event stream.
+4. Exposes the aggregates to a Vite/TypeScript single-page UI through thirteen
+   Tauri commands and a `sync-progress` event stream. The thirteenth command
+   (`set_model_pricing_settings`) lets users override pricing for the three
+   relay models — see
+   [architecture/data-model.md → Relay-model pricing overrides](architecture/data-model.md#relay-model-pricing-overrides).
 5. Optionally checks for new GitHub releases on launch and installs them
    in-place via `tauri-plugin-updater`.
 

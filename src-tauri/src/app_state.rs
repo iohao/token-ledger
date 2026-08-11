@@ -11,6 +11,9 @@ use serde::{Deserialize, Serialize};
 use crate::models::{
     DashboardMeta, DatabasePathSource, SyncPreview, SyncProgress, SyncProgressPhase,
 };
+use crate::pricing::{
+    normalize_pricing_overrides, validate_pricing_overrides, ModelPricingOverride,
+};
 use crate::repository::{SessionFileEntry, UsageRepository, UsageRepositoryConfig};
 
 const SYNC_PREVIEW_CACHE_TTL: Duration = Duration::from_secs(5);
@@ -21,6 +24,7 @@ const LEGACY_APP_SETTINGS_DIRS: [&str; 2] = [".tokenaccount", ".codex-usage-taur
 pub struct AppState {
     codex_home_path: PathBuf,
     settings_path: PathBuf,
+    settings: Mutex<AppSettings>,
     database_config: Mutex<DatabaseConfigState>,
     database_path_locked: bool,
     time_zone: String,
@@ -54,10 +58,12 @@ struct CachedSessionFileScan {
     cached_at: Instant,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 struct AppSettings {
     database_path: Option<String>,
+    #[serde(default)]
+    model_pricing_overrides: Vec<ModelPricingOverride>,
 }
 
 impl AppState {
@@ -67,11 +73,11 @@ impl AppState {
             .unwrap_or_else(|| PathBuf::from(".codex"));
         let settings_path = app_settings_path(&codex_home_path);
         let env_database_path = env_path("CODEX_USAGE_DATABASE");
-        let settings = load_app_settings(
-            &settings_path,
-            &legacy_app_settings_paths(&codex_home_path),
-        )
-        .unwrap_or_default();
+        let mut settings =
+            load_app_settings(&settings_path, &legacy_app_settings_paths(&codex_home_path))
+                .unwrap_or_default();
+        settings.model_pricing_overrides =
+            normalize_pricing_overrides(&settings.model_pricing_overrides);
         let database_config =
             resolve_database_config(&codex_home_path, env_database_path.clone(), &settings);
         let time_zone = env::var("TZ")
@@ -83,10 +89,11 @@ impl AppState {
         Self {
             codex_home_path,
             settings_path,
+            settings: Mutex::new(settings),
             database_config: Mutex::new(database_config),
             database_path_locked: env_database_path.is_some(),
             time_zone,
-            parse_version: 6,
+            parse_version: 7,
             sync_state: Mutex::new(SyncExecutionState::default()),
             sync_preview_cache: Mutex::new(None),
             session_file_scan_cache: Mutex::new(None),
@@ -100,12 +107,19 @@ impl AppState {
             .map_err(|_| anyhow::anyhow!("database config lock poisoned"))?
             .path
             .clone();
+        let pricing_overrides = self
+            .settings
+            .lock()
+            .map_err(|_| anyhow::anyhow!("app settings lock poisoned"))?
+            .model_pricing_overrides
+            .clone();
 
         UsageRepository::new(UsageRepositoryConfig {
             codex_home_path: self.codex_home_path.clone(),
             database_path,
             time_zone: self.time_zone.clone(),
             parse_version: self.parse_version,
+            pricing_overrides,
         })
     }
 
@@ -235,14 +249,12 @@ impl AppState {
             database_path: database_path.clone(),
             time_zone: self.time_zone.clone(),
             parse_version: self.parse_version,
+            pricing_overrides: self.current_pricing_overrides()?,
         })?;
 
-        save_app_settings(
-            &self.settings_path,
-            &AppSettings {
-                database_path: Some(repository.database_path.display().to_string()),
-            },
-        )?;
+        self.update_settings(|settings| {
+            settings.database_path = Some(repository.database_path.display().to_string());
+        })?;
 
         let mut database_config = self
             .database_config
@@ -270,14 +282,12 @@ impl AppState {
             database_path,
             time_zone: self.time_zone.clone(),
             parse_version: self.parse_version,
+            pricing_overrides: self.current_pricing_overrides()?,
         })?;
 
-        save_app_settings(
-            &self.settings_path,
-            &AppSettings {
-                database_path: None,
-            },
-        )?;
+        self.update_settings(|settings| {
+            settings.database_path = None;
+        })?;
 
         let mut database_config = self
             .database_config
@@ -287,6 +297,39 @@ impl AppState {
         database_config.source = DatabasePathSource::Default;
         drop(database_config);
         self.invalidate_sync_preview_cache()?;
+        Ok(())
+    }
+
+    pub fn set_model_pricing_overrides(&self, overrides: Vec<ModelPricingOverride>) -> Result<()> {
+        let _sync_guard = self.lock_available_operation()?;
+        let overrides = validate_pricing_overrides(&overrides)?;
+        self.update_settings(move |settings| {
+            settings.model_pricing_overrides = overrides;
+        })?;
+        self.invalidate_sync_preview_cache()?;
+        Ok(())
+    }
+
+    fn current_pricing_overrides(&self) -> Result<Vec<ModelPricingOverride>> {
+        let settings = self
+            .settings
+            .lock()
+            .map_err(|_| anyhow::anyhow!("app settings lock poisoned"))?;
+        Ok(settings.model_pricing_overrides.clone())
+    }
+
+    fn update_settings<F>(&self, update: F) -> Result<()>
+    where
+        F: FnOnce(&mut AppSettings),
+    {
+        let mut settings = self
+            .settings
+            .lock()
+            .map_err(|_| anyhow::anyhow!("app settings lock poisoned"))?;
+        let mut updated = settings.clone();
+        update(&mut updated);
+        save_app_settings(&self.settings_path, &updated)?;
+        *settings = updated;
         Ok(())
     }
 
@@ -488,13 +531,17 @@ mod tests {
         AppState {
             codex_home_path: PathBuf::from("/tmp/home/.codex"),
             settings_path: PathBuf::from("/tmp/home/.codex/.tokenledger/settings.json"),
+            settings: Mutex::new(AppSettings {
+                model_pricing_overrides: crate::pricing::default_model_pricing_overrides(),
+                ..AppSettings::default()
+            }),
             database_config: Mutex::new(DatabaseConfigState {
                 path: PathBuf::from("/tmp/home/.codex/.codex-usage/usage.sqlite"),
                 source: DatabasePathSource::Default,
             }),
             database_path_locked: false,
             time_zone: "UTC".to_string(),
-            parse_version: 6,
+            parse_version: 7,
             sync_state: Mutex::new(SyncExecutionState::default()),
             sync_preview_cache: Mutex::new(None),
             session_file_scan_cache: Mutex::new(None),
@@ -533,6 +580,7 @@ mod tests {
             Some(PathBuf::from("/tmp/override/usage.sqlite")),
             &AppSettings {
                 database_path: Some("/tmp/config/usage.sqlite".to_string()),
+                ..AppSettings::default()
             },
         );
 
@@ -548,6 +596,7 @@ mod tests {
             None,
             &AppSettings {
                 database_path: Some("/tmp/config/usage.sqlite".to_string()),
+                ..AppSettings::default()
             },
         );
 
@@ -687,14 +736,44 @@ mod tests {
         let settings_path = app_settings_path(temp_dir.path());
         let expected = AppSettings {
             database_path: Some(temp_dir.path().join("usage.sqlite").display().to_string()),
+            model_pricing_overrides: crate::pricing::default_model_pricing_overrides(),
         };
 
         save_app_settings(&settings_path, &expected).expect("save settings");
-        let actual =
-            load_app_settings(&settings_path, &legacy_app_settings_paths(temp_dir.path()))
-                .expect("load settings");
+        let actual = load_app_settings(&settings_path, &legacy_app_settings_paths(temp_dir.path()))
+            .expect("load settings");
 
         assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn pricing_update_preserves_database_path_setting() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let mut app_state = app_state_for_tests();
+        app_state.settings_path = app_settings_path(temp_dir.path());
+        let database_path = temp_dir.path().join("custom-usage.sqlite");
+        app_state
+            .settings
+            .lock()
+            .expect("app settings lock")
+            .database_path = Some(database_path.display().to_string());
+        let mut overrides = crate::pricing::default_model_pricing_overrides();
+        overrides[0].enabled = true;
+
+        app_state
+            .set_model_pricing_overrides(overrides.clone())
+            .expect("update model pricing");
+
+        let saved = load_app_settings(
+            &app_state.settings_path,
+            &legacy_app_settings_paths(temp_dir.path()),
+        )
+        .expect("load updated settings");
+        assert_eq!(
+            saved.database_path,
+            Some(database_path.display().to_string())
+        );
+        assert_eq!(saved.model_pricing_overrides, overrides);
     }
 
     #[test]
@@ -704,6 +783,7 @@ mod tests {
             let legacy_path = temp_dir.path().join(legacy_dir).join("settings.json");
             let expected = AppSettings {
                 database_path: Some(temp_dir.path().join("legacy.sqlite").display().to_string()),
+                ..AppSettings::default()
             };
 
             save_app_settings(&legacy_path, &expected).expect("save legacy settings");

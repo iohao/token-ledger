@@ -45,6 +45,7 @@ flowchart TD
     DailyDetail --> DailyQuery[query_daily_usage for range]
 
     SyncInfo --> Meta[Codex dir, SQLite path, time zone, parse version]
+    SyncInfo --> Pricing[Model pricing form (relay overrides)]
     SyncInfo --> Update[Updater check + install]
     SyncInfo --> Repo[Source repository link]
 ```
@@ -105,7 +106,8 @@ Shows the persisted `DashboardMetaDTO` plus the in-app updater UX:
 
 - Codex directory and SQLite path (read-only when `database_path_locked`
   is true because `CODEX_USAGE_DATABASE` is set).
-- Time zone, parse version, pricing notes.
+- Time zone, parse version, pricing notes, and a model-pricing form
+  (see [Model pricing](#model-pricing-set_model_pricing_settings) below).
 - A "Sync now" button (re-uses the same `startSync` plumbing).
 - An "Update" section that calls `checkForPendingAppUpdate()` (Tauri's
   `check()` from `tauri-plugin-updater`) and, on a hit, runs
@@ -120,6 +122,36 @@ The settings file edit (changing the SQLite path) lives in this tab too;
 `DashboardPayloadDTO`, and writes the new path into
 `${CODEX_HOME}/.tokenledger/settings.json`.
 
+### Model pricing (`set_model_pricing_settings`)
+
+Below the database-path form, the sync info tab renders one
+`pricing-model-group` per relay model. Each group shows the model's
+official rates (read-only reference) and four editable fields for the
+user-supplied relay rates (input, output, cache read, cache creation —
+all in USD per million tokens). A toggle labeled "Use relay pricing"
+flips the `relayEnabled` boolean, which decides whether
+`cost_for_with_overrides` uses the user's relay rates or the official
+ones for that model. The four rate fields are bounded to non-negative
+finite numbers; client-side validation in `validatePricingRate` and
+server-side validation in `pricing::validate_pricing_overrides` enforce
+the same rules, so a malformed draft surfaces an inline error before the
+Tauri call.
+
+A successful save calls `updateModelPricingSettings` (Tauri command
+`set_model_pricing_settings`, declared in
+`src-tauri/capabilities/default.json` as `allow-set-model-pricing-settings`)
+and reapplies the resulting `DashboardPayloadDTO`, which immediately
+re-prices every visible aggregate. A "Restore relay preset" button
+rehydrates the draft from the hard-coded relay preset (see
+[architecture/data-model.md](../architecture/data-model.md#relay-model-pricing-overrides))
+so the user can revert manual edits without having to remember the
+defaults. The i18n keys for this block live in
+`src/i18n.ts` (`pricingSection`, `modelPricingTitle`, `modelPricingHint`,
+`useRelayPricing`, `relayPricingActive`, `officialPricingActive`,
+`savePricing`, `restoreRelayPreset`, `cacheCreationAvailabilityNote`,
+`pricingRequiredError`, `pricingInvalidError`,
+`pricingValidationError`, `pricingSaved`).
+
 ## Demo mode
 
 When the URL contains `?demo=1`, every command in `src/api/tauri.ts` is
@@ -133,6 +165,10 @@ Demo toggles:
 
 - `updateDemoDatabasePath(path)` / `resetDemoDatabasePath()` keep the demo
   payload consistent with edits made in the sync info tab.
+- `updateDemoModelPricingSettings(settings)` keeps the synthesized
+  `DashboardMeta.model_pricing_settings` consistent with edits made in
+  the model-pricing form, so the same UI can be exercised in
+  `?demo=1&tab=syncInfo` without a real Codex install.
 
 ## Theme and locale
 

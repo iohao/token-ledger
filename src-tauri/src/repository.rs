@@ -15,7 +15,9 @@ use crate::models::{
     SyncProgress, SyncProgressPhase, SyncState, SyncStatus, UsagePeriod, UsageSummary,
 };
 use crate::parser::parse_session_file;
-use crate::pricing::pricing_notes;
+use crate::pricing::{
+    cost_for_with_overrides, model_pricing_settings, pricing_notes, ModelPricingOverride,
+};
 use crate::store::UsageStore;
 
 pub struct UsageRepository {
@@ -23,6 +25,7 @@ pub struct UsageRepository {
     pub database_path: PathBuf,
     pub time_zone: String,
     pub parse_version: i32,
+    pricing_overrides: Vec<ModelPricingOverride>,
     store: UsageStore,
 }
 
@@ -31,6 +34,7 @@ pub struct UsageRepositoryConfig {
     pub database_path: PathBuf,
     pub time_zone: String,
     pub parse_version: i32,
+    pub pricing_overrides: Vec<ModelPricingOverride>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -51,6 +55,7 @@ impl UsageRepository {
             database_path: store.database_path().to_path_buf(),
             time_zone: config.time_zone,
             parse_version: config.parse_version,
+            pricing_overrides: config.pricing_overrides,
             store,
         })
     }
@@ -64,6 +69,7 @@ impl UsageRepository {
             time_zone: self.time_zone.clone(),
             parse_version: self.parse_version,
             pricing_notes: pricing_notes(),
+            model_pricing_settings: model_pricing_settings(&self.pricing_overrides),
         }
     }
 
@@ -284,8 +290,9 @@ impl UsageRepository {
         let progress_stride = progress_stride(files_to_process);
 
         for (index, entry) in dirty_entries.iter().enumerate() {
-            let parsed_file =
+            let mut parsed_file =
                 parse_session_file(&entry.file_path, &sessions_root, &self.time_zone)?;
+            self.price_parsed_file(&mut parsed_file);
             extend_affected_date_keys(&mut affected_date_keys, &parsed_file);
             self.store
                 .replace_session_file(&parsed_file, self.parse_version, now.clone())?;
@@ -346,9 +353,10 @@ impl UsageRepository {
         status: &SyncStatus,
     ) -> Result<UsageSummary> {
         let (lower_bound, upper_bound) = self.period_bounds(period)?;
-        let rows = self
+        let mut rows = self
             .store
             .list_daily_rows_between(&lower_bound, &upper_bound)?;
+        self.price_daily_rows(&mut rows);
 
         Ok(UsageSummary {
             period,
@@ -366,10 +374,7 @@ impl UsageRepository {
         self.daily_history_for_keys_with_status(&keys, status)
     }
 
-    fn activity_history_with_status(
-        &self,
-        status: &SyncStatus,
-    ) -> Result<Vec<DailyUsageSummary>> {
+    fn activity_history_with_status(&self, status: &SyncStatus) -> Result<Vec<DailyUsageSummary>> {
         let today_key = last_n_date_keys(Utc::now(), &self.time_zone, 1)?
             .into_iter()
             .next()
@@ -397,9 +402,10 @@ impl UsageRepository {
             .first()
             .cloned()
             .unwrap_or_else(|| "9999-12-31".to_string());
-        let rows = self
+        let mut rows = self
             .store
             .list_daily_rows_between(&lower_bound, &upper_bound)?;
+        self.price_daily_rows(&mut rows);
         let mut grouped: HashMap<String, Vec<StoredDailyAggregate>> = HashMap::new();
 
         for row in rows {
@@ -422,7 +428,8 @@ impl UsageRepository {
     }
 
     fn monthly_history_with_status(&self, status: &SyncStatus) -> Result<Vec<MonthlyUsageSummary>> {
-        let rows = self.store.list_monthly_rows()?;
+        let mut rows = self.store.list_monthly_rows()?;
+        self.price_monthly_rows(&mut rows);
         let mut grouped: HashMap<String, Vec<StoredMonthlyAggregate>> = HashMap::new();
 
         for row in rows {
@@ -462,6 +469,27 @@ impl UsageRepository {
         Ok(context.codex_home_path.as_ref() != Some(&codex_home_path)
             || context.time_zone.as_deref() != Some(self.time_zone.as_str())
             || context.parse_version != Some(self.parse_version))
+    }
+
+    fn price_parsed_file(&self, parsed_file: &mut ParsedSessionFile) {
+        for usage in &mut parsed_file.usages {
+            usage.totals.cost_usd =
+                cost_for_with_overrides(&usage.totals, &usage.model, &self.pricing_overrides);
+        }
+    }
+
+    fn price_daily_rows(&self, rows: &mut [StoredDailyAggregate]) {
+        for row in rows {
+            row.totals.cost_usd =
+                cost_for_with_overrides(&row.totals, &row.model, &self.pricing_overrides);
+        }
+    }
+
+    fn price_monthly_rows(&self, rows: &mut [StoredMonthlyAggregate]) {
+        for row in rows {
+            row.totals.cost_usd =
+                cost_for_with_overrides(&row.totals, &row.model, &self.pricing_overrides);
+        }
     }
 
     fn compute_sync_preview_from_entries(
@@ -715,12 +743,21 @@ mod tests {
     }
 
     fn make_repository(temp_dir: &TempDir, parse_version: i32) -> UsageRepository {
+        make_repository_with_overrides(temp_dir, parse_version, Vec::new())
+    }
+
+    fn make_repository_with_overrides(
+        temp_dir: &TempDir,
+        parse_version: i32,
+        pricing_overrides: Vec<crate::pricing::ModelPricingOverride>,
+    ) -> UsageRepository {
         let database_path = temp_dir.path().join("usage.sqlite");
         UsageRepository::new(UsageRepositoryConfig {
             codex_home_path: temp_dir.path().to_path_buf(),
             database_path,
             time_zone: "Asia/Shanghai".to_string(),
             parse_version,
+            pricing_overrides,
         })
         .expect("create repository")
     }
@@ -760,6 +797,29 @@ mod tests {
     }
 
     #[test]
+    fn pricing_override_reprices_existing_history_without_rescan() {
+        let temp_dir = TempDir::new().expect("temp dir");
+        let session = r#"
+{"type":"turn_context","timestamp":"2026-04-09T01:00:00.000Z","payload":{"model":"gpt-5.6-sol"}}
+{"type":"event_msg","timestamp":"2026-04-09T01:02:00.000Z","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":1000000,"cached_input_tokens":200000,"cache_creation_input_tokens":100000,"output_tokens":100000,"reasoning_output_tokens":0,"total_tokens":1100000}}}}
+"#;
+        write_session(&temp_dir, "2026/04/09/pricing.jsonl", session);
+        let official_repository = make_repository(&temp_dir, 7);
+        official_repository
+            .sync(false)
+            .expect("sync official usage");
+
+        let mut overrides = crate::pricing::default_model_pricing_overrides();
+        overrides[0].enabled = true;
+        let relay_repository = make_repository_with_overrides(&temp_dir, 7, overrides);
+        let rows = relay_repository
+            .daily_history_between("2026-04-09", "2026-04-09")
+            .expect("query repriced history");
+
+        assert!((rows[0].totals.cost_usd - 13.005).abs() < 0.000_001);
+    }
+
+    #[test]
     fn dashboard_activity_history_covers_trailing_year_with_empty_days() {
         let temp_dir = TempDir::new().expect("temp dir");
         write_session(&temp_dir, "2026/04/09/example.jsonl", sample_session());
@@ -780,7 +840,10 @@ mod tests {
             .into_iter()
             .next();
         assert_eq!(
-            payload.activity_history.first().map(|row| row.date_key.as_str()),
+            payload
+                .activity_history
+                .first()
+                .map(|row| row.date_key.as_str()),
             expected_today_key.as_deref()
         );
         assert!(payload
@@ -908,6 +971,7 @@ mod tests {
             database_path,
             time_zone: "Invalid/TimeZone".to_string(),
             parse_version: 4,
+            pricing_overrides: Vec::new(),
         })
         .expect("create repository");
 

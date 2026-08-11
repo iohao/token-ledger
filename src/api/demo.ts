@@ -2,6 +2,8 @@ import type {
   DailyUsageSummaryDTO,
   DashboardMetaDTO,
   DashboardPayloadDTO,
+  ModelPricingOverrideDTO,
+  ModelPricingSettingDTO,
   MonthlyUsageSummaryDTO,
   SyncPreviewDTO,
   SyncProgressDTO,
@@ -13,6 +15,7 @@ function totals(input: number, cached: number, output: number, reasoning: number
   return {
     inputTokens: input,
     cachedInputTokens: cached,
+    cacheCreationInputTokens: 0,
     outputTokens: output,
     reasoningOutputTokens: reasoning,
     totalTokens: input + cached + output + reasoning,
@@ -26,12 +29,40 @@ const DEMO_META: DashboardMetaDTO = {
   databasePathSource: "default",
   databasePathEditable: true,
   timeZone: "Asia/Shanghai",
-  parseVersion: 6,
+  parseVersion: 7,
   pricingNotes: [
-    "GPT-5.6 family (Sol / Terra / Luna) rates use official OpenAI API pricing ($5.00/$30.00, $2.50/$15.00, $1.00/$6.00 per million tokens respectively).",
+    "Official model prices are used unless a relay price override is enabled for that model.",
+    "Cache creation charges apply only when session logs provide cache_creation_input_tokens; records without that field use zero cache creation tokens.",
     "GPT-5.5 / GPT-5.4 / GPT-5.4-mini / GPT-5.3-Codex rates use OpenAI Codex Rate Card values, converted from credits with a 25 credits = 1 USD inference."
+  ],
+  modelPricingSettings: [
+    pricingSetting("gpt-5.6-sol", [5, 30, 0.5, 5], [9, 54, 0.9, 11.25]),
+    pricingSetting("gpt-5.6-terra", [2.5, 15, 0.25, 2.5], [4.5, 27, 0.45, 5.4]),
+    pricingSetting("gpt-5.6-luna", [1, 6, 0.1, 1], [1.8, 10.8, 0.18, 2.25])
   ]
 };
+
+function pricingSetting(
+  model: string,
+  official: [number, number, number, number],
+  relay: [number, number, number, number]
+): ModelPricingSettingDTO {
+  return {
+    model,
+    relayEnabled: false,
+    officialRates: pricingRates(official),
+    relayRates: pricingRates(relay)
+  };
+}
+
+function pricingRates(values: [number, number, number, number]) {
+  return {
+    inputUsdPerMillion: values[0],
+    outputUsdPerMillion: values[1],
+    cacheReadUsdPerMillion: values[2],
+    cacheCreationUsdPerMillion: values[3]
+  };
+}
 
 const DEMO_STATUS: SyncStatusDTO = {
   state: "success",
@@ -252,6 +283,24 @@ export function resetDemoDatabasePath(): DashboardPayloadDTO {
       ...demoPayload.meta,
       databasePath: DEMO_META.databasePath,
       databasePathSource: DEMO_META.databasePathSource
+    }
+  };
+
+  return getDemoDashboard();
+}
+
+export function updateDemoModelPricingSettings(settings: ModelPricingOverrideDTO[]): DashboardPayloadDTO {
+  const settingsByModel = new Map(settings.map((setting) => [setting.model, setting]));
+  demoPayload = {
+    ...demoPayload,
+    meta: {
+      ...demoPayload.meta,
+      modelPricingSettings: demoPayload.meta.modelPricingSettings.map((setting) => {
+        const updated = settingsByModel.get(setting.model);
+        return updated
+          ? { ...setting, relayEnabled: updated.enabled, relayRates: structuredClone(updated.rates) }
+          : setting;
+      })
     }
   };
 
