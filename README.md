@@ -17,14 +17,14 @@
 ### Run the desktop app
 
 ```bash
-npm ci
-npm run desktop -- dev
+bun install
+bun run desktop -- dev
 ```
 
 ### Preview the frontend only
 
 ```bash
-npm run dev -- --host 127.0.0.1
+bun run dev -- --host 127.0.0.1
 ```
 
 Open `http://127.0.0.1:5173/?demo=1` to preview the UI with demo data.  
@@ -37,14 +37,14 @@ You can also open a specific view directly with `tab`:
 ### Checks and tests
 
 ```bash
-npm run typecheck
+bun run typecheck
 cd src-tauri && cargo test
 ```
 
 ### Package the desktop app
 
 ```bash
-npm run package:app
+bun run package:app
 ```
 Packaged runnable artifacts are copied into `release-app/` by default.
 

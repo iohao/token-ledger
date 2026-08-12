@@ -6,15 +6,15 @@
 
 ## Build, Test, and Development Commands
 
-Use Node `>=25` and a stable Rust toolchain.
+Use Bun `>=1.0` and a stable Rust toolchain.
 
-- `npm ci`: install frontend and Tauri CLI dependencies.
-- `npm run dev`: run the Vite frontend only.
-- `npm run desktop -- dev`: launch the full desktop app in Tauri dev mode.
-- `npm run typecheck`: run the frontend TypeScript check used in CI.
+- `bun install`: install frontend and Tauri CLI dependencies.
+- `bun run dev`: run the Vite frontend only.
+- `bun run desktop -- dev`: launch the full desktop app in Tauri dev mode.
+- `bun run typecheck`: run the frontend TypeScript check used in CI.
 - `cd src-tauri && cargo test`: run the Rust test suite.
-- `npm run build`: compile TypeScript and produce the frontend bundle.
-- `npm run package:app`: package the current platform app into `release-app/`.
+- `bun run build`: compile TypeScript and produce the frontend bundle.
+- `bun run package:app`: package the current platform app into `release-app/`.
 
 ## Coding Style & Naming Conventions
 
@@ -22,7 +22,7 @@ Match the existing file style instead of reformatting unrelated code. TypeScript
 
 ## Testing Guidelines
 
-Automated tests currently live on the Rust side as inline `#[cfg(test)]` modules, especially in `src-tauri/src/app_state.rs`, `parser.rs`, `repository.rs`, and `store.rs`. Add or extend those tests when changing parsing, storage, or aggregation behavior. Frontend changes should at minimum pass `npm run typecheck` and be manually checked in `npm run desktop -- dev`.
+Automated tests currently live on the Rust side as inline `#[cfg(test)]` modules, especially in `src-tauri/src/app_state.rs`, `parser.rs`, `repository.rs`, and `store.rs`. Add or extend those tests when changing parsing, storage, or aggregation behavior. Frontend changes should at minimum pass `bun run typecheck` and be manually checked in `bun run desktop -- dev`.
 
 macOS packaged builds are not yet signed with an Apple Developer ID certificate or notarized by Apple. Update checks can still work in packaged builds, but replacement apps may be blocked by Gatekeeper on first launch. For local testing, prefer the GitHub Release install package over a manually copied `.app`, and expect quarantine removal to be necessary in some cases.
 

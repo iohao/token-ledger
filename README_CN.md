@@ -17,21 +17,21 @@
 ### 运行开发版本
 
 ```bash
-npm ci
-npm run desktop -- dev
+bun install
+bun run desktop -- dev
 ```
 
 ### 运行测试与校验
 
 ```bash
-npm run typecheck
+bun run typecheck
 cd src-tauri && cargo test
 ```
 
 ### 打包应用
 
 ```bash
-npm run package:app
+bun run package:app
 ```
 打包后的可运行文件将输出至 `release-app/` 目录。
 

@@ -36,12 +36,8 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v5
-        with:
-          node-version: 25
-          cache: npm
-          cache-dependency-path: package-lock.json
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
 
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -52,17 +48,17 @@ jobs:
           workspaces: src-tauri -> target
 
       - name: Install frontend dependencies
-        run: npm ci
+        run: bun install --frozen-lockfile
 
       - name: Check frontend types
-        run: npm run typecheck
+        run: bun run typecheck
 
       - name: Run Rust tests
         working-directory: src-tauri
         run: cargo test
 
       - name: Build desktop bundles
-        run: npm run desktop -- build --ci --no-sign
+        run: bun run desktop -- build --ci --no-sign
 
       - name: Upload desktop bundles
         uses: actions/upload-artifact@v6

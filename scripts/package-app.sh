@@ -18,8 +18,8 @@ artifact into a stable output directory.
 
 Options:
   --out-dir <path>      Override the output directory. Default: ./release-app
-  --skip-install        Do not auto-run npm install when node_modules is missing
-  --skip-typecheck      Skip npm run typecheck before packaging
+  --skip-install        Do not auto-run bun install when node_modules is missing
+  --skip-typecheck      Skip bun run typecheck before packaging
   --open                Open the packaged app location after success (macOS only)
   --help                Show this help text
 
@@ -57,7 +57,7 @@ copy_artifact() {
 resolve_product_name() {
   (
     cd "$ROOT_DIR"
-    node -p "JSON.parse(require('node:fs').readFileSync('src-tauri/tauri.conf.json','utf8')).productName"
+    bun -e "console.log(require('./src-tauri/tauri.conf.json').productName)"
   )
 }
 
@@ -125,8 +125,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-require_command node
-require_command npm
+require_command bun
 require_command cargo
 require_command rustc
 
@@ -139,13 +138,13 @@ if [[ ! -d "$ROOT_DIR/node_modules" ]]; then
     fail "node_modules is missing and --skip-install was set"
   fi
 
-  log "node_modules is missing, running npm install"
-  (cd "$ROOT_DIR" && npm install)
+  log "node_modules is missing, running bun install"
+  (cd "$ROOT_DIR" && bun install)
 fi
 
 if [[ "$SKIP_TYPECHECK" -eq 0 ]]; then
   log "Running typecheck"
-  (cd "$ROOT_DIR" && npm run typecheck)
+  (cd "$ROOT_DIR" && bun run typecheck)
 fi
 
 if [[ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" && -z "${TAURI_SIGNING_PRIVATE_KEY_PATH:-}" && -f "$LOCAL_UPDATER_KEY_PATH" ]]; then
