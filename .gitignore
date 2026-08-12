@@ -1,4 +1,5 @@
 # Dependencies
+.openwikiignore
 node_modules/
 .npm/
 .pnpm-store/

@@ -1,6 +1,34 @@
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
+  Activity,
+  CalendarDays,
+  CalendarRange,
+  ChartNoAxesCombined,
+  CircleDollarSign,
+  Clock3,
+  Database,
+  Download,
+  ExternalLink,
+  FolderOpen,
+  Gauge,
+  Info,
+  Languages,
+  LayoutDashboard,
+  Monitor,
+  Moon,
+  Palette,
+  RefreshCw,
+  RotateCcw,
+  Save,
+  Search,
+  Settings,
+  SlidersHorizontal,
+  Sun,
+  TableProperties,
+  createIcons
+} from "lucide";
+import {
   fetchCurrentSyncProgress,
   fetchDashboard,
   fetchSyncPreview,
@@ -39,7 +67,9 @@ import {
   translatePricingNote,
   type Locale
 } from "./i18n";
+import appIconUrl from "../src-tauri/icons/128x128.png";
 import "./styles.css";
+import "./redesign.css";
 
 const root = document.querySelector<HTMLDivElement>("#root");
 
@@ -79,7 +109,7 @@ const RELAY_PRICING_PRESETS: Record<string, ModelPricingRatesDTO> = {
 };
 
 type AutoSyncModeValue = (typeof AUTO_SYNC_OPTIONS)[number]["value"];
-type AppTab = "overview" | "monthlyHistory" | "monthlyDetail" | "syncInfo" | "dailyDetail";
+type AppTab = "overview" | "monthlyHistory" | "monthlyDetail" | "settings" | "dailyDetail";
 type InlineNoticeTone = "good" | "bad";
 type UpdateStatus = "idle" | "checking" | "available" | "upToDate" | "installing" | "error";
 type PricingRateField = (typeof PRICING_RATE_FIELDS)[number];
@@ -95,34 +125,40 @@ type ActivityWallCell = {
   title: string;
 };
 
-type Theme = "dark" | "light";
+type ResolvedTheme = "dark" | "light";
+type ThemeMode = ResolvedTheme | "system";
 const THEME_STORAGE_KEY = "tokenledger.theme";
+const systemThemeQuery = window.matchMedia("(prefers-color-scheme: light)");
 
-function detectInitialTheme(): Theme {
+function detectInitialThemeMode(): ThemeMode {
   try {
     const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
-    if (stored === "dark" || stored === "light") {
+    if (stored === "dark" || stored === "light" || stored === "system") {
       return stored;
     }
   } catch {}
+  return "system";
+}
+
+function resolveTheme(themeMode: ThemeMode): ResolvedTheme {
+  return themeMode === "system" ? (systemThemeQuery.matches ? "light" : "dark") : themeMode;
+}
+
+function applyTheme(themeMode: ThemeMode, persist = true): void {
   try {
-    if (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches) {
-      return "light";
+    const resolvedTheme = resolveTheme(themeMode);
+    document.documentElement.setAttribute("data-theme", resolvedTheme);
+    document.documentElement.setAttribute("data-theme-mode", themeMode);
+    document.documentElement.style.colorScheme = resolvedTheme;
+    if (persist) {
+      window.localStorage.setItem(THEME_STORAGE_KEY, themeMode);
     }
   } catch {}
-  return "dark";
 }
 
-function applyTheme(theme: Theme): void {
-  try {
-    document.documentElement.setAttribute("data-theme", theme);
-    window.localStorage.setItem(THEME_STORAGE_KEY, theme);
-  } catch {}
-}
-
-function setTheme(theme: Theme): void {
-  state.theme = theme;
-  applyTheme(theme);
+function setThemeMode(themeMode: ThemeMode): void {
+  state.themeMode = themeMode;
+  applyTheme(themeMode);
   render();
 }
 
@@ -132,7 +168,11 @@ function detectInitialTab(): AppTab {
   }
 
   const tab = new URLSearchParams(window.location.search).get("tab");
-  return tab === "overview" || tab === "monthlyHistory" || tab === "monthlyDetail" || tab === "syncInfo" || tab === "dailyDetail"
+  if (tab === "syncInfo") {
+    return "settings";
+  }
+
+  return tab === "overview" || tab === "monthlyHistory" || tab === "monthlyDetail" || tab === "settings" || tab === "dailyDetail"
     ? tab
     : "overview";
 }
@@ -147,7 +187,7 @@ const state = {
   isUpdatingModelPricing: false,
   errorMessage: null as string | null,
   locale: detectInitialLocale(),
-  theme: detectInitialTheme(),
+  themeMode: detectInitialThemeMode(),
   autoSyncMode: "manual" as AutoSyncModeValue,
   nextAutoSyncAt: null as number | null,
   activeTab: detectInitialTab(),
@@ -205,6 +245,7 @@ let lastLiveRegionText = "";
 let lastSkipLinkText = "";
 let lastSidebarMarkup = "";
 let lastContentMarkup = "";
+let settingsSectionObserver: IntersectionObserver | null = null;
 let activeActivityTooltipDay: HTMLElement | null = null;
 const isMacLikePlatform = navigator.platform.toLowerCase().includes("mac");
 const isMacOS = navigator.userAgent.includes("Mac");
@@ -989,30 +1030,31 @@ function databasePathSourceLabel(source: DashboardPayloadDTO["meta"]["databasePa
 }
 
 function handleTabChange(nextTab: string): void {
-  if (nextTab !== "overview" && nextTab !== "monthlyHistory" && nextTab !== "monthlyDetail" && nextTab !== "syncInfo" && nextTab !== "dailyDetail") {
+  const normalizedTab = nextTab === "syncInfo" ? "settings" : nextTab;
+  if (normalizedTab !== "overview" && normalizedTab !== "monthlyHistory" && normalizedTab !== "monthlyDetail" && normalizedTab !== "settings" && normalizedTab !== "dailyDetail") {
     return;
   }
 
-  if (nextTab === "dailyDetail") {
+  if (normalizedTab === "dailyDetail") {
     const timeZone = state.dashboard?.meta.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
     const nowValue = state.dashboard?.now ?? new Date().toISOString();
     initializeDailyDetailRange(timeZone, nowValue);
   }
 
-  if (nextTab === "monthlyDetail") {
+  if (normalizedTab === "monthlyDetail") {
     const timeZone = state.dashboard?.meta.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
     const nowValue = state.dashboard?.now ?? new Date().toISOString();
     initializeMonthlyDetailSelection(timeZone, nowValue);
   }
 
-  state.activeTab = nextTab;
+  state.activeTab = normalizedTab;
   render();
 
-  if (nextTab === "dailyDetail" && !state.hasLoadedDailyDetails && !state.isLoadingDailyDetails) {
+  if (normalizedTab === "dailyDetail" && !state.hasLoadedDailyDetails && !state.isLoadingDailyDetails) {
     void loadDailyDetails();
   }
 
-  if (nextTab === "monthlyDetail" && !state.hasLoadedMonthlyDetails && !state.isLoadingMonthlyDetails) {
+  if (normalizedTab === "monthlyDetail" && !state.hasLoadedMonthlyDetails && !state.isLoadingMonthlyDetails) {
     void loadMonthlyDetails();
   }
 }
@@ -1055,7 +1097,7 @@ function handleGlobalKeydown(event: KeyboardEvent): void {
       nextTab = "dailyDetail";
       break;
     case "5":
-      nextTab = "syncInfo";
+      nextTab = "settings";
       break;
     default:
       break;
@@ -1597,60 +1639,62 @@ function renderUpdateNotes(notes: string | null | undefined): string {
   `;
 }
 
+function iconMarkup(name: string, className = "ui-icon"): string {
+  return `<i data-lucide="${name}" class="${className}" aria-hidden="true"></i>`;
+}
+
 function renderSidebarNav(): string {
-  const tabs: Array<{ value: AppTab; label: string; markerClass: string }> = [
-    { value: "overview", label: t(state.locale, "navOverview"), markerClass: "menu-item-mark--overview" },
-    { value: "monthlyDetail", label: t(state.locale, "navMonthlyDetail"), markerClass: "menu-item-mark--monthly-detail" },
-    { value: "monthlyHistory", label: t(state.locale, "navMonthlyHistory"), markerClass: "menu-item-mark--monthly-history" },
-    { value: "dailyDetail", label: t(state.locale, "navDailyDetail"), markerClass: "menu-item-mark--daily-detail" },
-    { value: "syncInfo", label: t(state.locale, "navSyncInfo"), markerClass: "menu-item-mark--sync-info" }
+  const usageTabs: Array<{ value: AppTab; label: string; icon: string }> = [
+    { value: "dailyDetail", label: t(state.locale, "navDailyDetail"), icon: "calendar-days" },
+    { value: "monthlyHistory", label: t(state.locale, "navMonthlyHistory"), icon: "chart-no-axes-combined" },
+    { value: "monthlyDetail", label: t(state.locale, "navMonthlyDetail"), icon: "calendar-range" }
   ];
+  const renderNavItem = (tab: { value: AppTab; label: string; icon: string }): string => `
+    <button
+      class="menu-item ${state.activeTab === tab.value ? "is-active" : ""}"
+      type="button"
+      title="${escapeHtml(tab.label)}"
+      aria-current="${state.activeTab === tab.value ? "page" : "false"}"
+      data-tab-trigger="${tab.value}"
+    >
+      ${iconMarkup(tab.icon, "menu-item-icon")}
+      <span class="menu-item-label">${tab.label}</span>
+    </button>
+  `;
+  const settingsLabel = t(state.locale, "navSettings");
 
   return `
     <aside class="sidebar">
-      <nav class="menu-shell panel" aria-label="${t(state.locale, "dashboardViewsAria")}">
-        <div class="menu-locale">
-          <label class="menu-locale-field" for="locale-select">
-            <span class="menu-locale-label">${t(state.locale, "language")}</span>
-            <select
-              id="locale-select"
-              class="menu-locale-select"
-              data-locale-select
-              aria-label="${t(state.locale, "languageSwitcherAria")}"
-            >
-              <option value="zh-CN" ${state.locale === "zh-CN" ? "selected" : ""}>${t(state.locale, "languageChinese")}</option>
-              <option value="en-US" ${state.locale === "en-US" ? "selected" : ""}>${t(state.locale, "languageEnglish")}</option>
-            </select>
-          </label>
-          <label class="menu-locale-field" for="theme-select" style="margin-top: 12px;">
-            <span class="menu-locale-label">${t(state.locale, "themeAppearance")}</span>
-            <select
-              id="theme-select"
-              class="menu-locale-select"
-              data-theme-select
-              aria-label="${t(state.locale, "themeSelectAria")}"
-            >
-              <option value="dark" ${state.theme === "dark" ? "selected" : ""}>${t(state.locale, "themeDark")}</option>
-              <option value="light" ${state.theme === "light" ? "selected" : ""}>${t(state.locale, "themeLight")}</option>
-            </select>
-          </label>
+      <div class="sidebar-brand">
+        <img class="sidebar-brand-icon" src="${appIconUrl}" alt="" width="36" height="36" />
+        <div class="sidebar-brand-copy">
+          <strong>TokenLedger</strong>
+          <span>${t(state.locale, "appTagline")}</span>
         </div>
-        ${tabs
-          .map(
-            (tab) => `
-              <button
-                class="menu-item ${state.activeTab === tab.value ? "is-active" : ""}"
-                type="button"
-                aria-pressed="${state.activeTab === tab.value}"
-                data-tab-trigger="${tab.value}"
-              >
-                <span class="menu-item-mark ${tab.markerClass}" aria-hidden="true"></span>
-                <span class="menu-item-label">${tab.label}</span>
-              </button>
-            `
-          )
-          .join("")}
+      </div>
+      <nav class="menu-shell" aria-label="${t(state.locale, "dashboardViewsAria")}">
+        <div class="menu-group">
+          <p class="menu-group-label">${t(state.locale, "navMain")}</p>
+          ${renderNavItem({ value: "overview", label: t(state.locale, "navOverview"), icon: "layout-dashboard" })}
+        </div>
+        <div class="menu-group">
+          <p class="menu-group-label">${t(state.locale, "navUsage")}</p>
+          ${usageTabs.map(renderNavItem).join("")}
+        </div>
       </nav>
+      <div class="sidebar-footer">
+        <button
+          class="menu-item ${state.activeTab === "settings" ? "is-active" : ""}"
+          type="button"
+          title="${escapeHtml(settingsLabel)}"
+          aria-current="${state.activeTab === "settings" ? "page" : "false"}"
+          data-tab-trigger="settings"
+        >
+          ${iconMarkup("settings", "menu-item-icon")}
+          <span class="menu-item-label">${settingsLabel}</span>
+          ${state.availableUpdate ? `<span class="menu-status-dot" aria-label="${escapeHtml(t(state.locale, "updateAvailableStatus", { version: state.availableUpdate.version }))}"></span>` : ""}
+        </button>
+      </div>
     </aside>
   `;
 }
@@ -1889,6 +1933,15 @@ function handleRootClick(event: Event): void {
     return;
   }
 
+  const themeModeButton = target.closest("[data-theme-mode]");
+  if (themeModeButton instanceof HTMLButtonElement) {
+    const themeMode = themeModeButton.dataset.themeMode;
+    if (themeMode === "dark" || themeMode === "light" || themeMode === "system") {
+      setThemeMode(themeMode);
+    }
+    return;
+  }
+
   const tabButton = target.closest("[data-tab-trigger]");
   if (tabButton instanceof HTMLButtonElement) {
     handleTabChange(tabButton.dataset.tabTrigger ?? "");
@@ -1911,14 +1964,6 @@ function handleRootChange(event: Event): void {
   if (localeSelect instanceof HTMLSelectElement) {
     if (isLocale(localeSelect.value)) {
       setLocale(localeSelect.value);
-    }
-    return;
-  }
-
-  const themeSelect = target.closest("[data-theme-select]");
-  if (themeSelect instanceof HTMLSelectElement) {
-    if (themeSelect.value === "light" || themeSelect.value === "dark") {
-      setTheme(themeSelect.value);
     }
     return;
   }
@@ -2022,6 +2067,19 @@ function handleRootSubmit(event: Event): void {
   }
 }
 
+function renderPageHeader(icon: string, eyebrow: string, title: string, description: string, actions = ""): string {
+  return `
+    <header class="page-header">
+      <div class="page-header-copy">
+        <div class="page-kicker">${iconMarkup(icon, "page-kicker-icon")}<span>${eyebrow}</span></div>
+        <h1>${title}</h1>
+        <p>${description}</p>
+      </div>
+      ${actions ? `<div class="page-header-actions">${actions}</div>` : ""}
+    </header>
+  `;
+}
+
 function renderHeroSection(
   dashboard: DashboardPayloadDTO | null,
   syncPreview: DashboardPayloadDTO["syncPreview"] | null,
@@ -2031,69 +2089,57 @@ function renderHeroSection(
   autoSyncOptionsMarkup: string,
   autoSyncCountdownMarkup: string
 ): string {
-  return `
-    <section class="hero panel">
-      <div class="hero-copy">
-        <p class="eyebrow">${t(state.locale, "dashboardTitle")}</p>
-        ${
-          dashboard
-            ? `
-              <div class="chip-row">
-                <span class="chip ${statusTone(dashboard.status.state)}">${t(state.locale, "heroStatus", {
-                  status: statusLabel(dashboard.status.state)
-                })}</span>
-                <span class="chip">${t(state.locale, "heroTimeZone", {
-                  timeZone: escapeHtml(dashboard.meta.timeZone)
-                })}</span>
-                <span class="chip">${t(state.locale, "heroTrackedSessions", {
-                  count: syncPreview?.totalTrackedSessions ?? "…"
-                })}</span>
-                <span class="chip ${syncPreview?.needsSync ? "warm" : "good"}">
-                  ${
-                    !syncPreview
-                      ? t(state.locale, "heroSyncPreviewUnavailable")
-                      : syncPreview.needsSync
-                        ? t(state.locale, "heroPendingSessions", {
-                            count: syncPreview.newSessions + syncPreview.changedSessions + syncPreview.removedSessions
-                          })
-                        : t(state.locale, "heroCaughtUp")
-                  }
-                </span>
-              </div>
-            `
-            : ""
-        }
-      </div>
+  const pendingSessions = syncPreview
+    ? syncPreview.newSessions + syncPreview.changedSessions + syncPreview.removedSessions
+    : null;
+  const syncActionMarkup = `
+    <button class="action primary" type="button" data-sync ${state.isLoading || state.isSyncing || !syncAvailable ? "disabled" : ""}>
+      ${iconMarkup("refresh-cw", "action-icon")}
+      <span>${state.isSyncing ? t(state.locale, "syncingShort") : syncAvailable ? t(state.locale, "syncButton") : t(state.locale, "syncPendingMigration")}</span>
+    </button>
+    <label class="sync-mode-field" for="auto-sync-mode">
+      <span>${t(state.locale, "syncFrequency")}</span>
+      <select id="auto-sync-mode" class="sync-mode-select" data-auto-sync-mode ${state.isSyncing ? "disabled" : ""}>
+        ${autoSyncOptionsMarkup}
+      </select>
+    </label>
+    ${autoSyncCountdownMarkup}
+  `;
 
-      <div class="hero-actions">
-        <div class="sync-toolbar">
-          <button class="action primary" type="button" data-sync ${state.isLoading || state.isSyncing || !syncAvailable ? "disabled" : ""}>
-            ${state.isSyncing ? t(state.locale, "syncingShort") : syncAvailable ? t(state.locale, "syncButton") : t(state.locale, "syncPendingMigration")}
-          </button>
-          <label class="sync-mode-field" for="auto-sync-mode">
-            <span>${t(state.locale, "syncFrequency")}</span>
-            <select id="auto-sync-mode" class="sync-mode-select" data-auto-sync-mode ${state.isSyncing ? "disabled" : ""}>
-              ${autoSyncOptionsMarkup}
-            </select>
-          </label>
-          ${autoSyncCountdownMarkup}
-        </div>
-        <div data-sync-progress-slot>${renderSyncProgressCard(syncProgress)}</div>
-        <div class="status-card">
-          <div class="status-card-head">
-            <p>${t(state.locale, "lastSynced")}</p>
-            <strong>${formatTimestamp(dashboard?.status.lastSyncedAt ?? null, timeZone)}</strong>
-          </div>
-          <span class="status-card-detail">
-            ${t(state.locale, "sessionDeltaSummary", {
-              newCount: syncPreview?.newSessions ?? 0,
-              changedCount: syncPreview?.changedSessions ?? 0,
-              removedCount: syncPreview?.removedSessions ?? 0
-            })}
-          </span>
-        </div>
+  return `
+    ${renderPageHeader(
+      "layout-dashboard",
+      t(state.locale, "dashboardTitle"),
+      t(state.locale, "overviewTitle"),
+      t(state.locale, "overviewDescription"),
+      `<div class="sync-toolbar">${syncActionMarkup}</div>`
+    )}
+    <section class="hero ledger-rail panel" aria-label="${t(state.locale, "currentStatus", { status: statusLabel(dashboard?.status.state ?? "idle") })}">
+      <div class="ledger-metric">
+        <span>${t(state.locale, "statusLabel")}</span>
+        <strong class="status-value ${statusTone(dashboard?.status.state ?? "idle")}">
+          <span class="status-indicator" aria-hidden="true"></span>${statusLabel(dashboard?.status.state ?? "idle")}
+        </strong>
       </div>
+      <div class="ledger-metric">
+        <span>${t(state.locale, "lastSynced")}</span>
+        <strong>${formatTimestamp(dashboard?.status.lastSyncedAt ?? null, timeZone)}</strong>
+      </div>
+      <div class="ledger-metric">
+        <span>${t(state.locale, "timeZone")}</span>
+        <strong>${escapeHtml(dashboard?.meta.timeZone ?? timeZone)}</strong>
+      </div>
+      <div class="ledger-metric">
+        <span>${t(state.locale, "pendingSessions")}</span>
+        <strong class="${pendingSessions && pendingSessions > 0 ? "warm" : "good"}">${pendingSessions ?? "…"}</strong>
+      </div>
+      <div class="ledger-detail">${t(state.locale, "sessionDeltaSummary", {
+        newCount: syncPreview?.newSessions ?? 0,
+        changedCount: syncPreview?.changedSessions ?? 0,
+        removedCount: syncPreview?.removedSessions ?? 0
+      })}</div>
     </section>
+    <div data-sync-progress-slot>${renderSyncProgressCard(syncProgress)}</div>
   `;
 }
 
@@ -2131,7 +2177,17 @@ function renderOverviewView(
 }
 
 function renderMonthlyHistoryView(timeZone: string, dashboard: DashboardPayloadDTO | null): string {
-  return renderUsageTable(t(state.locale, "navMonthlyHistory"), dashboard?.monthlyHistory ?? [], timeZone, "monthly");
+  return `
+    <div class="page-stack">
+      ${renderPageHeader(
+        "chart-no-axes-combined",
+        t(state.locale, "navUsage"),
+        t(state.locale, "navMonthlyHistory"),
+        t(state.locale, "monthlyHistoryDescription")
+      )}
+      ${renderUsageTable(t(state.locale, "navMonthlyHistory"), dashboard?.monthlyHistory ?? [], timeZone, "monthly")}
+    </div>
+  `;
 }
 
 function pricingFieldLabel(field: PricingRateField): string {
@@ -2257,7 +2313,7 @@ function renderModelPricingBlock(dashboard: DashboardPayloadDTO | null): string 
   `;
 }
 
-function renderSyncInfoView(timeZone: string, notes: string, dashboard: DashboardPayloadDTO | null): string {
+function renderSettingsView(timeZone: string, notes: string, dashboard: DashboardPayloadDTO | null): string {
   const databasePathEditable = dashboard?.meta.databasePathEditable ?? false;
   const databasePathDisabled = state.isLoading || state.isSyncing || state.isUpdatingDatabasePath || !databasePathEditable;
   const databasePathSource = dashboard ? databasePathSourceLabel(dashboard.meta.databasePathSource) : "-";
@@ -2275,144 +2331,156 @@ function renderSyncInfoView(timeZone: string, notes: string, dashboard: Dashboar
   const publishedAt = state.availableUpdate?.date ? formatTimestamp(state.availableUpdate.date, timeZone) : "-";
   const updateTone = updateStatusTone();
   const updateFeedbackClass = updateTone ? `config-feedback ${updateTone}` : "config-note";
+  const updateFeedbackMarkup =
+    state.updateStatus === "idle" ? "" : `<p class="${updateFeedbackClass}">${escapeHtml(updateStatusMessage())}</p>`;
   const updatePlatformNote = updatePlatformSupportNote();
+  const settingsSections = [
+    { id: "general", label: t(state.locale, "settingsGeneral"), icon: "languages" },
+    { id: "appearance", label: t(state.locale, "settingsAppearance"), icon: "palette" },
+    { id: "data", label: t(state.locale, "settingsData"), icon: "database" },
+    { id: "pricing", label: t(state.locale, "settingsPricing"), icon: "circle-dollar-sign" },
+    { id: "updates", label: t(state.locale, "settingsUpdates"), icon: "refresh-cw" },
+    { id: "about", label: t(state.locale, "settingsAbout"), icon: "info" }
+  ];
+  const sectionHeader = (icon: string, title: string, description: string): string => `
+    <div class="settings-section-head">
+      <span class="settings-section-icon">${iconMarkup(icon)}</span>
+      <div><h2>${title}</h2><p>${description}</p></div>
+    </div>
+  `;
+  const themeOptions: Array<{ value: ThemeMode; label: string; icon: string }> = [
+    { value: "dark", label: t(state.locale, "themeDark"), icon: "moon" },
+    { value: "light", label: t(state.locale, "themeLight"), icon: "sun" },
+    { value: "system", label: t(state.locale, "themeSystem"), icon: "monitor" }
+  ];
 
   return `
-    <section class="info-panel panel">
-      <div class="section-head">
-        <div>
-          <p class="eyebrow">${t(state.locale, "localData")}</p>
-          <h3>${t(state.locale, "syncInfoTitle")}</h3>
+    <div class="page-stack settings-page">
+      ${renderPageHeader(
+        "settings",
+        t(state.locale, "settingsEyebrow"),
+        t(state.locale, "settingsTitle"),
+        t(state.locale, "settingsDescription")
+      )}
+      <div class="settings-layout">
+        <nav class="settings-nav" aria-label="${t(state.locale, "settingsSectionNavAria")}">
+          ${settingsSections
+            .map(
+              (section, index) => `
+                <a class="settings-nav-item ${index === 0 ? "is-active" : ""}" href="#settings-${section.id}" data-settings-nav="${section.id}">
+                  ${iconMarkup(section.icon, "settings-nav-icon")}
+                  <span>${section.label}</span>
+                  ${section.id === "updates" && state.availableUpdate ? `<span class="settings-nav-dot" aria-hidden="true"></span>` : ""}
+                </a>
+              `
+            )
+            .join("")}
+        </nav>
+
+        <div class="settings-content">
+          <section class="settings-section panel" id="settings-general" data-settings-section="general">
+            ${sectionHeader("languages", t(state.locale, "settingsGeneral"), t(state.locale, "settingsGeneralDescription"))}
+            <div class="settings-control-row">
+              <div><strong>${t(state.locale, "settingsLanguageTitle")}</strong><span>${t(state.locale, "settingsLanguageDescription")}</span></div>
+              <select class="settings-select" data-locale-select aria-label="${t(state.locale, "languageSwitcherAria")}">
+                <option value="zh-CN" ${state.locale === "zh-CN" ? "selected" : ""}>${t(state.locale, "languageChinese")}</option>
+                <option value="en-US" ${state.locale === "en-US" ? "selected" : ""}>${t(state.locale, "languageEnglish")}</option>
+              </select>
+            </div>
+          </section>
+
+          <section class="settings-section panel" id="settings-appearance" data-settings-section="appearance">
+            ${sectionHeader("palette", t(state.locale, "settingsAppearance"), t(state.locale, "settingsAppearanceDescription"))}
+            <div class="settings-control-row settings-control-row--stack">
+              <div><strong>${t(state.locale, "themeModeTitle")}</strong><span>${t(state.locale, "themeModeDescription")}</span></div>
+              <div class="theme-segmented" role="group" aria-label="${t(state.locale, "themeSelectAria")}">
+                ${themeOptions
+                  .map(
+                    (option) => `
+                      <button class="theme-option ${state.themeMode === option.value ? "is-active" : ""}" type="button" data-theme-mode="${option.value}" aria-pressed="${state.themeMode === option.value}">
+                        ${iconMarkup(option.icon, "theme-option-icon")}<span>${option.label}</span>
+                      </button>
+                    `
+                  )
+                  .join("")}
+              </div>
+            </div>
+          </section>
+
+          <section class="settings-section panel" id="settings-data" data-settings-section="data">
+            ${sectionHeader("database", t(state.locale, "settingsData"), t(state.locale, "settingsDataDescription"))}
+            <h3 class="settings-subtitle">${t(state.locale, "diagnosticsTitle")}</h3>
+            <dl class="meta-list settings-meta-list">
+              <div><dt>${t(state.locale, "codexDirectory")}</dt><dd>${escapeHtml(dashboard?.meta.codexHomePath ?? "-")}</dd></div>
+              <div><dt>${t(state.locale, "sqlite")}</dt><dd>${escapeHtml(dashboard?.meta.databasePath ?? "-")}</dd></div>
+              <div><dt>${t(state.locale, "parseVersion")}</dt><dd>${dashboard?.meta.parseVersion ?? "-"}</dd></div>
+              <div><dt>${t(state.locale, "coverageThrough")}</dt><dd>${formatTimestamp(dashboard?.status.coverageThrough ?? null, timeZone)}</dd></div>
+              <div><dt>${t(state.locale, "scannedFiles")}</dt><dd>${formatInteger(dashboard?.status.scannedFiles ?? 0)}</dd></div>
+              <div><dt>${t(state.locale, "affectedSessions")}</dt><dd>${formatInteger(dashboard?.status.sessionCount ?? 0)}</dd></div>
+            </dl>
+            <div class="settings-divider"></div>
+            <h3 class="settings-subtitle">${t(state.locale, "sqlitePath")}</h3>
+            <form class="config-form" data-database-path-form>
+              <label class="config-field">
+                <span>${t(state.locale, "sqlitePath")}</span>
+                <input type="text" value="${escapeHtml(state.databasePathDraft)}" data-database-path-input ${databasePathDisabled ? "disabled" : ""} />
+              </label>
+              <div class="config-actions">
+                <button class="action primary" type="submit" ${databasePathDisabled ? "disabled" : ""}>
+                  ${iconMarkup("save", "action-icon")}<span>${state.isUpdatingDatabasePath ? t(state.locale, "savingPath") : t(state.locale, "savePath")}</span>
+                </button>
+                <button class="action" type="button" data-database-path-reset ${databasePathDisabled ? "disabled" : ""}>
+                  ${iconMarkup("rotate-ccw", "action-icon")}<span>${t(state.locale, "resetDefaultPath")}</span>
+                </button>
+              </div>
+            </form>
+            <p class="config-hint">${t(state.locale, "sqlitePathHint")}</p>
+            <p class="config-note">${t(state.locale, "databasePathSource", { source: databasePathSource })}</p>
+            ${databasePathLockNote}${databasePathFeedback}
+            ${notes ? `<div class="note-stack settings-note-stack">${notes}</div>` : ""}
+          </section>
+
+          <section class="settings-section panel" id="settings-pricing" data-settings-section="pricing">
+            ${sectionHeader("circle-dollar-sign", t(state.locale, "settingsPricing"), t(state.locale, "settingsPricingDescription"))}
+            ${renderModelPricingBlock(dashboard)}
+          </section>
+
+          <section class="settings-section panel" id="settings-updates" data-settings-section="updates">
+            ${sectionHeader("refresh-cw", t(state.locale, "settingsUpdates"), t(state.locale, "settingsUpdatesDescription"))}
+            <div class="update-meta-grid">
+              <div class="update-meta-item"><span>${t(state.locale, "currentVersion")}</span><strong>${escapeHtml(state.currentAppVersion ?? "-")}</strong></div>
+              <div class="update-meta-item"><span>${t(state.locale, "availableVersion")}</span><strong>${escapeHtml(availableVersion)}</strong></div>
+              <div class="update-meta-item"><span>${t(state.locale, "updatePublishedAtLabel")}</span><strong>${escapeHtml(publishedAt)}</strong></div>
+            </div>
+            <div class="config-actions">
+              <button class="action" type="button" data-check-updates ${checkDisabled ? "disabled" : ""}>
+                ${iconMarkup("refresh-cw", "action-icon")}<span>${state.updateStatus === "checking" ? t(state.locale, "checkingForUpdates") : t(state.locale, "checkForUpdates")}</span>
+              </button>
+              <button class="action primary" type="button" data-install-update ${installDisabled ? "disabled" : ""}>
+                ${iconMarkup("download", "action-icon")}<span>${state.isInstallingUpdate ? t(state.locale, "installingUpdate") : t(state.locale, "downloadAndInstallUpdate")}</span>
+              </button>
+            </div>
+            <p class="config-hint">${t(state.locale, "updateChecksRunOnLaunch")}</p>
+            ${updateFeedbackMarkup}
+            ${updatePlatformNote ? `<p class="config-note">${escapeHtml(updatePlatformNote)}</p>` : ""}
+            ${renderUpdateNotes(state.availableUpdate?.body)}
+          </section>
+
+          <section class="settings-section panel" id="settings-about" data-settings-section="about">
+            ${sectionHeader("info", t(state.locale, "settingsAbout"), t(state.locale, "settingsAboutDescription"))}
+            <div class="about-product">
+              <img src="${appIconUrl}" alt="TokenLedger" width="64" height="64" />
+              <div><strong>TokenLedger</strong><span>${t(state.locale, "appPurpose")}</span></div>
+            </div>
+            <dl class="meta-list settings-meta-list about-meta-list">
+              <div><dt>${t(state.locale, "currentVersion")}</dt><dd>${escapeHtml(state.currentAppVersion ?? "-")}</dd></div>
+              <div><dt>${t(state.locale, "applicationId")}</dt><dd>me.ionet.tokenledger</dd></div>
+              <div><dt>${t(state.locale, "sourceRepository")}</dt><dd><a class="meta-link" href="${SOURCE_REPOSITORY_URL}" target="_blank" rel="noreferrer" data-open-source-repository>${escapeHtml(SOURCE_REPOSITORY_URL)} ${iconMarkup("external-link", "inline-icon")}</a></dd></div>
+            </dl>
+          </section>
         </div>
       </div>
-
-      <dl class="meta-list">
-        <div>
-          <dt>${t(state.locale, "currentVersion")}</dt>
-          <dd>${escapeHtml(state.currentAppVersion ?? "-")}</dd>
-        </div>
-        <div>
-          <dt>${t(state.locale, "codexDirectory")}</dt>
-          <dd>${escapeHtml(dashboard?.meta.codexHomePath ?? "-")}</dd>
-        </div>
-        <div>
-          <dt>${t(state.locale, "sourceRepository")}</dt>
-          <dd>
-            <a class="meta-link" href="${SOURCE_REPOSITORY_URL}" target="_blank" rel="noreferrer">${escapeHtml(SOURCE_REPOSITORY_URL)}</a>
-            <span class="meta-link-separator"> · </span>
-            <a
-              class="meta-link"
-              href="${SOURCE_REPOSITORY_URL}"
-              target="_blank"
-              rel="noreferrer"
-              data-open-source-repository
-            >${t(state.locale, "viewSource")}</a>
-          </dd>
-        </div>
-        <div>
-          <dt>${t(state.locale, "sqlite")}</dt>
-          <dd>${escapeHtml(dashboard?.meta.databasePath ?? "-")}</dd>
-        </div>
-        <div>
-          <dt>${t(state.locale, "parseVersion")}</dt>
-          <dd>${dashboard?.meta.parseVersion ?? "-"}</dd>
-        </div>
-        <div>
-          <dt>${t(state.locale, "coverageThrough")}</dt>
-          <dd>${formatTimestamp(dashboard?.status.coverageThrough ?? null, timeZone)}</dd>
-        </div>
-        <div>
-          <dt>${t(state.locale, "scannedFiles")}</dt>
-          <dd>${dashboard?.status.scannedFiles ?? 0}</dd>
-        </div>
-        <div>
-          <dt>${t(state.locale, "affectedSessions")}</dt>
-          <dd>${dashboard?.status.sessionCount ?? 0}</dd>
-        </div>
-      </dl>
-
-      <div class="config-block">
-        <div class="section-head">
-          <div>
-            <p class="eyebrow">${t(state.locale, "appUpdateSection")}</p>
-            <h3>${t(state.locale, "appUpdateTitle")}</h3>
-          </div>
-        </div>
-
-        <div class="update-meta-grid">
-          <div class="update-meta-item">
-            <span>${t(state.locale, "currentVersion")}</span>
-            <strong>${escapeHtml(state.currentAppVersion ?? "-")}</strong>
-          </div>
-          <div class="update-meta-item">
-            <span>${t(state.locale, "availableVersion")}</span>
-            <strong>${escapeHtml(availableVersion)}</strong>
-          </div>
-          <div class="update-meta-item">
-            <span>${t(state.locale, "updatePublishedAtLabel")}</span>
-            <strong>${escapeHtml(publishedAt)}</strong>
-          </div>
-        </div>
-
-        <div class="config-actions">
-          <button class="action" type="button" data-check-updates ${checkDisabled ? "disabled" : ""}>
-            ${state.updateStatus === "checking" ? t(state.locale, "checkingForUpdates") : t(state.locale, "checkForUpdates")}
-          </button>
-          <button class="action primary" type="button" data-install-update ${installDisabled ? "disabled" : ""}>
-            ${state.isInstallingUpdate ? t(state.locale, "installingUpdate") : t(state.locale, "downloadAndInstallUpdate")}
-          </button>
-        </div>
-
-        <p class="config-hint">${t(state.locale, "updateChecksRunOnLaunch")}</p>
-        <p class="${updateFeedbackClass}">${escapeHtml(updateStatusMessage())}</p>
-        ${updatePlatformNote ? `<p class="config-note">${escapeHtml(updatePlatformNote)}</p>` : ""}
-        ${renderUpdateNotes(state.availableUpdate?.body)}
-      </div>
-
-      ${renderModelPricingBlock(dashboard)}
-
-      <div class="config-block">
-        <div class="section-head">
-          <div>
-            <p class="eyebrow">${t(state.locale, "sqlitePathSection")}</p>
-            <h3>${t(state.locale, "sqlitePath")}</h3>
-          </div>
-        </div>
-
-        <form class="config-form" data-database-path-form>
-          <label class="config-field">
-            <span>${t(state.locale, "sqlitePath")}</span>
-            <input
-              type="text"
-              value="${escapeHtml(state.databasePathDraft)}"
-              data-database-path-input
-              ${databasePathDisabled ? "disabled" : ""}
-            />
-          </label>
-
-          <div class="config-actions">
-            <button class="action primary" type="submit" ${databasePathDisabled ? "disabled" : ""}>
-              ${state.isUpdatingDatabasePath ? t(state.locale, "savingPath") : t(state.locale, "savePath")}
-            </button>
-            <button
-              class="action"
-              type="button"
-              data-database-path-reset
-              ${databasePathDisabled ? "disabled" : ""}
-            >
-              ${t(state.locale, "resetDefaultPath")}
-            </button>
-          </div>
-        </form>
-
-        <p class="config-hint">${t(state.locale, "sqlitePathHint")}</p>
-        <p class="config-note">${t(state.locale, "databasePathSource", { source: databasePathSource })}</p>
-        ${databasePathLockNote}
-        ${databasePathFeedback}
-      </div>
-
-      <div class="note-stack">${notes}</div>
-    </section>
+    </div>
   `;
 }
 
@@ -2464,6 +2532,13 @@ function renderDailyDetailView(timeZone: string): string {
   }
 
   return `
+    <div class="page-stack">
+    ${renderPageHeader(
+      "calendar-days",
+      t(state.locale, "navUsage"),
+      t(state.locale, "navDailyDetail"),
+      t(state.locale, "dailyUsageDescription")
+    )}
     <section class="detail-filter-panel panel">
       <div class="section-head">
         <div>
@@ -2482,7 +2557,8 @@ function renderDailyDetailView(timeZone: string): string {
           <input type="date" value="${state.dailyDetailEndDate}" data-daily-end ${queryDisabled ? "disabled" : ""} />
         </label>
         <button class="action primary detail-query-button" type="submit" ${queryDisabled ? "disabled" : ""}>
-          ${state.isLoadingDailyDetails ? t(state.locale, "querying") : t(state.locale, "queryDailyUsage")}
+          ${iconMarkup("search", "action-icon")}
+          <span>${state.isLoadingDailyDetails ? t(state.locale, "querying") : t(state.locale, "queryDailyUsage")}</span>
         </button>
       </form>
 
@@ -2490,6 +2566,7 @@ function renderDailyDetailView(timeZone: string): string {
     </section>
 
     ${resultsMarkup}
+    </div>
   `;
 }
 
@@ -2532,10 +2609,17 @@ function renderMonthlyDetailView(timeZone: string): string {
             timeZone,
             t(state.locale, "monthlyDetailTitle")
           )
-        : "";
+        : renderEmptyState(t(state.locale, "noDataInRangeTitle"), t(state.locale, "noDataInRangeDescription"));
   }
 
   return `
+    <div class="page-stack">
+    ${renderPageHeader(
+      "calendar-range",
+      t(state.locale, "navUsage"),
+      t(state.locale, "navMonthlyDetail"),
+      t(state.locale, "monthlyDetailDescription")
+    )}
     <section class="detail-filter-panel panel">
       <div class="section-head">
         <div>
@@ -2558,7 +2642,76 @@ function renderMonthlyDetailView(timeZone: string): string {
     </section>
 
     ${resultsMarkup}
+    </div>
   `;
+}
+
+function renderLucideIcons(): void {
+  createIcons({
+    root: appRoot,
+    icons: {
+      Activity,
+      CalendarDays,
+      CalendarRange,
+      ChartNoAxesCombined,
+      CircleDollarSign,
+      Clock3,
+      Database,
+      Download,
+      ExternalLink,
+      FolderOpen,
+      Gauge,
+      Info,
+      Languages,
+      LayoutDashboard,
+      Monitor,
+      Moon,
+      Palette,
+      RefreshCw,
+      RotateCcw,
+      Save,
+      Search,
+      Settings,
+      SlidersHorizontal,
+      Sun,
+      TableProperties
+    },
+    attrs: {
+      width: "18",
+      height: "18",
+      "stroke-width": "1.8"
+    }
+  });
+}
+
+function initializeSettingsSectionObserver(): void {
+  settingsSectionObserver?.disconnect();
+  settingsSectionObserver = null;
+
+  if (state.activeTab !== "settings") {
+    return;
+  }
+
+  const sections = [...appRoot.querySelectorAll<HTMLElement>("[data-settings-section]")];
+  const navItems = [...appRoot.querySelectorAll<HTMLAnchorElement>("[data-settings-nav]")];
+  const setActiveSection = (id: string): void => {
+    navItems.forEach((item) => item.classList.toggle("is-active", item.dataset.settingsNav === id));
+  };
+
+  settingsSectionObserver = new IntersectionObserver(
+    (entries) => {
+      const visible = entries
+        .filter((entry) => entry.isIntersecting)
+        .sort((left, right) => Math.abs(left.boundingClientRect.top) - Math.abs(right.boundingClientRect.top))[0];
+      if (visible) {
+        const section = visible.target as HTMLElement;
+        setActiveSection(section.dataset.settingsSection ?? "general");
+      }
+    },
+    { rootMargin: "-12% 0px -68% 0px", threshold: 0 }
+  );
+
+  sections.forEach((section) => settingsSectionObserver?.observe(section));
 }
 
 function render(): void {
@@ -2627,8 +2780,8 @@ function render(): void {
           ? renderMonthlyHistoryView(timeZone, dashboard)
           : state.activeTab === "monthlyDetail"
             ? renderMonthlyDetailView(timeZone)
-          : state.activeTab === "syncInfo"
-            ? renderSyncInfoView(timeZone, notes, dashboard)
+          : state.activeTab === "settings"
+            ? renderSettingsView(timeZone, notes, dashboard)
             : renderDailyDetailView(timeZone)
     }
   `;
@@ -2652,6 +2805,9 @@ function render(): void {
     ui.content.innerHTML = contentMarkup;
     lastContentMarkup = contentMarkup;
   }
+
+  renderLucideIcons();
+  initializeSettingsSectionObserver();
 }
 
 function validateDailyDetailRange(): string | null {
@@ -3184,7 +3340,12 @@ async function syncDashboard(): Promise<void> {
   }
 }
 
-applyTheme(state.theme);
+applyTheme(state.themeMode, false);
+systemThemeQuery.addEventListener("change", () => {
+  if (state.themeMode === "system") {
+    applyTheme("system", false);
+  }
+});
 render();
 
 try {
