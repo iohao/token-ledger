@@ -1,7 +1,7 @@
+import { renderDailyDetailTable } from "../components/daily-detail-table";
 import { renderActivityWall } from "../components/activity-wall";
 import { renderPageHeader } from "../components/page-header";
 import { renderSyncProgressCard } from "../components/sync-progress";
-import { renderUsageTable } from "../components/usage-table";
 import type { DashboardPayloadDTO, SyncProgressDTO } from "../dto/dashboard";
 import { t } from "../i18n";
 import type { AppState, PageSourceId } from "../types";
@@ -106,7 +106,13 @@ export function renderOverviewView(
       ${renderActivityWall(timeZone, dashboard?.activityHistory ?? [], state.locale)}
 
       <section class="content-grid">
-        ${renderUsageTable(t(state.locale, "lastSevenDaysDisplay"), dashboard?.dailyHistory ?? [], timeZone, "daily", state.locale)}
+        ${renderDailyDetailTable(
+          t(state.locale, "lastSevenDaysDisplay"),
+          dashboard?.dailyHistory ?? [],
+          timeZone,
+          t(state.locale, "dailySummaryEyebrow"),
+          state.locale
+        )}
       </section>
     </div>
   `;

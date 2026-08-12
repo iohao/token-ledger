@@ -39,48 +39,66 @@ export function renderDailyDetailTable(
   const totals = sumTotals(rows);
   const flatRows = rows.flatMap((row) => {
     const dateLabel = formatDateLabel(row.dateKey, timeZone, locale);
-    const models =
-      row.models.length > 0
-        ? row.models.map((model, index) => ({
-            dateLabel,
-            rowSpan: row.models.length,
-            showGroupCell: index === 0,
-            modelLabel: formatModelLabel(model.model, model.isFallback, locale),
-            totals: model.totals,
-            dailyCost: row.totals.costUSD
-          }))
-        : [
-            {
-              dateLabel,
-              rowSpan: 1,
-              showGroupCell: true,
-              modelLabel: t(locale, "noData"),
-              totals: {
-                inputTokens: 0,
-                cachedInputTokens: 0,
-                cacheCreationInputTokens: 0,
-                outputTokens: 0,
-                reasoningOutputTokens: 0,
-                totalTokens: 0,
-                costUSD: 0
-              },
-              dailyCost: 0
-            }
-          ];
+    const hasMultipleModels = row.models.length > 1;
+    const rowSpan = hasMultipleModels ? row.models.length + 1 : Math.max(row.models.length, 1);
 
-    return models;
+    if (row.models.length === 0) {
+      return [
+        {
+          dateLabel,
+          rowSpan: 1,
+          showGroupCell: true,
+          modelLabel: t(locale, "noData"),
+          totals: {
+            inputTokens: 0,
+            cachedInputTokens: 0,
+            cacheCreationInputTokens: 0,
+            outputTokens: 0,
+            reasoningOutputTokens: 0,
+            totalTokens: 0,
+            costUSD: 0
+          },
+          dailyCost: 0,
+          isSubtotal: false
+        }
+      ];
+    }
+
+    const modelRows = row.models.map((model, index) => ({
+      dateLabel,
+      rowSpan,
+      showGroupCell: index === 0,
+      modelLabel: formatModelLabel(model.model, model.isFallback, locale),
+      totals: model.totals,
+      dailyCost: row.totals.costUSD,
+      isSubtotal: false
+    }));
+
+    if (hasMultipleModels) {
+      modelRows.push({
+        dateLabel,
+        rowSpan,
+        showGroupCell: false,
+        modelLabel: t(locale, "subtotalLabel"),
+        totals: row.totals,
+        dailyCost: row.totals.costUSD,
+        isSubtotal: true
+      });
+    }
+
+    return modelRows;
   });
 
   const body = flatRows
     .map(
       (row) => `
-        <tr class="${row.showGroupCell ? "daily-detail-group-start" : ""}">
+        <tr class="${row.showGroupCell ? "daily-detail-group-start" : ""} ${row.isSubtotal ? "daily-detail-subtotal-row" : ""}">
           ${
             row.showGroupCell
               ? `<td class="label-cell daily-detail-date" rowspan="${row.rowSpan}">${escapeHtml(row.dateLabel)}</td>`
               : ""
           }
-          <td class="daily-detail-model">${escapeHtml(row.modelLabel)}</td>
+          <td class="daily-detail-model ${row.isSubtotal ? "daily-detail-subtotal-label" : ""}">${escapeHtml(row.modelLabel)}</td>
           <td>${renderAlignedTokenCount(nonCachedInputTokens(row.totals), locale)}</td>
           <td>${renderAlignedTokenCount(row.totals.outputTokens, locale)}</td>
           <td>${renderAlignedTokenCount(row.totals.cachedInputTokens, locale)}</td>

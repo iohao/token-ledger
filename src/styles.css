@@ -1406,6 +1406,21 @@ h3 {
   border-top: 1px solid var(--line);
 }
 
+.daily-detail-table tbody tr.daily-detail-subtotal-row td {
+  border-top: 1px dashed var(--line);
+  background: rgba(255, 255, 255, 0.02);
+  font-weight: 500;
+}
+
+[data-theme="light"] .daily-detail-table tbody tr.daily-detail-subtotal-row td {
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.daily-detail-table tbody tr.daily-detail-subtotal-row .daily-detail-subtotal-label {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
 .daily-detail-table td[rowspan] {
   vertical-align: middle;
 }
@@ -1475,10 +1490,10 @@ h3 {
 
 .metric-unit {
   text-align: left;
-  font-size: 0.85em;
-  opacity: 0.7;
-  font-weight: 500;
-  padding-left: 1px;
+  font-size: 0.9em;
+  font-weight: 600;
+  color: var(--text-primary);
+  padding-left: 2px;
 }
 
 .daily-detail-col-date {
