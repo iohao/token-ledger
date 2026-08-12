@@ -102,7 +102,8 @@ fn parse_session_usage_points(
     let metadata = file
         .metadata()
         .with_context(|| format!("failed to stat session file {}", file_path.display()))?;
-    let reader = BufReader::new(file);
+    let mut reader = BufReader::with_capacity(64 * 1024, file);
+    let mut line_buf = String::with_capacity(1024);
     let modified_at = DateTime::<Utc>::from(
         metadata
             .modified()
@@ -115,10 +116,16 @@ fn parse_session_usage_points(
     let mut latest_usage_at: Option<DateTime<Utc>> = None;
     let mut points = Vec::new();
 
-    for line in reader.lines() {
-        let line =
-            line.with_context(|| format!("failed to read session file {}", file_path.display()))?;
-        let trimmed = line.trim();
+    loop {
+        line_buf.clear();
+        let bytes_read = reader
+            .read_line(&mut line_buf)
+            .with_context(|| format!("failed to read session file {}", file_path.display()))?;
+        if bytes_read == 0 {
+            break;
+        }
+
+        let trimmed = line_buf.trim();
         if trimmed.is_empty() {
             continue;
         }

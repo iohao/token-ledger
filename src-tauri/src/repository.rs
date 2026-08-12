@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use chrono::{DateTime, Datelike, NaiveDate, Utc};
+use rayon::prelude::*;
 use walkdir::WalkDir;
 
 use crate::date_keys::{add_days_to_date_key, last_n_date_keys, month_key_for};
@@ -288,19 +289,36 @@ impl UsageRepository {
             .collect::<HashSet<_>>();
 
         let progress_stride = progress_stride(files_to_process);
+        let batch_size = 64.min(progress_stride.max(16));
+        let time_zone = &self.time_zone;
+        let pricing_overrides = &self.pricing_overrides;
 
-        for (index, entry) in dirty_entries.iter().enumerate() {
-            let mut parsed_file =
-                parse_session_file(&entry.file_path, &sessions_root, &self.time_zone)?;
-            self.price_parsed_file(&mut parsed_file);
-            extend_affected_date_keys(&mut affected_date_keys, &parsed_file);
+        for chunk in dirty_entries.chunks(batch_size) {
+            let parsed_chunk: Result<Vec<ParsedSessionFile>> = chunk
+                .par_iter()
+                .map(|entry| {
+                    let mut parsed_file =
+                        parse_session_file(&entry.file_path, &sessions_root, time_zone)?;
+                    price_parsed_file(&mut parsed_file, pricing_overrides);
+                    Ok(parsed_file)
+                })
+                .collect();
+            let parsed_chunk = parsed_chunk?;
+
+            for parsed_file in &parsed_chunk {
+                extend_affected_date_keys(&mut affected_date_keys, parsed_file);
+            }
+
             self.store
-                .replace_session_file(&parsed_file, self.parse_version, now.clone())?;
-            sync_progress.processed_files = index + 1;
+                .replace_session_files(&parsed_chunk, self.parse_version, now.clone())?;
+
+            let previous_processed = sync_progress.processed_files;
+            sync_progress.processed_files += chunk.len();
 
             if sync_progress.processed_files == files_to_process
-                || sync_progress.processed_files == 1
-                || sync_progress.processed_files % progress_stride == 0
+                || previous_processed == 0
+                || (sync_progress.processed_files / progress_stride)
+                    != (previous_processed / progress_stride)
             {
                 on_progress(sync_progress.clone());
             }
@@ -471,13 +489,6 @@ impl UsageRepository {
             || context.parse_version != Some(self.parse_version))
     }
 
-    fn price_parsed_file(&self, parsed_file: &mut ParsedSessionFile) {
-        for usage in &mut parsed_file.usages {
-            usage.totals.cost_usd =
-                cost_for_with_overrides(&usage.totals, &usage.model, &self.pricing_overrides);
-        }
-    }
-
     fn price_daily_rows(&self, rows: &mut [StoredDailyAggregate]) {
         for row in rows {
             row.totals.cost_usd =
@@ -604,6 +615,16 @@ impl UsageRepository {
                 today_key,
             )),
         }
+    }
+}
+
+fn price_parsed_file(
+    parsed_file: &mut ParsedSessionFile,
+    pricing_overrides: &[ModelPricingOverride],
+) {
+    for usage in &mut parsed_file.usages {
+        usage.totals.cost_usd =
+            cost_for_with_overrides(&usage.totals, &usage.model, pricing_overrides);
     }
 }
 

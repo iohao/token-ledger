@@ -301,12 +301,22 @@ impl UsageStore {
         parse_version: i32,
         synced_at: DateTime<Utc>,
     ) -> Result<()> {
-        self.with_transaction(|connection| {
-            connection.execute(
-                "DELETE FROM session_daily_usage WHERE session_id = ?1",
-                [&parsed_file.session_id],
-            )?;
+        self.replace_session_files(std::slice::from_ref(parsed_file), parse_version, synced_at)
+    }
 
+    pub fn replace_session_files(
+        &self,
+        parsed_files: &[ParsedSessionFile],
+        parse_version: i32,
+        synced_at: DateTime<Utc>,
+    ) -> Result<()> {
+        if parsed_files.is_empty() {
+            return Ok(());
+        }
+
+        self.with_transaction(|connection| {
+            let mut delete_usage =
+                connection.prepare("DELETE FROM session_daily_usage WHERE session_id = ?1")?;
             let mut insert_usage = connection.prepare(
                 "
         INSERT INTO session_daily_usage (
@@ -325,25 +335,7 @@ impl UsageStore {
         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
         ",
             )?;
-
-            for usage in &parsed_file.usages {
-                insert_usage.execute(params![
-                    &usage.session_id,
-                    &usage.relative_path,
-                    &usage.date_key,
-                    &usage.model,
-                    if usage.is_fallback { 1 } else { 0 },
-                    usage.totals.input_tokens,
-                    usage.totals.cached_input_tokens,
-                    usage.totals.cache_creation_input_tokens,
-                    usage.totals.output_tokens,
-                    usage.totals.reasoning_output_tokens,
-                    usage.totals.total_tokens,
-                    usage.totals.cost_usd,
-                ])?;
-            }
-
-            connection.execute(
+            let mut insert_source = connection.prepare(
                 "
         INSERT INTO source_sessions (
           session_id,
@@ -362,7 +354,29 @@ impl UsageStore {
           last_synced_at = excluded.last_synced_at,
           latest_usage_at = excluded.latest_usage_at
         ",
-                params![
+            )?;
+
+            for parsed_file in parsed_files {
+                delete_usage.execute([&parsed_file.session_id])?;
+
+                for usage in &parsed_file.usages {
+                    insert_usage.execute(params![
+                        &usage.session_id,
+                        &usage.relative_path,
+                        &usage.date_key,
+                        &usage.model,
+                        if usage.is_fallback { 1 } else { 0 },
+                        usage.totals.input_tokens,
+                        usage.totals.cached_input_tokens,
+                        usage.totals.cache_creation_input_tokens,
+                        usage.totals.output_tokens,
+                        usage.totals.reasoning_output_tokens,
+                        usage.totals.total_tokens,
+                        usage.totals.cost_usd,
+                    ])?;
+                }
+
+                insert_source.execute(params![
                     &parsed_file.session_id,
                     &parsed_file.relative_path,
                     parsed_file.file_size,
@@ -373,8 +387,8 @@ impl UsageStore {
                         .latest_usage_at
                         .as_ref()
                         .map(|value| format_utc_timestamp(*value)),
-                ],
-            )?;
+                ])?;
+            }
 
             Ok(())
         })
