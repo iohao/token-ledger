@@ -19,6 +19,7 @@ import {
   installPendingAppUpdate,
   type PendingAppUpdate
 } from "../api/updater";
+import { useDeferredTasks } from "../hooks/useDeferredTasks";
 import type {
   DailyUsageSummaryDTO,
   DashboardPayloadDTO,
@@ -1100,22 +1101,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       let targetTab: AppTab | null = null;
-      switch (event.key) {
-        case "1":
-          targetTab = "overview";
-          break;
-        case "2":
-          targetTab = "monthlyDetail";
-          break;
-        case "3":
-          targetTab = "monthlyHistory";
-          break;
-        case "4":
-          targetTab = "dailyDetail";
-          break;
-        case "5":
-          targetTab = "settings";
-          break;
+      if (event.key === "," || event.code === "Comma") {
+        targetTab = "settings";
+      } else {
+        switch (event.key) {
+          case "1":
+            targetTab = "overview";
+            break;
+          case "2":
+            targetTab = "monthlyDetail";
+            break;
+          case "3":
+            targetTab = "monthlyHistory";
+            break;
+          case "4":
+            targetTab = "dailyDetail";
+            break;
+          case "5":
+            targetTab = "settings";
+            break;
+        }
       }
 
       if (targetTab) {
@@ -1126,6 +1131,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     window.addEventListener("keydown", handleGlobalKeydown);
     return () => window.removeEventListener("keydown", handleGlobalKeydown);
+  }, [setActiveTab]);
+
+  // Native menu listener (open-settings)
+  useEffect(() => {
+    let unlisten: (() => void) | null = null;
+    void listen("open-settings", () => {
+      setActiveTab("settings");
+    }).then((fn) => {
+      unlisten = fn;
+    });
+
+    return () => {
+      if (unlisten) {
+        unlisten();
+      }
+    };
   }, [setActiveTab]);
 
   // System theme changes listener
@@ -1171,11 +1192,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch {}
 
     void fetchCurrentAppVersion().then(setCurrentAppVersion).catch(() => {});
-    if (!import.meta.env.DEV) {
-      void checkForAppUpdates(false);
-    }
     void loadDashboard();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Non-critical background deferred tasks queue (runs after initial render settles & main thread is idle)
+  useDeferredTasks([
+    {
+      id: "app-update-check",
+      name: "Check for App Updates",
+      run: async () => {
+        if (!import.meta.env.DEV) {
+          await checkForAppUpdates(false);
+        }
+      },
+      delayMs: 1500
+    }
+  ]);
 
   const contextValue: AppContextType = {
     dashboard,

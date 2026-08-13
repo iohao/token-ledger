@@ -19,6 +19,9 @@
   --danger-soft: rgba(224, 108, 120, 0.12);
   --info: #70a8c4;
   --focus: #5dbb96;
+  --subtotal: #70a8c4;
+  --subtotal-soft: rgba(112, 168, 196, 0.09);
+  --subtotal-border: rgba(112, 168, 196, 0.28);
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.28);
   --shadow-md: 0 12px 32px rgba(0, 0, 0, 0.18);
   --radius-panel: 8px;
@@ -81,6 +84,9 @@
   --danger-soft: rgba(182, 64, 80, 0.09);
   --info: #356f8d;
   --focus: #16624c;
+  --subtotal: #1d6ea3;
+  --subtotal-soft: rgba(29, 110, 163, 0.08);
+  --subtotal-border: rgba(29, 110, 163, 0.24);
   --shadow-sm: 0 1px 2px rgba(16, 29, 23, 0.06);
   --shadow-md: 0 12px 32px rgba(16, 29, 23, 0.08);
   --tooltip-bg: #ffffff;
@@ -768,6 +774,9 @@ select {
 .daily-detail-total-cost-cell,
 .daily-detail-summary-total-cost {
   color: var(--coral);
+  font-family: var(--mono-font);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
 }
 
 .activity-wall,
@@ -861,12 +870,42 @@ select {
   font-weight: 650;
 }
 
+.daily-detail-table tbody tr.daily-detail-subtotal-row td {
+  background: var(--subtotal-soft);
+  border-top: 1px dashed var(--subtotal-border);
+  color: var(--subtotal);
+  font-weight: 600;
+}
+
+.daily-detail-table tbody tr.daily-detail-subtotal-row:hover td {
+  background: var(--subtotal-soft);
+}
+
+.daily-detail-table tbody tr.daily-detail-subtotal-row .daily-detail-subtotal-label {
+  color: var(--subtotal);
+  font-weight: 600;
+}
+
+.daily-detail-table tbody tr.daily-detail-subtotal-row .metric-num,
+.daily-detail-table tbody tr.daily-detail-subtotal-row .metric-unit {
+  color: var(--subtotal);
+  font-weight: 600;
+}
+
 .total-row td.cost-cell,
 .summary-row td.cost-cell,
 .usage-table td.cost-cell,
-.daily-detail-table tbody tr.daily-detail-subtotal-row td.cost-cell,
+.daily-detail-table td.cost-cell,
 .daily-detail-table tfoot td.cost-cell {
   color: var(--coral);
+  font-family: var(--mono-font);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.daily-detail-table tbody tr.daily-detail-subtotal-row td.cost-cell,
+.daily-detail-table tbody tr.daily-detail-subtotal-row .daily-detail-model-cost-cell {
+  color: var(--subtotal);
 }
 
 .model-list {
@@ -1513,38 +1552,6 @@ select {
   line-height: 1.5;
 }
 
-/* Updates Section */
-.update-meta-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-  margin-top: 18px;
-}
-
-.update-meta-item {
-  display: grid;
-  gap: 4px;
-  padding: 12px 14px;
-  background: var(--surface-muted);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-control);
-}
-
-.update-meta-item span {
-  color: var(--text-muted);
-  font-size: 0.72rem;
-}
-
-.update-meta-item strong {
-  font-family: var(--mono-font);
-  font-size: 0.88rem;
-  color: var(--text);
-}
-
-.settings-update-actions {
-  margin: 16px 0;
-}
-
 /* About Section */
 .about-product-card {
   display: flex;
@@ -1878,7 +1885,6 @@ select {
   }
 
   .pricing-rate-grid,
-  .update-meta-grid,
   .settings-stats-grid {
     grid-template-columns: 1fr;
   }

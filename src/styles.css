@@ -1409,18 +1409,37 @@ h3 {
 }
 
 .daily-detail-table tbody tr.daily-detail-subtotal-row td {
-  border-top: 1px dashed var(--line);
-  background: rgba(255, 255, 255, 0.02);
-  font-weight: 500;
+  border-top: 1px dashed var(--subtotal-border, rgba(112, 168, 196, 0.28));
+  background: var(--subtotal-soft, rgba(112, 168, 196, 0.09));
+  color: var(--subtotal, #70a8c4);
+  font-weight: 600;
 }
 
 [data-theme="light"] .daily-detail-table tbody tr.daily-detail-subtotal-row td {
-  background: rgba(0, 0, 0, 0.02);
+  background: var(--subtotal-soft, rgba(29, 110, 163, 0.08));
+  border-top-color: var(--subtotal-border, rgba(29, 110, 163, 0.24));
+  color: var(--subtotal, #1d6ea3);
 }
 
 .daily-detail-table tbody tr.daily-detail-subtotal-row .daily-detail-subtotal-label {
-  color: var(--text-secondary);
+  color: var(--subtotal, #70a8c4);
   font-weight: 600;
+}
+
+.daily-detail-table tbody tr.daily-detail-subtotal-row .metric-num,
+.daily-detail-table tbody tr.daily-detail-subtotal-row .metric-unit {
+  color: var(--subtotal, #70a8c4);
+  font-weight: 600;
+}
+
+.daily-detail-table tbody tr.daily-detail-subtotal-row td.cost-cell,
+.daily-detail-table tbody tr.daily-detail-subtotal-row .daily-detail-model-cost-cell {
+  color: var(--subtotal, #70a8c4);
+}
+
+[data-theme="light"] .daily-detail-table tbody tr.daily-detail-subtotal-row td.cost-cell,
+[data-theme="light"] .daily-detail-table tbody tr.daily-detail-subtotal-row .daily-detail-model-cost-cell {
+  color: var(--subtotal, #1d6ea3);
 }
 
 .daily-detail-table td[rowspan] {
@@ -1543,17 +1562,24 @@ h3 {
 }
 
 .cost-cell,
-.daily-detail-model-cost-cell {
+.daily-detail-model-cost-cell,
+.daily-detail-total-cost-cell,
+.daily-detail-summary-total-cost {
   color: var(--coral);
+  font-family: var(--mono-font);
+  font-variant-numeric: tabular-nums;
   font-weight: 600;
 }
 
 .total-row td.cost-cell,
 .summary-row td.cost-cell,
 .usage-table td.cost-cell,
-.daily-detail-table tbody tr.daily-detail-subtotal-row td.cost-cell,
+.daily-detail-table td.cost-cell,
 .daily-detail-table tfoot td.cost-cell {
   color: var(--coral);
+  font-family: var(--mono-font);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
 }
 
 .total-row td {

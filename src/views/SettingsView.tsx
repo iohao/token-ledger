@@ -2,13 +2,11 @@ import React, { useEffect, useRef, useState } from "react";
 import {
   CircleDollarSign,
   Database,
-  Download,
   ExternalLink,
   Gauge,
   Info,
   Monitor,
   Moon,
-  RefreshCw,
   RotateCcw,
   Save,
   SlidersHorizontal,
@@ -18,12 +16,6 @@ import { useTranslation } from "react-i18next";
 import appIconUrl from "../../src-tauri/icons/128x128.png";
 import { useApp, pricingErrorKey } from "../context/AppContext";
 import { PageHeader } from "../components/PageHeader";
-import {
-  UpdateNotes,
-  updatePlatformSupportNote,
-  updateStatusMessage,
-  updateStatusTone
-} from "../components/UpdateBanner";
 import {
   PRICING_RATE_FIELDS,
   SOURCE_REPOSITORY_URL,
@@ -95,14 +87,6 @@ export const SettingsView: React.FC = () => {
     updateModelPricingRate,
     toggleModelPricingEnabled,
     currentAppVersion,
-    availableUpdate,
-    updateStatus,
-    updateErrorMessage,
-    updateDownloadedBytes,
-    updateContentLength,
-    isInstallingUpdate,
-    checkForAppUpdates,
-    installAppUpdate,
     openSourceRepositoryInBrowser,
     isLoading,
     isSyncing
@@ -115,29 +99,13 @@ export const SettingsView: React.FC = () => {
   const databasePathEditable = dashboard?.meta.databasePathEditable ?? false;
   const databasePathDisabled = isLoading || isSyncing || isUpdatingDatabasePath || !databasePathEditable;
   const pricingDisabled = isLoading || isSyncing || isUpdatingModelPricing;
-  const installDisabled = !availableUpdate || isInstallingUpdate || updateStatus === "checking" || isLoading || isSyncing;
-  const checkDisabled = updateStatus === "checking" || isInstallingUpdate;
 
-  const publishedAt = availableUpdate?.date ? formatTimestamp(availableUpdate.date, timeZone, locale) : "-";
-  const availableVersion = availableUpdate?.version ?? "-";
-  const updateTone = updateStatusTone(updateStatus);
-  const updateMsg = updateStatusMessage(
-    updateStatus,
-    availableUpdate?.version,
-    updateDownloadedBytes,
-    updateContentLength,
-    updateErrorMessage,
-    locale,
-    t
-  );
-  const updatePlatformNote = updatePlatformSupportNote(locale);
   const pricingNotes = (dashboard?.meta.pricingNotes ?? []).map((note) => translatePricingNote(locale, note));
 
   const settingsSections = [
     { id: "general", label: t("settingsGeneral"), icon: <SlidersHorizontal size={18} />, desc: t("settingsGeneralDescription") },
     { id: "data", label: t("settingsData"), icon: <Database size={18} />, desc: t("settingsDataDescription") },
     { id: "pricing", label: t("settingsPricing"), icon: <CircleDollarSign size={18} />, desc: t("settingsPricingDescription") },
-    { id: "updates", label: t("settingsUpdates"), icon: <RefreshCw size={18} />, desc: t("settingsUpdatesDescription") },
     { id: "about", label: t("settingsAbout"), icon: <Info size={18} />, desc: t("settingsAboutDescription") }
   ];
 
@@ -209,9 +177,6 @@ export const SettingsView: React.FC = () => {
             >
               <span className="settings-nav-icon">{section.icon}</span>
               <span>{section.label}</span>
-              {section.id === "updates" && availableUpdate && (
-                <span className="settings-nav-dot" aria-hidden="true" />
-              )}
             </button>
           ))}
         </nav>
@@ -541,65 +506,7 @@ export const SettingsView: React.FC = () => {
             </div>
           </section>
 
-          {/* 4. Software Updates */}
-          <section className="settings-section panel" id="settings-updates" data-settings-section="updates">
-            <div className="settings-section-head">
-              <span className="settings-section-icon">
-                <RefreshCw size={20} />
-              </span>
-              <div className="settings-section-title-wrap">
-                <h2>{t("settingsUpdates")}</h2>
-                <p>{t("settingsUpdatesDescription")}</p>
-              </div>
-            </div>
-
-            <div className="update-meta-grid">
-              <div className="update-meta-item">
-                <span>{t("currentVersion")}</span>
-                <strong>{currentAppVersion ?? "-"}</strong>
-              </div>
-              <div className="update-meta-item">
-                <span>{t("availableVersion")}</span>
-                <strong>{availableVersion}</strong>
-              </div>
-              <div className="update-meta-item">
-                <span>{t("updatePublishedAtLabel")}</span>
-                <strong>{publishedAt}</strong>
-              </div>
-            </div>
-
-            <div className="config-actions settings-update-actions">
-              <button
-                className="action"
-                type="button"
-                onClick={() => void checkForAppUpdates(true)}
-                disabled={checkDisabled}
-              >
-                <RefreshCw className={`action-icon ${updateStatus === "checking" ? "animate-spin" : ""}`} size={16} />
-                <span>{updateStatus === "checking" ? t("checkingForUpdates") : t("checkForUpdates")}</span>
-              </button>
-              <button
-                className="action primary"
-                type="button"
-                onClick={() => void installAppUpdate()}
-                disabled={installDisabled}
-              >
-                <Download className="action-icon" size={16} />
-                <span>{isInstallingUpdate ? t("installingUpdate") : t("downloadAndInstallUpdate")}</span>
-              </button>
-            </div>
-
-            <p className="config-hint">{t("updateChecksRunOnLaunch")}</p>
-            {updateStatus !== "idle" && (
-              <p className={updateTone ? `config-feedback ${updateTone}` : "config-note"}>
-                {updateMsg}
-              </p>
-            )}
-            {updatePlatformNote && <p className="config-note">{updatePlatformNote}</p>}
-            <UpdateNotes notes={availableUpdate?.body} />
-          </section>
-
-          {/* 5. About */}
+          {/* 4. About */}
           <section className="settings-section panel" id="settings-about" data-settings-section="about">
             <div className="settings-section-head">
               <span className="settings-section-icon">
