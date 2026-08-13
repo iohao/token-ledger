@@ -233,6 +233,7 @@ export function sumTotals(rows: Array<{ totals: UsageTotalsDTO }>): UsageTotalsD
       outputTokens: totals.outputTokens + row.totals.outputTokens,
       reasoningOutputTokens: totals.reasoningOutputTokens + row.totals.reasoningOutputTokens,
       totalTokens: totals.totalTokens + row.totals.totalTokens,
+      requestCount: totals.requestCount + (row.totals.requestCount ?? 0),
       costUSD: totals.costUSD + row.totals.costUSD
     }),
     {
@@ -242,6 +243,7 @@ export function sumTotals(rows: Array<{ totals: UsageTotalsDTO }>): UsageTotalsD
       outputTokens: 0,
       reasoningOutputTokens: 0,
       totalTokens: 0,
+      requestCount: 0,
       costUSD: 0
     }
   );

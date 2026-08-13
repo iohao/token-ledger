@@ -7,6 +7,7 @@ export interface UsageTotalsDTO {
   outputTokens: number;
   reasoningOutputTokens: number;
   totalTokens: number;
+  requestCount: number;
   costUSD: number;
 }
 

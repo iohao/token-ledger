@@ -1165,7 +1165,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     applyTheme(themeMode, false);
     try {
-      void getCurrentWindow().show();
+      const appWindow = getCurrentWindow();
+      void appWindow.maximize();
+      void appWindow.show();
     } catch {}
 
     void fetchCurrentAppVersion().then(setCurrentAppVersion).catch(() => {});

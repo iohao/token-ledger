@@ -324,6 +324,7 @@ fn as_totals(raw_usage: &RawUsage) -> UsageTotals {
         output_tokens: raw_usage.output_tokens,
         reasoning_output_tokens: raw_usage.reasoning_output_tokens,
         total_tokens: raw_usage.total_tokens,
+        request_count: 1,
         cost_usd: 0.0,
     })
 }
@@ -422,6 +423,7 @@ invalid json
         assert_eq!(usage.totals.output_tokens, 15);
         assert_eq!(usage.totals.reasoning_output_tokens, 4);
         assert_eq!(usage.totals.total_tokens, 165);
+        assert_eq!(usage.totals.request_count, 2);
         assert!(usage.totals.cost_usd > 0.0);
         assert_eq!(
             parsed.latest_usage_at.expect("latest usage").to_rfc3339(),
@@ -452,6 +454,7 @@ invalid json
         assert_eq!(usage.totals.output_tokens, 45);
         assert_eq!(usage.totals.reasoning_output_tokens, 8);
         assert_eq!(usage.totals.total_tokens, 225);
+        assert_eq!(usage.totals.request_count, 2);
         assert_eq!(usage.totals.cost_usd, 0.0);
     }
 
@@ -477,6 +480,7 @@ invalid json
         assert_eq!(usage.totals.output_tokens, 7);
         assert_eq!(usage.totals.reasoning_output_tokens, 2);
         assert_eq!(usage.totals.total_tokens, 27);
+        assert_eq!(usage.totals.request_count, 1);
         assert!(usage.totals.cost_usd > 0.0);
     }
 }

@@ -152,9 +152,9 @@ export const DailyDetailTable: React.FC<DailyDetailTableProps> = ({
             outputTokens: 0,
             reasoningOutputTokens: 0,
             totalTokens: 0,
+            requestCount: 0,
             costUSD: 0
           },
-          dailyCost: 0,
           isSubtotal: false
         }
       ];
@@ -167,7 +167,6 @@ export const DailyDetailTable: React.FC<DailyDetailTableProps> = ({
       showGroupCell: index === 0,
       modelLabel: formatModelLabel(model.model, model.isFallback, locale),
       totals: model.totals,
-      dailyCost: row.totals.costUSD,
       isSubtotal: false
     }));
 
@@ -179,7 +178,6 @@ export const DailyDetailTable: React.FC<DailyDetailTableProps> = ({
         showGroupCell: false,
         modelLabel: t("subtotalLabel"),
         totals: row.totals,
-        dailyCost: row.totals.costUSD,
         isSubtotal: true
       });
     }
@@ -200,6 +198,7 @@ export const DailyDetailTable: React.FC<DailyDetailTableProps> = ({
           <colgroup>
             <col className="daily-detail-col-date" />
             <col className="daily-detail-col-model" />
+            <col className="daily-detail-col-requests" />
             <col className="daily-detail-col-metric" />
             <col className="daily-detail-col-metric" />
             <col className="daily-detail-col-metric" />
@@ -207,20 +206,19 @@ export const DailyDetailTable: React.FC<DailyDetailTableProps> = ({
             <col className="daily-detail-col-metric" />
             <col className="daily-detail-col-metric" />
             <col className="daily-detail-col-model-cost" />
-            <col className="daily-detail-col-total-cost" />
           </colgroup>
           <thead>
             <tr>
               <th>{t("date")}</th>
               <th>{t("model")}</th>
+              <th>{t("requests")}</th>
               <th>{t("input")}</th>
               <th>{t("output")}</th>
               <th>{t("cachedInput")}</th>
               <th>{t("cacheCreationInput")}</th>
               <th>{t("reasoning")}</th>
               <th>{t("total")}</th>
-              <th className="daily-detail-model-cost-header">{t("modelCost")}</th>
-              <th className="daily-detail-total-cost-header">{t("totalCost")}</th>
+              <th className="daily-detail-model-cost-header">{t("cost")}</th>
             </tr>
           </thead>
           <tbody>
@@ -240,6 +238,12 @@ export const DailyDetailTable: React.FC<DailyDetailTableProps> = ({
                   {row.modelLabel}
                 </td>
                 <td>
+                  <span className="metric-align">
+                    <span className="metric-num">{formatInteger(row.totals.requestCount, locale)}</span>
+                    <span className="metric-unit" />
+                  </span>
+                </td>
+                <td>
                   <AlignedTokenCount value={nonCachedInputTokens(row.totals)} />
                 </td>
                 <td>
@@ -257,18 +261,19 @@ export const DailyDetailTable: React.FC<DailyDetailTableProps> = ({
                 <td className="daily-detail-total-metric">
                   <AlignedTokenCount value={row.totals.totalTokens} />
                 </td>
-                <td className="daily-detail-model-cost-cell">{formatCurrency(row.totals.costUSD, locale)}</td>
-                {row.showGroupCell && (
-                  <td className="cost-cell daily-detail-total-cost-cell" rowSpan={row.rowSpan}>
-                    {formatCurrency(row.dailyCost, locale)}
-                  </td>
-                )}
+                <td className="cost-cell daily-detail-model-cost-cell">{formatCurrency(row.totals.costUSD, locale)}</td>
               </tr>
             ))}
           </tbody>
           <tfoot>
             <tr className="summary-row">
               <td colSpan={2}>{t("totalLabel")}</td>
+              <td>
+                <span className="metric-align">
+                  <span className="metric-num">{formatInteger(totals.requestCount, locale)}</span>
+                  <span className="metric-unit" />
+                </span>
+              </td>
               <td>
                 <AlignedTokenCount value={nonCachedInputTokens(totals)} />
               </td>
@@ -287,10 +292,7 @@ export const DailyDetailTable: React.FC<DailyDetailTableProps> = ({
               <td className="daily-detail-total-metric">
                 <AlignedTokenCount value={totals.totalTokens} />
               </td>
-              <td className="daily-detail-model-cost-cell">{formatCurrency(totals.costUSD, locale)}</td>
-              <td className="cost-cell daily-detail-summary-total-cost">
-                {formatCurrency(totals.costUSD, locale)}
-              </td>
+              <td className="cost-cell daily-detail-model-cost-cell">{formatCurrency(totals.costUSD, locale)}</td>
             </tr>
           </tfoot>
         </table>

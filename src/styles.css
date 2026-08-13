@@ -1506,16 +1506,16 @@ h3 {
   width: 20ch;
 }
 
+.daily-detail-col-requests {
+  width: 80px;
+}
+
 .daily-detail-col-metric {
   width: 108px;
 }
 
 .daily-detail-col-model-cost {
   width: 96px;
-}
-
-.daily-detail-col-total-cost {
-  width: 108px;
 }
 
 .daily-detail-table tfoot td {
@@ -1542,12 +1542,16 @@ h3 {
   color: var(--text-muted);
 }
 
-.cost-cell {
+.cost-cell,
+.daily-detail-model-cost-cell {
   color: var(--coral);
   font-weight: 600;
 }
 
 .total-row td.cost-cell,
+.summary-row td.cost-cell,
+.usage-table td.cost-cell,
+.daily-detail-table tbody tr.daily-detail-subtotal-row td.cost-cell,
 .daily-detail-table tfoot td.cost-cell {
   color: var(--coral);
 }

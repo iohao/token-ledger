@@ -63,6 +63,7 @@ pub struct UsageTotals {
     pub output_tokens: i64,
     pub reasoning_output_tokens: i64,
     pub total_tokens: i64,
+    pub request_count: i64,
     #[serde(rename = "costUSD")]
     pub cost_usd: f64,
 }
@@ -234,6 +235,7 @@ pub fn empty_usage_totals() -> UsageTotals {
         output_tokens: 0,
         reasoning_output_tokens: 0,
         total_tokens: 0,
+        request_count: 0,
         cost_usd: 0.0,
     }
 }
@@ -247,6 +249,7 @@ pub fn add_usage_totals(left: &UsageTotals, right: &UsageTotals) -> UsageTotals 
         output_tokens: left.output_tokens + right.output_tokens,
         reasoning_output_tokens: left.reasoning_output_tokens + right.reasoning_output_tokens,
         total_tokens: left.total_tokens + right.total_tokens,
+        request_count: left.request_count + right.request_count,
         cost_usd: left.cost_usd + right.cost_usd,
     }
 }
@@ -259,6 +262,7 @@ pub fn clamp_non_negative(totals: UsageTotals) -> UsageTotals {
         output_tokens: totals.output_tokens.max(0),
         reasoning_output_tokens: totals.reasoning_output_tokens.max(0),
         total_tokens: totals.total_tokens.max(0),
+        request_count: totals.request_count.max(0),
         cost_usd: totals.cost_usd.max(0.0),
     }
 }

@@ -11,7 +11,14 @@ import type {
   UsageSummaryDTO
 } from "../dto/dashboard";
 
-function totals(input: number, cached: number, output: number, reasoning: number, costUSD: number) {
+function totals(
+  input: number,
+  cached: number,
+  output: number,
+  reasoning: number,
+  costUSD: number,
+  requestCount = 12
+) {
   return {
     inputTokens: input,
     cachedInputTokens: cached,
@@ -19,6 +26,7 @@ function totals(input: number, cached: number, output: number, reasoning: number
     outputTokens: output,
     reasoningOutputTokens: reasoning,
     totalTokens: input + cached + output + reasoning,
+    requestCount,
     costUSD
   };
 }
@@ -29,7 +37,7 @@ const DEMO_META: DashboardMetaDTO = {
   databasePathSource: "default",
   databasePathEditable: true,
   timeZone: "Asia/Shanghai",
-  parseVersion: 7,
+  parseVersion: 8,
   pricingNotes: [
     "Official model prices are used unless a relay price override is enabled for that model.",
     "Cache creation charges apply only when session logs provide cache_creation_input_tokens; records without that field use zero cache creation tokens.",

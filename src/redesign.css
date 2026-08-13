@@ -36,7 +36,7 @@
   --gold: var(--cost);
   --sage: #59b992;
   --moss: #4aae89;
-  --coral: var(--danger);
+  --coral: #f43f5e;
   --bg-deep: var(--canvas);
   --panel-bg: var(--surface);
   --panel-border: var(--border);
@@ -76,6 +76,7 @@
   --primary-border: rgba(22, 98, 76, 0.3);
   --cost: #8a621b;
   --cost-soft: rgba(138, 98, 27, 0.1);
+  --coral: #e11d48;
   --danger: #b64050;
   --danger-soft: rgba(182, 64, 80, 0.09);
   --info: #356f8d;
@@ -766,7 +767,7 @@ select {
 .daily-detail-model-cost-cell,
 .daily-detail-total-cost-cell,
 .daily-detail-summary-total-cost {
-  color: var(--cost);
+  color: var(--coral);
 }
 
 .activity-wall,
@@ -858,6 +859,14 @@ select {
   background: var(--tfoot-bg);
   border-color: var(--border);
   font-weight: 650;
+}
+
+.total-row td.cost-cell,
+.summary-row td.cost-cell,
+.usage-table td.cost-cell,
+.daily-detail-table tbody tr.daily-detail-subtotal-row td.cost-cell,
+.daily-detail-table tfoot td.cost-cell {
+  color: var(--coral);
 }
 
 .model-list {

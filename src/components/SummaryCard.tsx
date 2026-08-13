@@ -2,7 +2,13 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import type { UsageSummaryDTO } from "../dto/dashboard";
 import { useApp } from "../context/AppContext";
-import { formatCurrency, formatTokenCount, nonCachedInputTokens, periodLabel } from "../utils/format";
+import {
+  formatCurrency,
+  formatInteger,
+  formatTokenCount,
+  nonCachedInputTokens,
+  periodLabel
+} from "../utils/format";
 
 export interface SummaryCardProps {
   summary: UsageSummaryDTO;
@@ -20,6 +26,9 @@ export const SummaryCard: React.FC<SummaryCardProps> = ({ summary }) => {
         <strong>{formatTokenCount(summary.totals.totalTokens, locale)}</strong>
       </div>
       <div className="summary-inline">
+        <span>
+          {t("requests")}: {formatInteger(summary.totals.requestCount, locale)}
+        </span>
         <span>
           {t("input")}: {formatTokenCount(nonCachedInputTokens(summary.totals), locale)}
         </span>

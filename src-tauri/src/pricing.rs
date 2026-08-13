@@ -257,6 +257,7 @@ mod tests {
             output_tokens,
             reasoning_output_tokens: 0,
             total_tokens: input_tokens + output_tokens,
+            request_count: 0,
             cost_usd: 0.0,
         }
     }

@@ -73,6 +73,7 @@ impl UsageStore {
           output_tokens INTEGER NOT NULL,
           reasoning_output_tokens INTEGER NOT NULL,
           total_tokens INTEGER NOT NULL,
+          request_count INTEGER NOT NULL DEFAULT 0,
           cost_usd REAL NOT NULL,
           PRIMARY KEY (session_id, usage_date, model, is_fallback)
         );
@@ -89,6 +90,7 @@ impl UsageStore {
           output_tokens INTEGER NOT NULL,
           reasoning_output_tokens INTEGER NOT NULL,
           total_tokens INTEGER NOT NULL,
+          request_count INTEGER NOT NULL DEFAULT 0,
           cost_usd REAL NOT NULL,
           PRIMARY KEY (usage_date, model, is_fallback)
         );
@@ -105,6 +107,7 @@ impl UsageStore {
           output_tokens INTEGER NOT NULL,
           reasoning_output_tokens INTEGER NOT NULL,
           total_tokens INTEGER NOT NULL,
+          request_count INTEGER NOT NULL DEFAULT 0,
           cost_usd REAL NOT NULL,
           PRIMARY KEY (month_key, model, is_fallback)
         );
@@ -118,31 +121,30 @@ impl UsageStore {
             .context("failed to run sqlite migrations")?;
 
         for table in ["session_daily_usage", "daily_usage", "monthly_usage"] {
-            self.ensure_cache_creation_column(table)?;
+            self.ensure_column(table, "cache_creation_input_tokens", "INTEGER NOT NULL DEFAULT 0")?;
+            self.ensure_column(table, "request_count", "INTEGER NOT NULL DEFAULT 0")?;
         }
 
         Ok(())
     }
 
-    fn ensure_cache_creation_column(&self, table: &str) -> Result<()> {
+    fn ensure_column(&self, table: &str, column_name: &str, column_def: &str) -> Result<()> {
         let mut statement = self
             .connection
             .prepare(&format!("PRAGMA table_info({table})"))?;
         let columns = statement.query_map([], |row| row.get::<_, String>(1))?;
         for column in columns {
-            if column? == "cache_creation_input_tokens" {
+            if column? == column_name {
                 return Ok(());
             }
         }
 
         self.connection
             .execute(
-                &format!(
-                    "ALTER TABLE {table} ADD COLUMN cache_creation_input_tokens INTEGER NOT NULL DEFAULT 0"
-                ),
+                &format!("ALTER TABLE {table} ADD COLUMN {column_name} {column_def}"),
                 [],
             )
-            .with_context(|| format!("failed to add cache creation tokens to {table}"))?;
+            .with_context(|| format!("failed to add {column_name} to {table}"))?;
         Ok(())
     }
 
@@ -331,8 +333,9 @@ impl UsageStore {
           output_tokens,
           reasoning_output_tokens,
           total_tokens,
+          request_count,
           cost_usd
-        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
         ",
             )?;
             let mut insert_source = connection.prepare(
@@ -372,6 +375,7 @@ impl UsageStore {
                         usage.totals.output_tokens,
                         usage.totals.reasoning_output_tokens,
                         usage.totals.total_tokens,
+                        usage.totals.request_count,
                         usage.totals.cost_usd,
                     ])?;
                 }
@@ -448,6 +452,7 @@ impl UsageStore {
           output_tokens,
           reasoning_output_tokens,
           total_tokens,
+          request_count,
           cost_usd
         )
         SELECT
@@ -460,6 +465,7 @@ impl UsageStore {
           SUM(output_tokens),
           SUM(reasoning_output_tokens),
           SUM(total_tokens),
+          SUM(request_count),
           SUM(cost_usd)
         FROM session_daily_usage
         WHERE usage_date = ?1
@@ -486,6 +492,7 @@ impl UsageStore {
           output_tokens,
           reasoning_output_tokens,
           total_tokens,
+          request_count,
           cost_usd
         )
         SELECT
@@ -498,6 +505,7 @@ impl UsageStore {
           SUM(output_tokens),
           SUM(reasoning_output_tokens),
           SUM(total_tokens),
+          SUM(request_count),
           SUM(cost_usd)
         FROM daily_usage
         WHERE substr(usage_date, 1, 7) = ?1
@@ -533,6 +541,7 @@ impl UsageStore {
           output_tokens,
           reasoning_output_tokens,
           total_tokens,
+          request_count,
           cost_usd
         FROM daily_usage
         WHERE usage_date >= ?1 AND usage_date <= ?2
@@ -568,6 +577,7 @@ impl UsageStore {
           output_tokens,
           reasoning_output_tokens,
           total_tokens,
+          request_count,
           cost_usd
         FROM monthly_usage
         ORDER BY month_key DESC, total_tokens DESC, model ASC
@@ -634,6 +644,7 @@ fn map_totals(row: &Row<'_>) -> rusqlite::Result<UsageTotals> {
         output_tokens: row.get("output_tokens")?,
         reasoning_output_tokens: row.get("reasoning_output_tokens")?,
         total_tokens: row.get("total_tokens")?,
+        request_count: row.get("request_count")?,
         cost_usd: row.get("cost_usd")?,
     })
 }
@@ -738,6 +749,7 @@ mod tests {
                         output_tokens: 10,
                         reasoning_output_tokens: 5,
                         total_tokens: 110,
+                        request_count: 2,
                         cost_usd: 1.5,
                     },
                 },
@@ -754,6 +766,7 @@ mod tests {
                         output_tokens: 8,
                         reasoning_output_tokens: 1,
                         total_tokens: 58,
+                        request_count: 1,
                         cost_usd: 0.8,
                     },
                 },
@@ -774,11 +787,14 @@ mod tests {
 
         assert_eq!(daily.len(), 2);
         assert_eq!(daily[0].date_key, "2026-04-10");
+        assert_eq!(daily[0].totals.request_count, 1);
         assert_eq!(daily[1].date_key, "2026-04-09");
+        assert_eq!(daily[1].totals.request_count, 2);
         assert_eq!(monthly.len(), 1);
         assert_eq!(monthly[0].month_key, "2026-04");
         assert_eq!(monthly[0].totals.total_tokens, 168);
         assert_eq!(monthly[0].totals.cache_creation_input_tokens, 6);
+        assert_eq!(monthly[0].totals.request_count, 3);
         assert_eq!(
             store
                 .list_date_keys_for_sessions(&["session-a".to_string()])
@@ -788,7 +804,7 @@ mod tests {
     }
 
     #[test]
-    fn migrate_adds_cache_creation_column_to_existing_usage_tables() {
+    fn migrate_adds_cache_creation_and_request_count_columns_to_existing_usage_tables() {
         let temp_dir = TempDir::new().expect("temp dir");
         let database_path = temp_dir.path().join("legacy.sqlite");
         let connection = Connection::open(&database_path).expect("open legacy database");
@@ -846,15 +862,13 @@ mod tests {
                     .connection
                     .prepare(&format!("PRAGMA table_info({table})"))
                     .expect("prepare table info");
-                let has_column = statement
+                let columns: Vec<String> = statement
                     .query_map([], |row| row.get::<_, String>(1))
                     .expect("query columns")
-                    .any(|column| {
-                        column
-                            .expect("column name")
-                            .eq("cache_creation_input_tokens")
-                    });
-                has_column
+                    .map(|c| c.expect("column name"))
+                    .collect();
+                columns.iter().any(|c| c == "cache_creation_input_tokens")
+                    && columns.iter().any(|c| c == "request_count")
             })
             .count();
 
