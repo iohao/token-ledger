@@ -1,9 +1,12 @@
+import i18n from "i18next";
+import { initReactI18next } from "react-i18next";
+
 export type Locale = "zh-CN" | "en-US";
 
 const LOCALE_STORAGE_KEY = "tokenledger.locale";
 const LEGACY_LOCALE_STORAGE_KEYS = ["tokenaccount.locale", "codex-usage-tauri.locale"];
 
-const MESSAGES = {
+export const MESSAGES = {
   "zh-CN": {
     skipToMainContent: "跳到主要内容",
     dashboardViewsAria: "看板视图",
@@ -486,7 +489,7 @@ const MESSAGES = {
   },
 } as const;
 
-type MessageKey = keyof (typeof MESSAGES)["zh-CN"];
+export type MessageKey = keyof (typeof MESSAGES)["zh-CN"];
 
 const ZH_PRICING_NOTE_MAP: Record<string, string> = {
   "Official model prices are used unless a relay price override is enabled for that model.":
@@ -536,7 +539,8 @@ export function persistLocale(locale: Locale): void {
 }
 
 export function t(locale: Locale, key: MessageKey, variables: Record<string, string | number> = {}): string {
-  return interpolate(MESSAGES[locale][key], variables);
+  const template = MESSAGES[locale]?.[key] ?? MESSAGES["en-US"][key] ?? key;
+  return interpolate(template, variables);
 }
 
 export function translatePricingNote(locale: Locale, note: string): string {
@@ -623,3 +627,20 @@ function readDemoLocaleOverride(): Locale | null {
     return null;
   }
 }
+
+// Initialize i18next instance
+void i18n.use(initReactI18next).init({
+  resources: {
+    "zh-CN": { translation: MESSAGES["zh-CN"] },
+    "en-US": { translation: MESSAGES["en-US"] }
+  },
+  lng: detectInitialLocale(),
+  fallbackLng: "en-US",
+  interpolation: {
+    prefix: "{",
+    suffix: "}",
+    escapeValue: false
+  }
+});
+
+export default i18n;

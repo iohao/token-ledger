@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-`src/` contains the Vite + TypeScript desktop UI. Keep Tauri bridge calls in `src/api/`, shared DTOs in `src/dto/`, and UI/i18n logic close to `src/main.ts` and `src/i18n.ts`. Rust backend code lives in `src-tauri/src/` with modules such as `commands.rs`, `repository.rs`, `parser.rs`, and `store.rs`. Build and packaging helpers live in `scripts/`. Generated output in `dist/`, `release-app/`, `src-tauri/target/`, and `src-tauri/gen/` should not be committed.
+`src/` contains the React 19 + TypeScript + Tailwind CSS desktop UI. Keep Tauri bridge calls in `src/api/`, shared DTOs in `src/dto/`, React state in `src/context/`, views in `src/views/`, reusable components in `src/components/`, and UI/i18n logic close to `src/main.tsx`, `src/App.tsx`, and `src/i18n.ts`. Rust backend code lives in `src-tauri/src/` with modules such as `commands.rs`, `repository.rs`, `parser.rs`, and `store.rs`. Build and packaging helpers live in `scripts/`. Generated output in `dist/`, `release-app/`, `src-tauri/target/`, and `src-tauri/gen/` should not be committed.
 
 ## Build, Test, and Development Commands
 

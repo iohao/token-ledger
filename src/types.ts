@@ -62,6 +62,11 @@ export type InlineNoticeTone = "good" | "bad";
 export type UpdateStatus = "idle" | "checking" | "available" | "upToDate" | "installing" | "error";
 export type PricingRateField = (typeof PRICING_RATE_FIELDS)[number];
 export type PageSourceId =
+  | "src/views/OverviewView.tsx"
+  | "src/views/MonthlyHistoryView.tsx"
+  | "src/views/MonthlyDetailView.tsx"
+  | "src/views/SettingsView.tsx"
+  | "src/views/DailyDetailView.tsx"
   | "src/views/overview.ts"
   | "src/views/monthly-history.ts"
   | "src/views/monthly-detail.ts"
