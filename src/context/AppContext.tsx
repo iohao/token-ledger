@@ -150,9 +150,9 @@ export function useApp(): AppContextType {
 
 function detectInitialPageSourceVisibility(): boolean {
   try {
-    return window.localStorage.getItem(PAGE_SOURCE_VISIBILITY_STORAGE_KEY) !== "false";
+    return window.localStorage.getItem(PAGE_SOURCE_VISIBILITY_STORAGE_KEY) === "true";
   } catch {
-    return true;
+    return false;
   }
 }
 

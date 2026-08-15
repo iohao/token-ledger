@@ -1,6 +1,6 @@
 {
   "name": "tokenledger",
-  "version": "0.4.4",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "packageManager": "bun@1.3.6",
