@@ -157,8 +157,8 @@ export const OverviewView: React.FC = () => {
       </div>
 
       <section className="summary-grid">
-        {(dashboard?.summaries ?? []).map((summary, idx) => (
-          <SummaryCard key={idx} summary={summary} />
+        {(dashboard?.summaries ?? []).map((summary) => (
+          <SummaryCard key={summary.period} summary={summary} />
         ))}
       </section>
 

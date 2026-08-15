@@ -1013,6 +1013,25 @@ h3 {
   background: rgba(0, 0, 0, 0.03);
 }
 
+@keyframes summary-card-updated-pulse {
+  0% {
+    border-color: rgba(139, 92, 246, 0.6);
+    box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.2), 0 10px 25px -5px rgba(99, 102, 241, 0.15);
+  }
+  50% {
+    border-color: rgba(139, 92, 246, 0.6);
+    box-shadow: 0 0 14px 2px rgba(139, 92, 246, 0.25), 0 10px 25px -5px rgba(99, 102, 241, 0.15);
+  }
+  100% {
+    border-color: var(--line);
+    box-shadow: none;
+  }
+}
+
+.summary-card.is-updated {
+  animation: summary-card-updated-pulse 1.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
 .summary-kicker,
 .meta-list dt {
   display: block;
