@@ -26,6 +26,22 @@ export const OverviewView: React.FC = () => {
     locale
   } = useApp();
 
+  const hasTriggeredInitialSyncRef = React.useRef(false);
+
+  React.useEffect(() => {
+    if (hasTriggeredInitialSyncRef.current) {
+      return;
+    }
+    if (isSyncing) {
+      hasTriggeredInitialSyncRef.current = true;
+      return;
+    }
+    if (!isLoading) {
+      hasTriggeredInitialSyncRef.current = true;
+      void syncDashboard();
+    }
+  }, [isLoading, isSyncing, syncDashboard]);
+
   const timeZone = dashboard?.meta.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
   const pendingSessions = syncPreview
     ? syncPreview.newSessions + syncPreview.changedSessions + syncPreview.removedSessions
