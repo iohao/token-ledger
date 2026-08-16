@@ -15,10 +15,15 @@ export const Sidebar: React.FC = () => {
   const { t } = useTranslation();
   const { activeTab, setActiveTab, availableUpdate } = useApp();
 
-  const usageTabs: Array<{ value: AppTab; label: string; icon: React.ReactNode }> = [
-    { value: "dailyDetail", label: t("navDailyDetail"), icon: <CalendarDays size={18} /> },
-    { value: "monthlyHistory", label: t("navMonthlyHistory"), icon: <ChartNoAxesCombined size={18} /> },
-    { value: "monthlyDetail", label: t("navMonthlyDetail"), icon: <CalendarRange size={18} /> }
+  const isMac =
+    typeof navigator !== "undefined" &&
+    (/Mac|iPod|iPhone|iPad/.test(navigator.userAgent) || /Mac/i.test(navigator.platform || ""));
+  const modKey = isMac ? "⌘" : "Ctrl+";
+
+  const usageTabs: Array<{ value: AppTab; label: string; icon: React.ReactNode; shortcut: string }> = [
+    { value: "dailyDetail", label: t("navDailyDetail"), icon: <CalendarDays size={18} />, shortcut: "2" },
+    { value: "monthlyHistory", label: t("navMonthlyHistory"), icon: <ChartNoAxesCombined size={18} />, shortcut: "3" },
+    { value: "monthlyDetail", label: t("navMonthlyDetail"), icon: <CalendarRange size={18} />, shortcut: "4" }
   ];
 
   return (
@@ -36,7 +41,7 @@ export const Sidebar: React.FC = () => {
           <button
             className={`menu-item ${activeTab === "overview" ? "is-active" : ""}`}
             type="button"
-            title={t("navOverview")}
+            title={`${t("navOverview")} (${modKey}1)`}
             aria-current={activeTab === "overview" ? "page" : "false"}
             onClick={() => setActiveTab("overview")}
           >
@@ -44,6 +49,7 @@ export const Sidebar: React.FC = () => {
               <LayoutDashboard size={18} />
             </span>
             <span className="menu-item-label">{t("navOverview")}</span>
+            <kbd className="menu-item-shortcut">{modKey}1</kbd>
           </button>
         </div>
         <div className="menu-group">
@@ -53,12 +59,13 @@ export const Sidebar: React.FC = () => {
               key={tab.value}
               className={`menu-item ${activeTab === tab.value ? "is-active" : ""}`}
               type="button"
-              title={tab.label}
+              title={`${tab.label} (${modKey}${tab.shortcut})`}
               aria-current={activeTab === tab.value ? "page" : "false"}
               onClick={() => setActiveTab(tab.value)}
             >
               <span className="menu-item-icon">{tab.icon}</span>
               <span className="menu-item-label">{tab.label}</span>
+              <kbd className="menu-item-shortcut">{modKey}{tab.shortcut}</kbd>
             </button>
           ))}
         </div>
@@ -67,7 +74,7 @@ export const Sidebar: React.FC = () => {
         <button
           className={`menu-item ${activeTab === "settings" ? "is-active" : ""}`}
           type="button"
-          title={t("navSettings")}
+          title={`${t("navSettings")} (${modKey},)`}
           aria-current={activeTab === "settings" ? "page" : "false"}
           onClick={() => setActiveTab("settings")}
         >
@@ -75,12 +82,15 @@ export const Sidebar: React.FC = () => {
             <Settings size={18} />
           </span>
           <span className="menu-item-label">{t("navSettings")}</span>
-          {availableUpdate && (
-            <span
-              className="menu-status-dot"
-              aria-label={t("updateAvailableStatus", { version: availableUpdate.version })}
-            />
-          )}
+          <div className="menu-item-trailing">
+            {availableUpdate && (
+              <span
+                className="menu-status-dot"
+                aria-label={t("updateAvailableStatus", { version: availableUpdate.version })}
+              />
+            )}
+            <kbd className="menu-item-shortcut">{modKey},</kbd>
+          </div>
         </button>
       </div>
     </aside>

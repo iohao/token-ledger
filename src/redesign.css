@@ -299,6 +299,48 @@ select {
   box-shadow: 0 0 0 3px var(--cost-soft);
 }
 
+.menu-item-shortcut {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 18px;
+  padding: 0 5px;
+  font-family: var(--mono-font);
+  font-size: 0.68rem;
+  font-weight: 500;
+  line-height: 1;
+  color: var(--text-muted);
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  opacity: 0.75;
+  transition: opacity 160ms ease, color 160ms ease, border-color 160ms ease, background-color 160ms ease;
+  user-select: none;
+  pointer-events: none;
+}
+
+.menu-item:hover .menu-item-shortcut {
+  opacity: 1;
+  color: var(--text-secondary);
+  border-color: var(--border-strong);
+}
+
+.menu-item.is-active .menu-item-shortcut,
+[data-theme="light"] .menu-item.is-active .menu-item-shortcut {
+  color: rgba(255, 255, 255, 0.95);
+  background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.28);
+  opacity: 1;
+}
+
+.menu-item-trailing {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  justify-self: end;
+}
+
 .sidebar-footer {
   flex: 0 0 auto;
   padding: 10px;
@@ -620,6 +662,7 @@ select {
 }
 
 .hero.ledger-rail {
+  position: relative;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0;
@@ -629,6 +672,52 @@ select {
   background: var(--surface);
   border-radius: var(--radius-panel);
   box-shadow: var(--shadow-sm);
+}
+
+.ledger-rail-progress {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: transparent;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+  z-index: 2;
+}
+
+.ledger-rail-progress.is-active {
+  opacity: 1;
+  background: rgba(35, 122, 93, 0.15);
+}
+
+[data-theme="light"] .ledger-rail-progress.is-active {
+  background: rgba(22, 98, 76, 0.1);
+}
+
+.ledger-rail-progress-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--primary);
+  transition: width 0.2s ease;
+}
+
+.ledger-rail-progress-fill.is-indeterminate {
+  width: 40%;
+  background: linear-gradient(90deg, transparent, var(--primary), var(--info), transparent);
+  animation: ledger-rail-pulse 1.2s ease-in-out infinite alternate;
+}
+
+@keyframes ledger-rail-pulse {
+  from {
+    transform: translateX(-30%);
+  }
+  to {
+    transform: translateX(230%);
+  }
 }
 
 .ledger-metric {
@@ -694,12 +783,52 @@ select {
 
 .ledger-detail {
   grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   padding: 10px 20px;
   color: var(--text-secondary);
   background: var(--surface-muted);
   border-top: 1px solid var(--border);
   font-family: var(--mono-font);
   font-size: 0.74rem;
+  min-height: 40px;
+  box-sizing: border-box;
+}
+
+.ledger-detail-sessions {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ledger-detail-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.ledger-sync-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  font-weight: 500;
+}
+
+.ledger-sync-badge.is-syncing {
+  color: var(--moss);
+}
+
+.ledger-sync-badge.is-error {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.ledger-sync-badge .action-icon {
+  flex-shrink: 0;
 }
 
 .sync-progress-card {
@@ -1733,7 +1862,9 @@ select {
 
   .sidebar-brand-copy,
   .menu-group-label,
-  .menu-item-label {
+  .menu-item-label,
+  .menu-item-shortcut,
+  .menu-item-trailing {
     display: none;
   }
 
@@ -1829,6 +1960,17 @@ select {
 
   .summary-grid {
     grid-template-columns: 1fr;
+  }
+
+  .ledger-detail {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 8px 16px;
+  }
+
+  .ledger-detail-sessions {
+    white-space: normal;
   }
 
   .detail-filter-grid {

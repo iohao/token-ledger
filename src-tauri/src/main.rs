@@ -33,6 +33,29 @@ fn build_app_menu<R: tauri::Runtime>(handle: &tauri::AppHandle<R>) -> tauri::Res
         .select_all()
         .build()?;
 
+    let view_menu = SubmenuBuilder::new(handle, "View")
+        .item(
+            &MenuItemBuilder::with_id("nav-overview", "Overview")
+                .accelerator("CmdOrCtrl+1")
+                .build(handle)?,
+        )
+        .item(
+            &MenuItemBuilder::with_id("nav-daily-detail", "Daily Detail")
+                .accelerator("CmdOrCtrl+2")
+                .build(handle)?,
+        )
+        .item(
+            &MenuItemBuilder::with_id("nav-monthly-history", "Monthly History")
+                .accelerator("CmdOrCtrl+3")
+                .build(handle)?,
+        )
+        .item(
+            &MenuItemBuilder::with_id("nav-monthly-detail", "Monthly Detail")
+                .accelerator("CmdOrCtrl+4")
+                .build(handle)?,
+        )
+        .build()?;
+
     let window_menu = SubmenuBuilder::new(handle, "Window")
         .minimize()
         .separator()
@@ -40,7 +63,7 @@ fn build_app_menu<R: tauri::Runtime>(handle: &tauri::AppHandle<R>) -> tauri::Res
         .build()?;
 
     MenuBuilder::new(handle)
-        .items(&[&app_menu, &edit_menu, &window_menu])
+        .items(&[&app_menu, &edit_menu, &view_menu, &window_menu])
         .build()
 }
 
@@ -66,6 +89,29 @@ fn build_app_menu<R: tauri::Runtime>(handle: &tauri::AppHandle<R>) -> tauri::Res
         .select_all()
         .build()?;
 
+    let view_menu = SubmenuBuilder::new(handle, "View")
+        .item(
+            &MenuItemBuilder::with_id("nav-overview", "Overview")
+                .accelerator("CmdOrCtrl+1")
+                .build(handle)?,
+        )
+        .item(
+            &MenuItemBuilder::with_id("nav-daily-detail", "Daily Detail")
+                .accelerator("CmdOrCtrl+2")
+                .build(handle)?,
+        )
+        .item(
+            &MenuItemBuilder::with_id("nav-monthly-history", "Monthly History")
+                .accelerator("CmdOrCtrl+3")
+                .build(handle)?,
+        )
+        .item(
+            &MenuItemBuilder::with_id("nav-monthly-detail", "Monthly Detail")
+                .accelerator("CmdOrCtrl+4")
+                .build(handle)?,
+        )
+        .build()?;
+
     let window_menu = SubmenuBuilder::new(handle, "Window")
         .minimize()
         .separator()
@@ -77,7 +123,7 @@ fn build_app_menu<R: tauri::Runtime>(handle: &tauri::AppHandle<R>) -> tauri::Res
         .build()?;
 
     MenuBuilder::new(handle)
-        .items(&[&file_menu, &edit_menu, &window_menu, &help_menu])
+        .items(&[&file_menu, &edit_menu, &view_menu, &window_menu, &help_menu])
         .build()
 }
 
@@ -92,8 +138,23 @@ fn main() {
             Ok(())
         })
         .on_menu_event(|app, event| {
-            if event.id() == "settings" {
-                let _ = app.emit("open-settings", ());
+            match event.id().as_ref() {
+                "settings" => {
+                    let _ = app.emit("open-settings", ());
+                }
+                "nav-overview" => {
+                    let _ = app.emit("navigate-tab", "overview");
+                }
+                "nav-daily-detail" => {
+                    let _ = app.emit("navigate-tab", "dailyDetail");
+                }
+                "nav-monthly-history" => {
+                    let _ = app.emit("navigate-tab", "monthlyHistory");
+                }
+                "nav-monthly-detail" => {
+                    let _ = app.emit("navigate-tab", "monthlyDetail");
+                }
+                _ => {}
             }
         })
         .invoke_handler(tauri::generate_handler![

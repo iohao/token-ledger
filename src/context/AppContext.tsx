@@ -203,7 +203,9 @@ export function pricingErrorKey(model: string, field: PricingRateField): string 
   return `${model}:${field}`;
 }
 
-const isMacLikePlatform = typeof navigator !== "undefined" && navigator.platform.toLowerCase().includes("mac");
+const isMacLikePlatform =
+  typeof navigator !== "undefined" &&
+  (/Mac|iPod|iPhone|iPad/.test(navigator.userAgent) || /Mac/i.test(navigator.platform || ""));
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [dashboard, setDashboard] = useState<DashboardPayloadDTO | null>(null);
@@ -1079,7 +1081,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return () => window.clearInterval(timer);
   }, [nextAutoSyncAt]);
 
-  // Global keydown (Cmd/Ctrl + 1..5)
+  // Global keydown (Cmd/Ctrl + 1..5, Cmd/Ctrl + ,)
   useEffect(() => {
     const handleGlobalKeydown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.altKey || event.shiftKey) {
@@ -1103,24 +1105,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       let targetTab: AppTab | null = null;
       if (event.key === "," || event.code === "Comma") {
         targetTab = "settings";
-      } else {
-        switch (event.key) {
-          case "1":
-            targetTab = "overview";
-            break;
-          case "2":
-            targetTab = "monthlyDetail";
-            break;
-          case "3":
-            targetTab = "monthlyHistory";
-            break;
-          case "4":
-            targetTab = "dailyDetail";
-            break;
-          case "5":
-            targetTab = "settings";
-            break;
-        }
+      } else if (event.key === "1" || event.code === "Digit1" || event.code === "Numpad1") {
+        targetTab = "overview";
+      } else if (event.key === "2" || event.code === "Digit2" || event.code === "Numpad2") {
+        targetTab = "dailyDetail";
+      } else if (event.key === "3" || event.code === "Digit3" || event.code === "Numpad3") {
+        targetTab = "monthlyHistory";
+      } else if (event.key === "4" || event.code === "Digit4" || event.code === "Numpad4") {
+        targetTab = "monthlyDetail";
+      } else if (event.key === "5" || event.code === "Digit5" || event.code === "Numpad5") {
+        targetTab = "settings";
       }
 
       if (targetTab) {
@@ -1133,18 +1127,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return () => window.removeEventListener("keydown", handleGlobalKeydown);
   }, [setActiveTab]);
 
-  // Native menu listener (open-settings)
+  // Native menu listener (open-settings & navigate-tab)
   useEffect(() => {
-    let unlisten: (() => void) | null = null;
+    let unlistenSettings: (() => void) | null = null;
+    let unlistenNavigate: (() => void) | null = null;
+
     void listen("open-settings", () => {
       setActiveTab("settings");
     }).then((fn) => {
-      unlisten = fn;
+      unlistenSettings = fn;
+    });
+
+    void listen<AppTab>("navigate-tab", (event) => {
+      if (event.payload) {
+        setActiveTab(event.payload);
+      }
+    }).then((fn) => {
+      unlistenNavigate = fn;
     });
 
     return () => {
-      if (unlisten) {
-        unlisten();
+      if (unlistenSettings) {
+        unlistenSettings();
+      }
+      if (unlistenNavigate) {
+        unlistenNavigate();
       }
     };
   }, [setActiveTab]);

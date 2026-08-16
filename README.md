@@ -1,58 +1,33 @@
 # TokenLedger
 
-[中文说明](./README_CN.md)
+TokenLedger 是一款专为 OpenAI Codex 用户打造的本地桌面端 Token 用量与费用分析工具。无需复杂配置，打开软件即可自动扫描并汇总本地 Codex 会话记录，帮助你清晰直观地掌握 Token 消耗明细、模型使用分布与实际费用支出。
 
-`TokenLedger` is a Tauri-based desktop dashboard that reads Codex session data and tracks token and cost trends.
+所有数据均保存在你的本地电脑中，不上传任何会话内容或敏感信息，安全省心。
 
-## Features
+## 下载安装
 
-- **Data Parsing**: Reads Codex session data from `CODEX_HOME/sessions/*.jsonl`.
-- **Local Storage**: Writes aggregated usage into a local SQLite database (default path: `CODEX_HOME/.codex-usage/usage.sqlite`).
-- **Multi-dimensional Views**: Browse token and cost trends across today, the last 7 days, month-to-date, daily, and monthly views.
-- **In-App Updates**: Checks GitHub Releases for new versions and installs updates in-place.
-- **i18n**: Built-in support for English and Chinese.
+前往 GitHub Releases 获取最新版本安装包：
 
-## Quick Start
+- 最新版本下载地址：https://github.com/iohao/token-ledger/releases/latest
 
-### Run the desktop app
+软件支持 macOS 与 Windows 系统，下载对应系统的安装包后，双击安装即可直接使用。
 
-```bash
-bun install
-bun run desktop -- dev
-```
+## 核心功能特性
 
-### Preview the frontend only
+- 多维度用量看板：提供今日用量、近 7 日用量、本月累计等统计卡片，直观展示 Token 总消耗、请求次数与费用预估。
+- 细粒度 Token 拆解：完整统计输入、输出、缓存读取、缓存创建以及推理 Token 消耗，各项账目清晰明了。
+- 年度活跃度热力图：以热力图形式呈现过去一年的每日使用频次与活跃度走势，用量变化一目了然。
+- 灵活的用量明细查询：支持自定义日期范围查询每天各模型的用量，支持按年份和月份下钻查看当月每天、每个模型的详细消耗。
+- 自定义模型计价：内置主流模型官方参考价格，支持为各模型单独配置中转 API 单价，保存后自动重新核算历史与后续账单。
+- 数据自动同步：打开软件即可自动同步本地最新的 Codex 会话数据，同时支持手动一键同步与定时自动同步。
+- 舒适的使用体验：界面简洁流畅，系统资源占用极低；支持深色模式、浅色模式与跟随系统外观，内置中英文双语界面切换。
+- 软件内一键更新：内置新版本检测功能，发现新版本后可直接在软件内下载并完成升级。
 
-```bash
-bun run dev -- --host 127.0.0.1
-```
+## 如何使用
 
-Open `http://127.0.0.1:5173/?demo=1` to preview the UI with demo data.  
-You can also open a specific view directly with `tab`:
-- `?demo=1&tab=overview`
-- `?demo=1&tab=monthlyHistory`
-- `?demo=1&tab=monthlyDetail`
-- `?demo=1&tab=dailyDetail`
-
-### Checks and tests
-
-```bash
-bun run typecheck
-cd src-tauri && cargo test
-```
-
-### Package the desktop app
-
-```bash
-bun run package:app
-```
-Packaged runnable artifacts are copied into `release-app/` by default.
-
-## Project Structure
-
-```text
-src/             Frontend UI, i18n, DTOs, and Tauri API bridge (Vite + TypeScript)
-src-tauri/       Rust backend, commands, SQLite, and Tauri config
-scripts/         Packaging and comparison helpers
-release-app/     Output directory for packaged apps
-```
+1. 安装运行：下载对应系统的安装程序并完成安装，启动 TokenLedger。
+2. 查看统计数据：软件启动后会自动读取本地 Codex 会话记录并呈现图表：
+   - 工作台：查看今日、近 7 日及本月的 Token 消耗、请求次数、费用汇总以及年度活跃墙。
+   - 用量分析：在“按日查询”中选择日期区间查看每天明细，或在“每月用量明细”中按年份和月份查看具体模型的消耗。
+3. 自定义价格（可选）：如果使用的是中转 API 或非官方定价，进入“设置”中的“模型计价”，开启中转价格并填入实际单价，软件会自动重新计算费用。
+4. 偏好与更新设置：在“设置”页面中可根据喜好切换界面语言（中文/英文）、外观主题（浅色/深色/跟随系统）或手动检查版本更新。
