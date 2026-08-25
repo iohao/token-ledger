@@ -2,9 +2,11 @@ import type {
   DailyUsageSummaryDTO,
   DashboardMetaDTO,
   DashboardPayloadDTO,
-  ModelPricingOverrideDTO,
-  ModelPricingSettingDTO,
+  ModelPricingRatesDTO,
   MonthlyUsageSummaryDTO,
+  PricingComparisonDTO,
+  PricingProviderDTO,
+  RelayPricingProviderDTO,
   SyncPreviewDTO,
   SyncProgressDTO,
   SyncStatusDTO,
@@ -38,32 +40,38 @@ const DEMO_META: DashboardMetaDTO = {
   databasePathEditable: true,
   timeZone: "Asia/Shanghai",
   parseVersion: 8,
-  pricingNotes: [
-    "Official model prices are used unless a relay price override is enabled for that model.",
-    "Cache creation charges apply only when session logs provide cache_creation_input_tokens; records without that field use zero cache creation tokens.",
-    "GPT-5.5 / GPT-5.4 / GPT-5.4-mini / GPT-5.3-Codex rates use OpenAI Codex Rate Card values, converted from credits with a 25 credits = 1 USD inference."
-  ],
-  modelPricingSettings: [
-    pricingSetting("gpt-5.6-sol", [5, 30, 0.5, 5], [9, 54, 0.9, 11.25]),
-    pricingSetting("gpt-5.6-terra", [2.5, 15, 0.25, 2.5], [4.5, 27, 0.45, 5.4]),
-    pricingSetting("gpt-5.6-luna", [1, 6, 0.1, 1], [1.8, 10.8, 0.18, 2.25])
+  pricingProviders: [
+    {
+      id: "openai-official",
+      kind: "official",
+      name: "OpenAI 官方",
+      enabled: true,
+      rechargeRatioUsdPerRmb: 0.14,
+      modelPrices: [
+        { model: "gpt-5.6-sol", rates: pricingRates([5, 30, 0.5, 5]) },
+        { model: "gpt-5.6-terra", rates: pricingRates([2.5, 15, 0.25, 2.5]) },
+        { model: "gpt-5.6-luna", rates: pricingRates([1, 6, 0.1, 1]) },
+        { model: "gpt-5.5", rates: pricingRates([5, 30, 0.5, 5]) },
+        { model: "gpt-5.4", rates: pricingRates([2.5, 15, 0.25, 2.5]) },
+        { model: "gpt-5.4-mini", rates: pricingRates([0.75, 4.52, 0.075, 0.75]) },
+        { model: "gpt-5.3-codex", rates: pricingRates([1.75, 14, 0.175, 1.75]) },
+        { model: "gpt-5.3-codex-spark", rates: pricingRates([1.75, 14, 0.175, 1.75]) }
+      ]
+    },
+    {
+      id: "demo-relay",
+      kind: "relay",
+      name: "示例中转",
+      enabled: true,
+      rechargeRatioUsdPerRmb: 0.14,
+      modelPrices: [
+        { model: "gpt-5.4", rates: pricingRates([3.2, 19.2, 0.32, 3.2]) }
+      ]
+    }
   ]
 };
 
-function pricingSetting(
-  model: string,
-  official: [number, number, number, number],
-  relay: [number, number, number, number]
-): ModelPricingSettingDTO {
-  return {
-    model,
-    relayEnabled: false,
-    officialRates: pricingRates(official),
-    relayRates: pricingRates(relay)
-  };
-}
-
-function pricingRates(values: [number, number, number, number]) {
+function pricingRates(values: [number, number, number, number]): ModelPricingRatesDTO {
   return {
     inputUsdPerMillion: values[0],
     outputUsdPerMillion: values[1],
@@ -241,6 +249,7 @@ let demoPayload: DashboardPayloadDTO = {
   status: DEMO_STATUS,
   syncPreview: DEMO_SYNC_PREVIEW,
   summaries: DEMO_SUMMARIES,
+  providerCostComparisons: [],
   dailyHistory: DEMO_DAILY_HISTORY,
   activityHistory: DEMO_ACTIVITY_HISTORY,
   monthlyHistory: DEMO_MONTHLY_HISTORY,
@@ -256,7 +265,13 @@ export function isDemoMode(): boolean {
 }
 
 export function getDemoDashboard(): DashboardPayloadDTO {
-  return structuredClone(demoPayload);
+  return structuredClone({
+    ...demoPayload,
+    providerCostComparisons: buildDemoPricingComparisons(
+      demoPayload.summaries,
+      demoPayload.meta.pricingProviders
+    )
+  });
 }
 
 export function getDemoSyncPreview(): SyncPreviewDTO {
@@ -297,22 +312,83 @@ export function resetDemoDatabasePath(): DashboardPayloadDTO {
   return getDemoDashboard();
 }
 
-export function updateDemoModelPricingSettings(settings: ModelPricingOverrideDTO[]): DashboardPayloadDTO {
-  const settingsByModel = new Map(settings.map((setting) => [setting.model, setting]));
+export function updateDemoPricingProviders(
+  relayPricingProviders: RelayPricingProviderDTO[],
+  openaiUsdPerRmb: number
+): DashboardPayloadDTO {
   demoPayload = {
     ...demoPayload,
     meta: {
       ...demoPayload.meta,
-      modelPricingSettings: demoPayload.meta.modelPricingSettings.map((setting) => {
-        const updated = settingsByModel.get(setting.model);
-        return updated
-          ? { ...setting, relayEnabled: updated.enabled, relayRates: structuredClone(updated.rates) }
-          : setting;
-      })
+      pricingProviders: demoPayload.meta.pricingProviders.map((provider) =>
+        provider.kind === "official"
+          ? { ...provider, rechargeRatioUsdPerRmb: openaiUsdPerRmb }
+          : provider
+      ).filter((provider) => provider.kind === "official").concat(
+        relayPricingProviders.map((provider) => ({ ...provider, kind: "relay" as const }))
+      )
     }
   };
 
   return getDemoDashboard();
+}
+
+function buildDemoPricingComparisons(
+  summaries: UsageSummaryDTO[],
+  providers: PricingProviderDTO[]
+): PricingComparisonDTO[] {
+  return summaries.map((summary) => ({
+    period: summary.period,
+    providers: providers.filter((provider) => provider.enabled).map((provider) => {
+      const fallbackModels: string[] = [];
+      const unpricedModels: string[] = [];
+      let costUsd = 0;
+
+      for (const modelUsage of summary.models) {
+        const supplied = provider.modelPrices.find((price) => price.model === modelUsage.model);
+        const official = DEMO_META.pricingProviders[0].modelPrices.find(
+          (price) => price.model === modelUsage.model
+        );
+        const rates = supplied?.rates ?? official?.rates;
+        if (!rates) {
+          unpricedModels.push(modelUsage.model);
+          continue;
+        }
+        if (!supplied && provider.kind === "relay") {
+          fallbackModels.push(modelUsage.model);
+        }
+        costUsd += costForRates(modelUsage.totals, rates);
+      }
+
+      const isComplete = unpricedModels.length === 0 && provider.rechargeRatioUsdPerRmb !== null;
+      return {
+        providerId: provider.id,
+        isComplete,
+        costUsd: isComplete ? costUsd : null,
+        costCny: isComplete ? costUsd / provider.rechargeRatioUsdPerRmb! : null,
+        fallbackModels,
+        unpricedModels
+      };
+    })
+  }));
+}
+
+function costForRates(
+  usage: UsageSummaryDTO["totals"],
+  rates: ModelPricingRatesDTO
+): number {
+  const input = Math.max(0, usage.inputTokens);
+  const cached = Math.min(Math.max(0, usage.cachedInputTokens), input);
+  const remaining = input - cached;
+  const cacheCreation = Math.min(Math.max(0, usage.cacheCreationInputTokens), remaining);
+  const regular = remaining - cacheCreation;
+
+  return (
+    (regular / 1_000_000) * rates.inputUsdPerMillion
+    + (cached / 1_000_000) * rates.cacheReadUsdPerMillion
+    + (cacheCreation / 1_000_000) * rates.cacheCreationUsdPerMillion
+    + (Math.max(0, usage.outputTokens) / 1_000_000) * rates.outputUsdPerMillion
+  );
 }
 
 export function getDemoDailyUsage(): DailyUsageSummaryDTO[] {

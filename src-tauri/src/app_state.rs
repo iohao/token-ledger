@@ -12,7 +12,9 @@ use crate::models::{
     DashboardMeta, DatabasePathSource, SyncPreview, SyncProgress, SyncProgressPhase,
 };
 use crate::pricing::{
-    normalize_pricing_overrides, validate_pricing_overrides, ModelPricingOverride,
+    validate_openai_usd_per_rmb, validate_relay_pricing_providers, ModelPricingRates,
+    ProviderModelPricing, RelayPricingProvider, DEFAULT_OPENAI_USD_PER_RMB,
+    MIGRATED_RELAY_PROVIDER_ID,
 };
 use crate::repository::{SessionFileEntry, UsageRepository, UsageRepositoryConfig};
 
@@ -20,6 +22,10 @@ const SYNC_PREVIEW_CACHE_TTL: Duration = Duration::from_secs(5);
 const SESSION_FILE_SCAN_CACHE_TTL: Duration = Duration::from_secs(15);
 const APP_SETTINGS_DIR: &str = ".tokenledger";
 const LEGACY_APP_SETTINGS_DIRS: [&str; 2] = [".tokenaccount", ".codex-usage-tauri"];
+
+fn default_openai_usd_per_rmb() -> f64 {
+    DEFAULT_OPENAI_USD_PER_RMB
+}
 
 pub struct AppState {
     codex_home_path: PathBuf,
@@ -58,12 +64,77 @@ struct CachedSessionFileScan {
     cached_at: Instant,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 struct AppSettings {
     database_path: Option<String>,
-    #[serde(default)]
-    model_pricing_overrides: Vec<ModelPricingOverride>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    relay_pricing_providers: Option<Vec<RelayPricingProvider>>,
+    #[serde(default = "default_openai_usd_per_rmb")]
+    openai_usd_per_rmb: f64,
+    #[serde(default, skip_serializing)]
+    model_pricing_overrides: Vec<LegacyModelPricingOverride>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+struct LegacyModelPricingOverride {
+    model: String,
+    enabled: bool,
+    rates: ModelPricingRates,
+}
+
+impl Default for AppSettings {
+    fn default() -> Self {
+        Self {
+            database_path: None,
+            relay_pricing_providers: Some(Vec::new()),
+            openai_usd_per_rmb: default_openai_usd_per_rmb(),
+            model_pricing_overrides: Vec::new(),
+        }
+    }
+}
+
+impl AppSettings {
+    fn migrate_legacy_pricing_overrides(&mut self) {
+        if self.relay_pricing_providers.is_some() {
+            return;
+        }
+
+        let model_prices = self
+            .model_pricing_overrides
+            .iter()
+            .map(|setting| ProviderModelPricing {
+                model: setting.model.clone(),
+                rates: setting.rates.clone(),
+            })
+            .collect::<Vec<_>>();
+        self.relay_pricing_providers = Some(if model_prices.is_empty() {
+            Vec::new()
+        } else {
+            vec![RelayPricingProvider {
+                id: MIGRATED_RELAY_PROVIDER_ID.to_string(),
+                name: "Migrated relay".to_string(),
+                enabled: false,
+                recharge_ratio_usd_per_rmb: None,
+                model_prices,
+            }]
+        });
+    }
+
+    fn pricing_configuration(&self) -> (Vec<RelayPricingProvider>, f64) {
+        let openai_usd_per_rmb =
+            if self.openai_usd_per_rmb.is_finite() && self.openai_usd_per_rmb > 0.0 {
+                self.openai_usd_per_rmb
+            } else {
+                default_openai_usd_per_rmb()
+            };
+
+        (
+            self.relay_pricing_providers.clone().unwrap_or_default(),
+            openai_usd_per_rmb,
+        )
+    }
 }
 
 impl AppState {
@@ -76,8 +147,7 @@ impl AppState {
         let mut settings =
             load_app_settings(&settings_path, &legacy_app_settings_paths(&codex_home_path))
                 .unwrap_or_default();
-        settings.model_pricing_overrides =
-            normalize_pricing_overrides(&settings.model_pricing_overrides);
+        settings.migrate_legacy_pricing_overrides();
         let database_config =
             resolve_database_config(&codex_home_path, env_database_path.clone(), &settings);
         let time_zone = env::var("TZ")
@@ -107,19 +177,19 @@ impl AppState {
             .map_err(|_| anyhow::anyhow!("database config lock poisoned"))?
             .path
             .clone();
-        let pricing_overrides = self
+        let (relay_pricing_providers, openai_usd_per_rmb) = self
             .settings
             .lock()
             .map_err(|_| anyhow::anyhow!("app settings lock poisoned"))?
-            .model_pricing_overrides
-            .clone();
+            .pricing_configuration();
 
         UsageRepository::new(UsageRepositoryConfig {
             codex_home_path: self.codex_home_path.clone(),
             database_path,
             time_zone: self.time_zone.clone(),
             parse_version: self.parse_version,
-            pricing_overrides,
+            relay_pricing_providers,
+            openai_usd_per_rmb,
         })
     }
 
@@ -244,12 +314,14 @@ impl AppState {
             anyhow::bail!("database path cannot be empty");
         }
 
+        let (relay_pricing_providers, openai_usd_per_rmb) = self.current_pricing_configuration()?;
         let repository = UsageRepository::new(UsageRepositoryConfig {
             codex_home_path: self.codex_home_path.clone(),
             database_path: database_path.clone(),
             time_zone: self.time_zone.clone(),
             parse_version: self.parse_version,
-            pricing_overrides: self.current_pricing_overrides()?,
+            relay_pricing_providers,
+            openai_usd_per_rmb,
         })?;
 
         self.update_settings(|settings| {
@@ -277,12 +349,14 @@ impl AppState {
         }
 
         let database_path = default_database_path(&self.codex_home_path);
+        let (relay_pricing_providers, openai_usd_per_rmb) = self.current_pricing_configuration()?;
         let repository = UsageRepository::new(UsageRepositoryConfig {
             codex_home_path: self.codex_home_path.clone(),
             database_path,
             time_zone: self.time_zone.clone(),
             parse_version: self.parse_version,
-            pricing_overrides: self.current_pricing_overrides()?,
+            relay_pricing_providers,
+            openai_usd_per_rmb,
         })?;
 
         self.update_settings(|settings| {
@@ -300,22 +374,28 @@ impl AppState {
         Ok(())
     }
 
-    pub fn set_model_pricing_overrides(&self, overrides: Vec<ModelPricingOverride>) -> Result<()> {
+    pub fn set_pricing_providers(
+        &self,
+        relay_pricing_providers: Vec<RelayPricingProvider>,
+        openai_usd_per_rmb: f64,
+    ) -> Result<()> {
         let _sync_guard = self.lock_available_operation()?;
-        let overrides = validate_pricing_overrides(&overrides)?;
+        let relay_pricing_providers = validate_relay_pricing_providers(&relay_pricing_providers)?;
+        let openai_usd_per_rmb = validate_openai_usd_per_rmb(openai_usd_per_rmb)?;
         self.update_settings(move |settings| {
-            settings.model_pricing_overrides = overrides;
+            settings.relay_pricing_providers = Some(relay_pricing_providers);
+            settings.openai_usd_per_rmb = openai_usd_per_rmb;
+            settings.model_pricing_overrides.clear();
         })?;
-        self.invalidate_sync_preview_cache()?;
         Ok(())
     }
 
-    fn current_pricing_overrides(&self) -> Result<Vec<ModelPricingOverride>> {
+    fn current_pricing_configuration(&self) -> Result<(Vec<RelayPricingProvider>, f64)> {
         let settings = self
             .settings
             .lock()
             .map_err(|_| anyhow::anyhow!("app settings lock poisoned"))?;
-        Ok(settings.model_pricing_overrides.clone())
+        Ok(settings.pricing_configuration())
     }
 
     fn update_settings<F>(&self, update: F) -> Result<()>
@@ -531,10 +611,7 @@ mod tests {
         AppState {
             codex_home_path: PathBuf::from("/tmp/home/.codex"),
             settings_path: PathBuf::from("/tmp/home/.codex/.tokenledger/settings.json"),
-            settings: Mutex::new(AppSettings {
-                model_pricing_overrides: crate::pricing::default_model_pricing_overrides(),
-                ..AppSettings::default()
-            }),
+            settings: Mutex::new(AppSettings::default()),
             database_config: Mutex::new(DatabaseConfigState {
                 path: PathBuf::from("/tmp/home/.codex/.codex-usage/usage.sqlite"),
                 source: DatabasePathSource::Default,
@@ -736,7 +813,9 @@ mod tests {
         let settings_path = app_settings_path(temp_dir.path());
         let expected = AppSettings {
             database_path: Some(temp_dir.path().join("usage.sqlite").display().to_string()),
-            model_pricing_overrides: crate::pricing::default_model_pricing_overrides(),
+            relay_pricing_providers: Some(Vec::new()),
+            openai_usd_per_rmb: crate::pricing::DEFAULT_OPENAI_USD_PER_RMB,
+            model_pricing_overrides: Vec::new(),
         };
 
         save_app_settings(&settings_path, &expected).expect("save settings");
@@ -747,7 +826,49 @@ mod tests {
     }
 
     #[test]
-    fn pricing_update_preserves_database_path_setting() {
+    fn legacy_pricing_overrides_migrate_once_to_a_disabled_relay() {
+        let mut settings: AppSettings = serde_json::from_str(
+            r#"{
+              "modelPricingOverrides": [
+                {
+                  "model": "gpt-5.6-sol",
+                  "enabled": true,
+                  "rates": {
+                    "inputUsdPerMillion": 9.0,
+                    "outputUsdPerMillion": 54.0,
+                    "cacheReadUsdPerMillion": 0.9,
+                    "cacheCreationUsdPerMillion": 11.25
+                  }
+                }
+              ]
+            }"#,
+        )
+        .expect("parse legacy settings");
+
+        settings.migrate_legacy_pricing_overrides();
+        settings.migrate_legacy_pricing_overrides();
+
+        let providers = settings
+            .relay_pricing_providers
+            .as_ref()
+            .expect("migration marker");
+        assert_eq!(providers.len(), 1);
+        assert_eq!(providers[0].id, crate::pricing::MIGRATED_RELAY_PROVIDER_ID);
+        assert_eq!(providers[0].name, "Migrated relay");
+        assert!(!providers[0].enabled);
+        assert_eq!(providers[0].recharge_ratio_usd_per_rmb, None);
+        assert_eq!(
+            providers[0].model_prices[0].rates.output_usd_per_million,
+            54.0
+        );
+
+        let serialized = serde_json::to_string(&settings).expect("serialize migrated settings");
+        assert!(serialized.contains("relayPricingProviders"));
+        assert!(!serialized.contains("modelPricingOverrides"));
+    }
+
+    #[test]
+    fn pricing_provider_update_preserves_database_path_setting() {
         let temp_dir = TempDir::new().expect("temp dir");
         let mut app_state = app_state_for_tests();
         app_state.settings_path = app_settings_path(temp_dir.path());
@@ -757,12 +878,17 @@ mod tests {
             .lock()
             .expect("app settings lock")
             .database_path = Some(database_path.display().to_string());
-        let mut overrides = crate::pricing::default_model_pricing_overrides();
-        overrides[0].enabled = true;
+        let relays = vec![crate::pricing::RelayPricingProvider {
+            id: "relay-a".to_string(),
+            name: "Relay A".to_string(),
+            enabled: false,
+            recharge_ratio_usd_per_rmb: Some(0.14),
+            model_prices: Vec::new(),
+        }];
 
         app_state
-            .set_model_pricing_overrides(overrides.clone())
-            .expect("update model pricing");
+            .set_pricing_providers(relays.clone(), 0.14)
+            .expect("update pricing providers");
 
         let saved = load_app_settings(
             &app_state.settings_path,
@@ -773,7 +899,7 @@ mod tests {
             saved.database_path,
             Some(database_path.display().to_string())
         );
-        assert_eq!(saved.model_pricing_overrides, overrides);
+        assert_eq!(saved.relay_pricing_providers, Some(relays));
     }
 
     #[test]

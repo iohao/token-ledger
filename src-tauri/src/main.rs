@@ -54,6 +54,11 @@ fn build_app_menu<R: tauri::Runtime>(handle: &tauri::AppHandle<R>) -> tauri::Res
                 .accelerator("CmdOrCtrl+4")
                 .build(handle)?,
         )
+        .item(
+            &MenuItemBuilder::with_id("nav-relay-pricing", "Relay Pricing")
+                .accelerator("CmdOrCtrl+5")
+                .build(handle)?,
+        )
         .build()?;
 
     let window_menu = SubmenuBuilder::new(handle, "Window")
@@ -110,6 +115,11 @@ fn build_app_menu<R: tauri::Runtime>(handle: &tauri::AppHandle<R>) -> tauri::Res
                 .accelerator("CmdOrCtrl+4")
                 .build(handle)?,
         )
+        .item(
+            &MenuItemBuilder::with_id("nav-relay-pricing", "Relay Pricing")
+                .accelerator("CmdOrCtrl+5")
+                .build(handle)?,
+        )
         .build()?;
 
     let window_menu = SubmenuBuilder::new(handle, "Window")
@@ -118,9 +128,7 @@ fn build_app_menu<R: tauri::Runtime>(handle: &tauri::AppHandle<R>) -> tauri::Res
         .close_window()
         .build()?;
 
-    let help_menu = SubmenuBuilder::new(handle, "Help")
-        .about(None)
-        .build()?;
+    let help_menu = SubmenuBuilder::new(handle, "Help").about(None).build()?;
 
     MenuBuilder::new(handle)
         .items(&[&file_menu, &edit_menu, &view_menu, &window_menu, &help_menu])
@@ -137,25 +145,26 @@ fn main() {
             app.set_menu(menu)?;
             Ok(())
         })
-        .on_menu_event(|app, event| {
-            match event.id().as_ref() {
-                "settings" => {
-                    let _ = app.emit("open-settings", ());
-                }
-                "nav-overview" => {
-                    let _ = app.emit("navigate-tab", "overview");
-                }
-                "nav-daily-detail" => {
-                    let _ = app.emit("navigate-tab", "dailyDetail");
-                }
-                "nav-monthly-history" => {
-                    let _ = app.emit("navigate-tab", "monthlyHistory");
-                }
-                "nav-monthly-detail" => {
-                    let _ = app.emit("navigate-tab", "monthlyDetail");
-                }
-                _ => {}
+        .on_menu_event(|app, event| match event.id().as_ref() {
+            "settings" => {
+                let _ = app.emit("open-settings", ());
             }
+            "nav-overview" => {
+                let _ = app.emit("navigate-tab", "overview");
+            }
+            "nav-daily-detail" => {
+                let _ = app.emit("navigate-tab", "dailyDetail");
+            }
+            "nav-monthly-history" => {
+                let _ = app.emit("navigate-tab", "monthlyHistory");
+            }
+            "nav-monthly-detail" => {
+                let _ = app.emit("navigate-tab", "monthlyDetail");
+            }
+            "nav-relay-pricing" => {
+                let _ = app.emit("navigate-tab", "relayPricing");
+            }
+            _ => {}
         })
         .invoke_handler(tauri::generate_handler![
             commands::ping,
@@ -170,9 +179,8 @@ fn main() {
             commands::query_daily_usage,
             commands::set_database_path,
             commands::reset_database_path,
-            commands::set_model_pricing_settings
+            commands::set_pricing_providers
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
-

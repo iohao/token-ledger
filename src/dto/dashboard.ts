@@ -31,6 +31,37 @@ export interface ModelPricingSettingDTO {
   relayRates: ModelPricingRatesDTO;
 }
 
+export interface ProviderModelPricingDTO {
+  model: string;
+  rates: ModelPricingRatesDTO;
+}
+
+export interface RelayPricingProviderDTO {
+  id: string;
+  name: string;
+  enabled: boolean;
+  rechargeRatioUsdPerRmb: number | null;
+  modelPrices: ProviderModelPricingDTO[];
+}
+
+export interface PricingProviderDTO extends RelayPricingProviderDTO {
+  kind: "official" | "relay";
+}
+
+export interface ProviderCostComparisonDTO {
+  providerId: string;
+  isComplete: boolean;
+  costUsd: number | null;
+  costCny: number | null;
+  fallbackModels: string[];
+  unpricedModels: string[];
+}
+
+export interface PricingComparisonDTO {
+  period: UsagePeriod;
+  providers: ProviderCostComparisonDTO[];
+}
+
 export interface ModelUsageBreakdownDTO {
   model: string;
   isFallback: boolean;
@@ -96,8 +127,7 @@ export interface DashboardMetaDTO {
   databasePathEditable: boolean;
   timeZone: string;
   parseVersion: number;
-  pricingNotes: string[];
-  modelPricingSettings: ModelPricingSettingDTO[];
+  pricingProviders: PricingProviderDTO[];
 }
 
 export interface DashboardPayloadDTO {
@@ -105,6 +135,7 @@ export interface DashboardPayloadDTO {
   status: SyncStatusDTO;
   syncPreview: SyncPreviewDTO | null;
   summaries: UsageSummaryDTO[];
+  providerCostComparisons: PricingComparisonDTO[];
   dailyHistory: DailyUsageSummaryDTO[];
   activityHistory: DailyUsageSummaryDTO[];
   monthlyHistory: MonthlyUsageSummaryDTO[];

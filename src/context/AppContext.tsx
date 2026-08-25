@@ -10,8 +10,7 @@ import {
   queryDailyUsage,
   resetDatabasePath,
   startSync,
-  updateDatabasePath,
-  updateModelPricingSettings
+  updateDatabasePath
 } from "../api/tauri";
 import {
   checkForPendingAppUpdate,
@@ -23,9 +22,6 @@ import { useDeferredTasks } from "../hooks/useDeferredTasks";
 import type {
   DailyUsageSummaryDTO,
   DashboardPayloadDTO,
-  ModelPricingOverrideDTO,
-  ModelPricingRatesDTO,
-  ModelPricingSettingDTO,
   SyncProgressDTO,
   SyncPreviewDTO,
   SyncStatusDTO
@@ -43,16 +39,12 @@ import {
   DAILY_DETAIL_PAGE_SIZE,
   MAX_DAILY_DETAIL_RANGE_DAYS,
   PAGE_SOURCE_VISIBILITY_STORAGE_KEY,
-  PRICING_RATE_FIELDS,
-  RELAY_PRICING_PRESETS,
   SYNC_PROGRESS_EVENT_NAME,
   SYNC_STATUS_POLL_INTERVAL_MS,
   type AppTab,
   type AutoSyncModeValue,
   type InlineNoticeTone,
-  type ModelPricingDraft,
   type PageSourceId,
-  type PricingRateField,
   type ThemeMode,
   type UpdateStatus
 } from "../types";
@@ -60,8 +52,7 @@ import {
   dateRangeDayCount,
   formatCountdown,
   formatDateInputValue,
-  formatInteger,
-  formatPricingInput
+  formatInteger
 } from "../utils/format";
 import { applyTheme, detectInitialThemeMode, systemThemeQuery } from "../utils/theme";
 import { dateRangeForMonth } from "../views/MonthlyDetailView";
@@ -73,7 +64,6 @@ export interface AppContextType {
   isLoading: boolean;
   isSyncing: boolean;
   isUpdatingDatabasePath: boolean;
-  isUpdatingModelPricing: boolean;
   errorMessage: string | null;
   locale: Locale;
   themeMode: ThemeMode;
@@ -85,10 +75,6 @@ export interface AppContextType {
   databasePathDraft: string;
   databasePathDraftDirty: boolean;
   databasePathNotice: { tone: InlineNoticeTone; text: string } | null;
-  modelPricingDraft: ModelPricingDraft[];
-  modelPricingDraftDirty: boolean;
-  modelPricingErrors: Record<string, string>;
-  modelPricingNotice: { tone: InlineNoticeTone; text: string } | null;
   dailyDetailRows: DailyUsageSummaryDTO[];
   dailyDetailStartDate: string;
   dailyDetailEndDate: string;
@@ -129,10 +115,6 @@ export interface AppContextType {
   loadMonthlyDetails: (month?: number | null) => Promise<void>;
   saveDatabasePathOverride: () => Promise<void>;
   resetDatabasePathOverride: () => Promise<void>;
-  saveModelPricingSettings: () => Promise<void>;
-  resetModelPricingPresetDraft: () => void;
-  updateModelPricingRate: (model: string, field: PricingRateField, val: string) => void;
-  toggleModelPricingEnabled: (model: string, enabled: boolean) => void;
   checkForAppUpdates: (manual?: boolean) => Promise<void>;
   installAppUpdate: () => Promise<void>;
   openSourceRepositoryInBrowser: () => Promise<void>;
@@ -164,7 +146,7 @@ function detectInitialTab(): AppTab {
   if (tab === "syncInfo") {
     return "settings";
   }
-  return tab === "overview" || tab === "monthlyHistory" || tab === "monthlyDetail" || tab === "settings" || tab === "dailyDetail"
+  return tab === "overview" || tab === "monthlyHistory" || tab === "monthlyDetail" || tab === "settings" || tab === "dailyDetail" || tab === "relayPricing"
     ? tab
     : "overview";
 }
@@ -199,10 +181,6 @@ export function syncProgressSnapshot(
   };
 }
 
-export function pricingErrorKey(model: string, field: PricingRateField): string {
-  return `${model}:${field}`;
-}
-
 const isMacLikePlatform =
   typeof navigator !== "undefined" &&
   (/Mac|iPod|iPhone|iPad/.test(navigator.userAgent) || /Mac/i.test(navigator.platform || ""));
@@ -214,7 +192,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [isUpdatingDatabasePath, setIsUpdatingDatabasePath] = useState<boolean>(false);
-  const [isUpdatingModelPricing, setIsUpdatingModelPricing] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [locale, setLocaleState] = useState<Locale>(detectInitialLocale);
   const [themeMode, setThemeModeState] = useState<ThemeMode>(detectInitialThemeMode);
@@ -228,10 +205,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [databasePathDraft, setDatabasePathDraftState] = useState<string>("");
   const [databasePathDraftDirty, setDatabasePathDraftDirty] = useState<boolean>(false);
   const [databasePathNotice, setDatabasePathNotice] = useState<{ tone: InlineNoticeTone; text: string } | null>(null);
-  const [modelPricingDraft, setModelPricingDraft] = useState<ModelPricingDraft[]>([]);
-  const [modelPricingDraftDirty, setModelPricingDraftDirty] = useState<boolean>(false);
-  const [modelPricingErrors, setModelPricingErrors] = useState<Record<string, string>>({});
-  const [modelPricingNotice, setModelPricingNotice] = useState<{ tone: InlineNoticeTone; text: string } | null>(null);
 
   // Daily Detail state
   const [dailyDetailRows, setDailyDetailRows] = useState<DailyUsageSummaryDTO[]>([]);
@@ -280,14 +253,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     isSyncing,
     isLoading,
     isUpdatingDatabasePath,
-    isUpdatingModelPricing,
     dashboard,
     syncPreview,
     syncProgress,
     databasePathDraft,
     databasePathDraftDirty,
-    modelPricingDraft,
-    modelPricingDraftDirty,
     dailyDetailStartDate,
     dailyDetailEndDate,
     dailyDetailRows,
@@ -314,14 +284,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       isSyncing,
       isLoading,
       isUpdatingDatabasePath,
-      isUpdatingModelPricing,
       dashboard,
       syncPreview,
       syncProgress,
       databasePathDraft,
       databasePathDraftDirty,
-      modelPricingDraft,
-      modelPricingDraftDirty,
       dailyDetailStartDate,
       dailyDetailEndDate,
       dailyDetailRows,
@@ -419,26 +386,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setDatabasePathDraftDirty(false);
   }, []);
 
-  const syncModelPricingDraft = useCallback((settings: ModelPricingSettingDTO[], force = false) => {
-    if (!force && stateRef.current.modelPricingDraftDirty) {
-      return;
-    }
-    setModelPricingDraft(
-      settings.map((setting) => ({
-        model: setting.model,
-        enabled: setting.relayEnabled,
-        rates: {
-          inputUsdPerMillion: formatPricingInput(setting.relayRates.inputUsdPerMillion),
-          outputUsdPerMillion: formatPricingInput(setting.relayRates.outputUsdPerMillion),
-          cacheReadUsdPerMillion: formatPricingInput(setting.relayRates.cacheReadUsdPerMillion),
-          cacheCreationUsdPerMillion: formatPricingInput(setting.relayRates.cacheCreationUsdPerMillion)
-        }
-      }))
-    );
-    setModelPricingDraftDirty(false);
-    setModelPricingErrors({});
-  }, []);
-
   const applyDashboardPayload = useCallback(
     (payload: DashboardPayloadDTO, forceDatabasePathDraft = false, resetSyncPreview = false) => {
       setDashboard(payload);
@@ -453,9 +400,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       initializeDailyDetailRange(payload.meta.timeZone, payload.now);
       initializeMonthlyDetailSelection(payload.meta.timeZone, payload.now);
       syncDatabasePathDraft(payload.meta.databasePath, forceDatabasePathDraft);
-      syncModelPricingDraft(payload.meta.modelPricingSettings);
     },
-    [initializeDailyDetailRange, initializeMonthlyDetailSelection, syncDatabasePathDraft, syncModelPricingDraft]
+    [initializeDailyDetailRange, initializeMonthlyDetailSelection, syncDatabasePathDraft]
   );
 
   const loadSyncPreview = useCallback(async (expectedSyncGeneration = syncGenerationRef.current) => {
@@ -884,124 +830,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [applyDashboardPayload, loadSyncPreview]);
 
-  const validatePricingRate = useCallback((value: string): string | null => {
-    if (!value.trim()) {
-      return t(stateRef.current.locale, "pricingRequiredError");
-    }
-    const parsed = Number(value);
-    if (!Number.isFinite(parsed) || parsed < 0) {
-      return t(stateRef.current.locale, "pricingInvalidError");
-    }
-    return null;
-  }, []);
-
-  const updateModelPricingRate = useCallback(
-    (model: string, field: PricingRateField, val: string) => {
-      setModelPricingDraft((prev) =>
-        prev.map((d) => (d.model === model ? { ...d, rates: { ...d.rates, [field]: val } } : d))
-      );
-      setModelPricingDraftDirty(true);
-      setModelPricingNotice(null);
-      const errorKey = pricingErrorKey(model, field);
-      const error = validatePricingRate(val);
-      setModelPricingErrors((prev) => {
-        const next = { ...prev };
-        if (error) {
-          next[errorKey] = error;
-        } else {
-          delete next[errorKey];
-        }
-        return next;
-      });
-    },
-    [validatePricingRate]
-  );
-
-  const toggleModelPricingEnabled = useCallback((model: string, enabled: boolean) => {
-    setModelPricingDraft((prev) => prev.map((d) => (d.model === model ? { ...d, enabled } : d)));
-    setModelPricingDraftDirty(true);
-    setModelPricingNotice(null);
-  }, []);
-
-  const resetModelPricingPresetDraft = useCallback(() => {
-    if (stateRef.current.isLoading || stateRef.current.isSyncing || stateRef.current.isUpdatingModelPricing) {
-      return;
-    }
-    setModelPricingDraft((prev) =>
-      prev.map((draft) => {
-        const preset = RELAY_PRICING_PRESETS[draft.model];
-        if (!preset) {
-          return draft;
-        }
-        return {
-          ...draft,
-          rates: {
-            inputUsdPerMillion: formatPricingInput(preset.inputUsdPerMillion),
-            outputUsdPerMillion: formatPricingInput(preset.outputUsdPerMillion),
-            cacheReadUsdPerMillion: formatPricingInput(preset.cacheReadUsdPerMillion),
-            cacheCreationUsdPerMillion: formatPricingInput(preset.cacheCreationUsdPerMillion)
-          }
-        };
-      })
-    );
-    setModelPricingDraftDirty(true);
-    setModelPricingErrors({});
-    setModelPricingNotice(null);
-  }, []);
-
-  const saveModelPricingSettings = useCallback(async () => {
-    if (stateRef.current.isLoading || stateRef.current.isSyncing || stateRef.current.isUpdatingModelPricing) {
-      return;
-    }
-
-    const errors: Record<string, string> = {};
-    const settings = stateRef.current.modelPricingDraft.map((draft) => {
-      const rates = {} as ModelPricingRatesDTO;
-      for (const field of PRICING_RATE_FIELDS) {
-        const error = validatePricingRate(draft.rates[field]);
-        if (error) {
-          errors[pricingErrorKey(draft.model, field)] = error;
-        }
-        rates[field] = Number(draft.rates[field]);
-      }
-      return {
-        model: draft.model,
-        enabled: draft.enabled,
-        rates
-      };
-    });
-
-    setModelPricingErrors(errors);
-    if (Object.keys(errors).length > 0) {
-      setModelPricingNotice({ tone: "bad", text: t(stateRef.current.locale, "pricingValidationError") });
-      return;
-    }
-
-    setIsUpdatingModelPricing(true);
-    setModelPricingNotice(null);
-
-    try {
-      const payload = await updateModelPricingSettings(settings as ModelPricingOverrideDTO[]);
-      setModelPricingDraftDirty(false);
-      applyDashboardPayload(payload, false, true);
-      setDailyDetailRows([]);
-      setDailyDetailsError(null);
-      setHasLoadedDailyDetails(false);
-      setMonthlyDetailRows([]);
-      setMonthlyDetailsError(null);
-      setHasLoadedMonthlyDetails(false);
-      setModelPricingNotice({ tone: "good", text: t(stateRef.current.locale, "pricingSaved") });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      setModelPricingNotice({
-        tone: "bad",
-        text: translateErrorMessage(stateRef.current.locale, message)
-      });
-    } finally {
-      setIsUpdatingModelPricing(false);
-    }
-  }, [applyDashboardPayload, validatePricingRate]);
-
   const checkForAppUpdates = useCallback(async (manual = false) => {
     if (stateRef.current.updateStatus === "checking" || stateRef.current.isInstallingUpdate) {
       return;
@@ -1114,7 +942,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       } else if (event.key === "4" || event.code === "Digit4" || event.code === "Numpad4") {
         targetTab = "monthlyDetail";
       } else if (event.key === "5" || event.code === "Digit5" || event.code === "Numpad5") {
-        targetTab = "settings";
+        targetTab = "relayPricing";
       }
 
       if (targetTab) {
@@ -1223,7 +1051,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     isLoading,
     isSyncing,
     isUpdatingDatabasePath,
-    isUpdatingModelPricing,
     errorMessage,
     locale,
     themeMode,
@@ -1235,10 +1062,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     databasePathDraft,
     databasePathDraftDirty,
     databasePathNotice,
-    modelPricingDraft,
-    modelPricingDraftDirty,
-    modelPricingErrors,
-    modelPricingNotice,
     dailyDetailRows,
     dailyDetailStartDate,
     dailyDetailEndDate,
@@ -1277,10 +1100,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     loadMonthlyDetails,
     saveDatabasePathOverride,
     resetDatabasePathOverride,
-    saveModelPricingSettings,
-    resetModelPricingPresetDraft,
-    updateModelPricingRate,
-    toggleModelPricingEnabled,
     checkForAppUpdates,
     installAppUpdate,
     openSourceRepositoryInBrowser

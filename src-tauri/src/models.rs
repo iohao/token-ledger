@@ -3,7 +3,7 @@ use std::cmp::Ordering;
 use chrono::{DateTime, SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::pricing::ModelPricingSetting;
+use crate::pricing::PricingProvider;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -157,8 +157,25 @@ pub struct DashboardMeta {
     pub database_path_editable: bool,
     pub time_zone: String,
     pub parse_version: i32,
-    pub pricing_notes: Vec<String>,
-    pub model_pricing_settings: Vec<ModelPricingSetting>,
+    pub pricing_providers: Vec<PricingProvider>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProviderCostComparison {
+    pub provider_id: String,
+    pub is_complete: bool,
+    pub cost_usd: Option<f64>,
+    pub cost_cny: Option<f64>,
+    pub fallback_models: Vec<String>,
+    pub unpriced_models: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PricingComparison {
+    pub period: UsagePeriod,
+    pub providers: Vec<ProviderCostComparison>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -168,6 +185,7 @@ pub struct DashboardPayload {
     pub status: SyncStatus,
     pub sync_preview: Option<SyncPreview>,
     pub summaries: Vec<UsageSummary>,
+    pub provider_cost_comparisons: Vec<PricingComparison>,
     pub daily_history: Vec<DailyUsageSummary>,
     pub activity_history: Vec<DailyUsageSummary>,
     pub monthly_history: Vec<MonthlyUsageSummary>,

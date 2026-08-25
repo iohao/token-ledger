@@ -3,6 +3,7 @@ import {
   CalendarDays,
   CalendarRange,
   ChartNoAxesCombined,
+  CircleDollarSign,
   LayoutDashboard,
   Settings
 } from "lucide-react";
@@ -71,6 +72,19 @@ export const Sidebar: React.FC = () => {
         </div>
       </nav>
       <div className="sidebar-footer">
+        <button
+          className={`menu-item ${activeTab === "relayPricing" ? "is-active" : ""}`}
+          type="button"
+          title={`${t("navRelayPricing")} (${modKey}5)`}
+          aria-current={activeTab === "relayPricing" ? "page" : "false"}
+          onClick={() => setActiveTab("relayPricing")}
+        >
+          <span className="menu-item-icon">
+            <CircleDollarSign size={18} />
+          </span>
+          <span className="menu-item-label">{t("navRelayPricing")}</span>
+          <kbd className="menu-item-shortcut">{modKey}5</kbd>
+        </button>
         <button
           className={`menu-item ${activeTab === "settings" ? "is-active" : ""}`}
           type="button"

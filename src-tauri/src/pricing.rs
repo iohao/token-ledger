@@ -1,11 +1,24 @@
-use std::collections::HashMap;
+use std::collections::HashSet;
 
 use anyhow::{bail, Result};
 use serde::{Deserialize, Serialize};
 
-use crate::models::UsageTotals;
+use crate::models::{ModelUsageBreakdown, UsageTotals};
 
-const RELAY_MODELS: [&str; 3] = ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"];
+pub const OPENAI_OFFICIAL_PROVIDER_ID: &str = "openai-official";
+pub const MIGRATED_RELAY_PROVIDER_ID: &str = "migrated-relay";
+pub const DEFAULT_OPENAI_USD_PER_RMB: f64 = 0.14;
+
+const OFFICIAL_MODELS: [&str; 8] = [
+    "gpt-5.6-sol",
+    "gpt-5.6-terra",
+    "gpt-5.6-luna",
+    "gpt-5.5",
+    "gpt-5.4",
+    "gpt-5.4-mini",
+    "gpt-5.3-codex",
+    "gpt-5.3-codex-spark",
+];
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -18,19 +31,45 @@ pub struct ModelPricingRates {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
-pub struct ModelPricingOverride {
+pub struct ProviderModelPricing {
     pub model: String,
-    pub enabled: bool,
     pub rates: ModelPricingRates,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
-pub struct ModelPricingSetting {
-    pub model: String,
-    pub relay_enabled: bool,
-    pub official_rates: ModelPricingRates,
-    pub relay_rates: ModelPricingRates,
+pub struct RelayPricingProvider {
+    pub id: String,
+    pub name: String,
+    pub enabled: bool,
+    pub recharge_ratio_usd_per_rmb: Option<f64>,
+    #[serde(default)]
+    pub model_prices: Vec<ProviderModelPricing>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum PricingProviderKind {
+    Official,
+    Relay,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct PricingProvider {
+    pub id: String,
+    pub kind: PricingProviderKind,
+    pub name: String,
+    pub enabled: bool,
+    pub recharge_ratio_usd_per_rmb: Option<f64>,
+    pub model_prices: Vec<ProviderModelPricing>,
+}
+
+#[derive(Debug, Default)]
+pub struct ProviderCostResult {
+    pub cost_usd: Option<f64>,
+    pub fallback_models: Vec<String>,
+    pub unpriced_models: Vec<String>,
 }
 
 pub fn normalize_model(raw_value: &str) -> String {
@@ -99,68 +138,149 @@ fn rates(
     }
 }
 
-fn relay_preset_for(model: &str) -> Option<ModelPricingRates> {
-    match model {
-        "gpt-5.6-sol" => Some(rates(9.0, 54.0, 0.9, 11.25)),
-        "gpt-5.6-terra" => Some(rates(4.5, 27.0, 0.45, 5.4)),
-        "gpt-5.6-luna" => Some(rates(1.8, 10.8, 0.18, 2.25)),
-        _ => None,
-    }
-}
-
-pub fn default_model_pricing_overrides() -> Vec<ModelPricingOverride> {
-    RELAY_MODELS
-        .iter()
-        .map(|model| ModelPricingOverride {
-            model: (*model).to_string(),
-            enabled: false,
-            rates: relay_preset_for(model).expect("relay model must have a preset"),
-        })
-        .collect()
-}
-
-pub fn normalize_pricing_overrides(
-    overrides: &[ModelPricingOverride],
-) -> Vec<ModelPricingOverride> {
-    let stored = overrides
-        .iter()
-        .map(|setting| (setting.model.as_str(), setting))
-        .collect::<HashMap<_, _>>();
-
-    default_model_pricing_overrides()
-        .into_iter()
-        .map(|preset| {
-            stored
-                .get(preset.model.as_str())
-                .filter(|value| validate_rates(&value.rates, &value.model).is_ok())
-                .map_or(preset, |value| (*value).clone())
-        })
-        .collect()
-}
-
-pub fn validate_pricing_overrides(
-    overrides: &[ModelPricingOverride],
-) -> Result<Vec<ModelPricingOverride>> {
-    if overrides.len() != RELAY_MODELS.len() {
-        bail!("pricing settings must include exactly three supported models");
-    }
-
-    let mut normalized = Vec::with_capacity(RELAY_MODELS.len());
-    for model in RELAY_MODELS {
-        let matches = overrides
+pub fn pricing_providers(
+    relays: &[RelayPricingProvider],
+    openai_usd_per_rmb: f64,
+) -> Vec<PricingProvider> {
+    let official = PricingProvider {
+        id: OPENAI_OFFICIAL_PROVIDER_ID.to_string(),
+        kind: PricingProviderKind::Official,
+        name: "OpenAI 官方".to_string(),
+        enabled: true,
+        recharge_ratio_usd_per_rmb: Some(openai_usd_per_rmb),
+        model_prices: OFFICIAL_MODELS
             .iter()
-            .filter(|setting| setting.model == model)
-            .collect::<Vec<_>>();
-        if matches.len() != 1 {
-            bail!("pricing settings must include model {model} exactly once");
+            .filter_map(|model| {
+                official_pricing_for(model).map(|rates| ProviderModelPricing {
+                    model: (*model).to_string(),
+                    rates,
+                })
+            })
+            .collect(),
+    };
+
+    std::iter::once(official)
+        .chain(relays.iter().cloned().map(|relay| PricingProvider {
+            id: relay.id,
+            kind: PricingProviderKind::Relay,
+            name: relay.name,
+            enabled: relay.enabled,
+            recharge_ratio_usd_per_rmb: relay.recharge_ratio_usd_per_rmb,
+            model_prices: relay.model_prices,
+        }))
+        .collect()
+}
+
+pub fn validate_relay_pricing_providers(
+    providers: &[RelayPricingProvider],
+) -> Result<Vec<RelayPricingProvider>> {
+    let mut ids = HashSet::new();
+    let mut normalized = Vec::with_capacity(providers.len());
+
+    for provider in providers {
+        let id = provider.id.trim();
+        let name = provider.name.trim();
+        if id.is_empty() {
+            bail!("relay provider id is required");
+        }
+        if id == OPENAI_OFFICIAL_PROVIDER_ID {
+            bail!("OpenAI official provider id is reserved");
+        }
+        if !ids.insert(id.to_string()) {
+            bail!("relay provider id must be unique");
+        }
+        if name.is_empty() {
+            bail!("relay provider name is required");
         }
 
-        let setting = matches[0];
-        validate_rates(&setting.rates, model)?;
-        normalized.push(setting.clone());
+        let recharge_ratio_usd_per_rmb = provider.recharge_ratio_usd_per_rmb;
+        if let Some(ratio) = recharge_ratio_usd_per_rmb {
+            if !ratio.is_finite() || ratio <= 0.0 {
+                bail!("{name} recharge ratio must be a positive finite number");
+            }
+        } else if provider.enabled || id != MIGRATED_RELAY_PROVIDER_ID {
+            bail!("{name} needs a recharge ratio before it can be saved");
+        }
+
+        let mut models = HashSet::new();
+        let mut model_prices = Vec::with_capacity(provider.model_prices.len());
+        for price in &provider.model_prices {
+            let model = price.model.trim();
+            if model.is_empty() {
+                bail!("{name} model name is required");
+            }
+            let identity = pricing_identity(model);
+            if !models.insert(identity) {
+                bail!("{name} has duplicate model pricing for {model}");
+            }
+            validate_rates(&price.rates, model)?;
+            model_prices.push(ProviderModelPricing {
+                model: model.to_string(),
+                rates: price.rates.clone(),
+            });
+        }
+
+        normalized.push(RelayPricingProvider {
+            id: id.to_string(),
+            name: name.to_string(),
+            enabled: provider.enabled,
+            recharge_ratio_usd_per_rmb,
+            model_prices,
+        });
     }
 
     Ok(normalized)
+}
+
+pub fn validate_openai_usd_per_rmb(value: f64) -> Result<f64> {
+    if !value.is_finite() || value <= 0.0 {
+        bail!("OpenAI recharge ratio must be a positive finite number");
+    }
+    Ok(value)
+}
+
+pub fn cost_for(totals: &UsageTotals, model: &str) -> f64 {
+    official_pricing_for(model)
+        .as_ref()
+        .map_or(0.0, |pricing| cost_for_rates(totals, pricing))
+}
+
+pub fn cost_for_provider(
+    models: &[ModelUsageBreakdown],
+    provider: &PricingProvider,
+) -> ProviderCostResult {
+    let mut total = 0.0;
+    let mut fallback_models = Vec::new();
+    let mut unpriced_models = Vec::new();
+
+    for usage in models {
+        let identity = pricing_identity(&usage.model);
+        let supplied_rates = provider
+            .model_prices
+            .iter()
+            .find(|price| pricing_identity(&price.model) == identity)
+            .map(|price| &price.rates);
+        let official_rates = official_pricing_for(&identity);
+
+        let Some((rates, is_fallback)) = supplied_rates
+            .map(|rates| (rates, false))
+            .or_else(|| official_rates.as_ref().map(|rates| (rates, true)))
+        else {
+            unpriced_models.push(usage.model.clone());
+            continue;
+        };
+
+        if is_fallback && !matches!(provider.kind, PricingProviderKind::Official) {
+            fallback_models.push(usage.model.clone());
+        }
+        total += cost_for_rates(&usage.totals, rates);
+    }
+
+    ProviderCostResult {
+        cost_usd: unpriced_models.is_empty().then_some(total),
+        fallback_models,
+        unpriced_models,
+    }
 }
 
 fn validate_rates(rates: &ModelPricingRates, model: &str) -> Result<()> {
@@ -177,38 +297,7 @@ fn validate_rates(rates: &ModelPricingRates, model: &str) -> Result<()> {
     Ok(())
 }
 
-pub fn model_pricing_settings(overrides: &[ModelPricingOverride]) -> Vec<ModelPricingSetting> {
-    normalize_pricing_overrides(overrides)
-        .into_iter()
-        .map(|setting| ModelPricingSetting {
-            official_rates: official_pricing_for(&setting.model)
-                .expect("relay model must have official pricing"),
-            model: setting.model,
-            relay_enabled: setting.enabled,
-            relay_rates: setting.rates,
-        })
-        .collect()
-}
-
-pub fn cost_for(totals: &UsageTotals, model: &str) -> f64 {
-    cost_for_with_overrides(totals, model, &[])
-}
-
-pub fn cost_for_with_overrides(
-    totals: &UsageTotals,
-    model: &str,
-    overrides: &[ModelPricingOverride],
-) -> f64 {
-    let identity = pricing_identity(model);
-    let relay_rates = overrides
-        .iter()
-        .find(|setting| setting.enabled && setting.model == identity)
-        .map(|setting| &setting.rates);
-    let official_rates = official_pricing_for(&identity);
-    let Some(pricing) = relay_rates.or(official_rates.as_ref()) else {
-        return 0.0;
-    };
-
+fn cost_for_rates(totals: &UsageTotals, pricing: &ModelPricingRates) -> f64 {
     let input_tokens = totals.input_tokens.max(0);
     let cache_read_tokens = totals.cached_input_tokens.clamp(0, input_tokens);
     let remaining_input_tokens = input_tokens - cache_read_tokens;
@@ -223,26 +312,13 @@ pub fn cost_for_with_overrides(
         + ((totals.output_tokens.max(0) as f64 / 1_000_000.0) * pricing.output_usd_per_million)
 }
 
-pub fn pricing_notes() -> Vec<String> {
-    vec![
-        "Official model prices are used unless a relay price override is enabled for that model."
-            .to_string(),
-        "Cache creation charges apply only when session logs provide cache_creation_input_tokens; records without that field use zero cache creation tokens."
-            .to_string(),
-        "GPT-5.5 / GPT-5.4 / GPT-5.4-mini / GPT-5.3-Codex rates use OpenAI Codex Rate Card values, converted from credits with a 25 credits = 1 USD inference."
-            .to_string(),
-        "GPT-5.3-Codex-Spark is still marked as not final by OpenAI; this dashboard estimates Spark cost using GPT-5.3-Codex rates."
-            .to_string(),
-    ]
-}
-
 #[cfg(test)]
 mod tests {
     use super::{
-        cost_for, cost_for_with_overrides, default_model_pricing_overrides, normalize_model,
-        normalize_pricing_overrides, validate_pricing_overrides,
+        cost_for, cost_for_provider, pricing_providers, validate_relay_pricing_providers,
+        ModelPricingRates, ProviderModelPricing, RelayPricingProvider,
     };
-    use crate::models::UsageTotals;
+    use crate::models::{ModelUsageBreakdown, UsageTotals};
 
     fn totals(
         input_tokens: i64,
@@ -273,70 +349,53 @@ mod tests {
     }
 
     #[test]
-    fn enabled_sol_override_prices_all_token_categories() {
-        let mut overrides = default_model_pricing_overrides();
-        overrides[0].enabled = true;
-
-        let cost = cost_for_with_overrides(
-            &totals(1_000_000, 200_000, 100_000, 100_000),
-            "openai/gpt-5.6-sol",
-            &overrides,
+    fn provider_pricing_falls_back_to_official_for_missing_models() {
+        let relay = RelayPricingProvider {
+            id: "relay-a".to_string(),
+            name: "Relay A".to_string(),
+            enabled: true,
+            recharge_ratio_usd_per_rmb: Some(0.14),
+            model_prices: vec![ProviderModelPricing {
+                model: "gpt-5.6-sol".to_string(),
+                rates: ModelPricingRates {
+                    input_usd_per_million: 10.5,
+                    output_usd_per_million: 63.0,
+                    cache_read_usd_per_million: 1.05,
+                    cache_creation_usd_per_million: 13.125,
+                },
+            }],
+        };
+        let providers = pricing_providers(&[relay], 0.14);
+        let result = cost_for_provider(
+            &[
+                ModelUsageBreakdown {
+                    model: "gpt-5.6-sol".to_string(),
+                    is_fallback: false,
+                    totals: totals(1_000_000, 200_000, 100_000, 100_000),
+                },
+                ModelUsageBreakdown {
+                    model: "gpt-5.4".to_string(),
+                    is_fallback: false,
+                    totals: totals(1_000_000, 0, 0, 0),
+                },
+            ],
+            &providers[1],
         );
 
-        assert!((cost - 13.005).abs() < 0.000_001, "unexpected cost: {cost}");
+        assert!((result.cost_usd.unwrap_or_default() - 17.6725).abs() < 0.000_001);
+        assert_eq!(result.fallback_models, vec!["gpt-5.4"]);
     }
 
     #[test]
-    fn generic_gpt_5_6_uses_sol_override() {
-        let mut overrides = default_model_pricing_overrides();
-        overrides[0].enabled = true;
+    fn enabled_provider_requires_a_recharge_ratio() {
+        let provider = RelayPricingProvider {
+            id: "legacy".to_string(),
+            name: "Migrated relay".to_string(),
+            enabled: true,
+            recharge_ratio_usd_per_rmb: None,
+            model_prices: vec![],
+        };
 
-        let cost = cost_for_with_overrides(
-            &totals(1_000_000, 200_000, 100_000, 100_000),
-            "gpt-5.6",
-            &overrides,
-        );
-
-        assert!((cost - 13.005).abs() < 0.000_001, "unexpected cost: {cost}");
-    }
-
-    #[test]
-    fn cache_categories_are_clamped_to_total_input() {
-        let mut overrides = default_model_pricing_overrides();
-        overrides[0].enabled = true;
-
-        let cost = cost_for_with_overrides(&totals(100, 80, 80, 0), "gpt-5.6-sol", &overrides);
-
-        assert!(
-            (cost - 0.000_297).abs() < 0.000_001,
-            "unexpected cost: {cost}"
-        );
-    }
-
-    #[test]
-    fn rejects_negative_prices() {
-        let mut overrides = default_model_pricing_overrides();
-        overrides[1].rates.input_usd_per_million = -1.0;
-
-        let error = validate_pricing_overrides(&overrides).expect_err("negative price must fail");
-
-        assert!(error.to_string().contains("non-negative finite number"));
-    }
-
-    #[test]
-    fn invalid_stored_override_falls_back_to_disabled_preset() {
-        let mut overrides = default_model_pricing_overrides();
-        overrides[0].enabled = true;
-        overrides[0].rates.input_usd_per_million = -1.0;
-
-        let normalized = normalize_pricing_overrides(&overrides);
-
-        assert!(!normalized[0].enabled);
-        assert_eq!(normalized[0].rates.input_usd_per_million, 9.0);
-    }
-
-    #[test]
-    fn normalizes_dated_gpt_5_5_snapshot() {
-        assert_eq!(normalize_model("openai/gpt-5.5-2026-04-24"), "gpt-5.5");
+        assert!(validate_relay_pricing_providers(&[provider]).is_err());
     }
 }

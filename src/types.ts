@@ -1,7 +1,6 @@
 import type {
   DailyUsageSummaryDTO,
   DashboardPayloadDTO,
-  ModelPricingRatesDTO,
   SyncProgressDTO,
   SyncPreviewDTO
 } from "./dto/dashboard";
@@ -29,42 +28,16 @@ export const ENGLISH_MONTH_LABELS = [
   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
 ] as const;
 export const SOURCE_REPOSITORY_URL = "https://github.com/iohao/token-ledger";
-export const PRICING_RATE_FIELDS = [
-  "inputUsdPerMillion",
-  "outputUsdPerMillion",
-  "cacheReadUsdPerMillion",
-  "cacheCreationUsdPerMillion"
-] as const;
-
-export function pricingRates(
-  inputUsdPerMillion: number,
-  outputUsdPerMillion: number,
-  cacheReadUsdPerMillion: number,
-  cacheCreationUsdPerMillion: number
-): ModelPricingRatesDTO {
-  return {
-    inputUsdPerMillion,
-    outputUsdPerMillion,
-    cacheReadUsdPerMillion,
-    cacheCreationUsdPerMillion
-  };
-}
-
-export const RELAY_PRICING_PRESETS: Record<string, ModelPricingRatesDTO> = {
-  "gpt-5.6-sol": pricingRates(9, 54, 0.9, 11.25),
-  "gpt-5.6-terra": pricingRates(4.5, 27, 0.45, 5.4),
-  "gpt-5.6-luna": pricingRates(1.8, 10.8, 0.18, 2.25)
-};
 
 export type AutoSyncModeValue = (typeof AUTO_SYNC_OPTIONS)[number]["value"];
-export type AppTab = "overview" | "monthlyHistory" | "monthlyDetail" | "settings" | "dailyDetail";
+export type AppTab = "overview" | "monthlyHistory" | "monthlyDetail" | "settings" | "dailyDetail" | "relayPricing";
 export type InlineNoticeTone = "good" | "bad";
 export type UpdateStatus = "idle" | "checking" | "available" | "upToDate" | "installing" | "error";
-export type PricingRateField = (typeof PRICING_RATE_FIELDS)[number];
 export type PageSourceId =
   | "src/views/OverviewView.tsx"
   | "src/views/MonthlyHistoryView.tsx"
   | "src/views/MonthlyDetailView.tsx"
+  | "src/views/RelayPricingView.tsx"
   | "src/views/SettingsView.tsx"
   | "src/views/DailyDetailView.tsx"
   | "src/views/overview.ts"
@@ -72,12 +45,6 @@ export type PageSourceId =
   | "src/views/monthly-detail.ts"
   | "src/views/settings.ts"
   | "src/views/daily-detail.ts";
-
-export type ModelPricingDraft = {
-  model: string;
-  enabled: boolean;
-  rates: Record<PricingRateField, string>;
-};
 
 export type ActivityWallCell = {
   dateKey: string | null;
@@ -99,7 +66,6 @@ export interface AppState {
   isLoading: boolean;
   isSyncing: boolean;
   isUpdatingDatabasePath: boolean;
-  isUpdatingModelPricing: boolean;
   errorMessage: string | null;
   locale: Locale;
   themeMode: ThemeMode;
@@ -110,10 +76,6 @@ export interface AppState {
   databasePathDraft: string;
   databasePathDraftDirty: boolean;
   databasePathNotice: { tone: InlineNoticeTone; text: string } | null;
-  modelPricingDraft: ModelPricingDraft[];
-  modelPricingDraftDirty: boolean;
-  modelPricingErrors: Record<string, string>;
-  modelPricingNotice: { tone: InlineNoticeTone; text: string } | null;
   dailyDetailRows: DailyUsageSummaryDTO[];
   dailyDetailStartDate: string;
   dailyDetailEndDate: string;

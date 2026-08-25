@@ -8,6 +8,7 @@ import { MonthlyHistoryView } from "./views/MonthlyHistoryView";
 import { MonthlyDetailView } from "./views/MonthlyDetailView";
 import { DailyDetailView } from "./views/DailyDetailView";
 import { SettingsView } from "./views/SettingsView";
+import { RelayPricingView } from "./views/RelayPricingView";
 import { statusLabel } from "./utils/format";
 
 export const AppContent: React.FC = () => {
@@ -57,6 +58,7 @@ export const AppContent: React.FC = () => {
             {activeTab === "monthlyHistory" && <MonthlyHistoryView />}
             {activeTab === "monthlyDetail" && <MonthlyDetailView />}
             {activeTab === "dailyDetail" && <DailyDetailView />}
+            {activeTab === "relayPricing" && <RelayPricingView />}
             {activeTab === "settings" && <SettingsView />}
           </div>
         </section>

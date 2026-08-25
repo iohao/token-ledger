@@ -8,14 +8,14 @@ import {
   isDemoMode,
   resetDemoDatabasePath,
   updateDemoDatabasePath,
-  updateDemoModelPricingSettings
+  updateDemoPricingProviders
 } from "./demo";
 
 import type {
   DailyUsageSummaryDTO,
   DashboardMetaDTO,
   DashboardPayloadDTO,
-  ModelPricingOverrideDTO,
+  RelayPricingProviderDTO,
   SyncProgressDTO,
   SyncStatusDTO,
   SyncPreviewDTO
@@ -94,12 +94,18 @@ export function resetDatabasePath(): Promise<DashboardPayloadDTO> {
   return invoke<DashboardPayloadDTO>("reset_database_path");
 }
 
-export function updateModelPricingSettings(settings: ModelPricingOverrideDTO[]): Promise<DashboardPayloadDTO> {
+export function updatePricingProviders(
+  relayPricingProviders: RelayPricingProviderDTO[],
+  openaiUsdPerRmb: number
+): Promise<DashboardPayloadDTO> {
   if (isDemoMode()) {
-    return Promise.resolve(updateDemoModelPricingSettings(settings));
+    return Promise.resolve(updateDemoPricingProviders(relayPricingProviders, openaiUsdPerRmb));
   }
 
-  return invoke<DashboardPayloadDTO>("set_model_pricing_settings", { settings });
+  return invoke<DashboardPayloadDTO>("set_pricing_providers", {
+    relayPricingProviders,
+    openaiUsdPerRmb
+  });
 }
 
 export function openSourceRepository(): Promise<void> {

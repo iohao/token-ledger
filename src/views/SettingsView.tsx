@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
-  CircleDollarSign,
   Database,
   ExternalLink,
   Gauge,
@@ -14,37 +13,18 @@ import {
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import appIconUrl from "../../src-tauri/icons/128x128.png";
-import { useApp, pricingErrorKey } from "../context/AppContext";
+import { useApp } from "../context/AppContext";
 import { PageHeader } from "../components/PageHeader";
 import {
-  PRICING_RATE_FIELDS,
   SOURCE_REPOSITORY_URL,
   type PageSourceId,
-  type PricingRateField,
   type ThemeMode
 } from "../types";
-import {
-  formatInteger,
-  formatPricingInput,
-  formatTimestamp
-} from "../utils/format";
-import { translatePricingNote, type Locale } from "../i18n";
+import { formatInteger, formatTimestamp } from "../utils/format";
+import { type Locale } from "../i18n";
 import type { DashboardPayloadDTO } from "../dto/dashboard";
 
 export const SETTINGS_PAGE_SOURCE_ID: PageSourceId = "src/views/SettingsView.tsx";
-
-export function pricingFieldLabel(field: PricingRateField, t: (key: any) => string): string {
-  switch (field) {
-    case "inputUsdPerMillion":
-      return t("pricingInput");
-    case "outputUsdPerMillion":
-      return t("pricingOutput");
-    case "cacheReadUsdPerMillion":
-      return t("pricingCacheRead");
-    case "cacheCreationUsdPerMillion":
-      return t("pricingCacheCreation");
-  }
-}
 
 export function databasePathSourceLabel(
   source: DashboardPayloadDTO["meta"]["databasePathSource"] | undefined,
@@ -78,14 +58,6 @@ export const SettingsView: React.FC = () => {
     isUpdatingDatabasePath,
     saveDatabasePathOverride,
     resetDatabasePathOverride,
-    modelPricingDraft,
-    modelPricingErrors,
-    modelPricingNotice,
-    isUpdatingModelPricing,
-    saveModelPricingSettings,
-    resetModelPricingPresetDraft,
-    updateModelPricingRate,
-    toggleModelPricingEnabled,
     currentAppVersion,
     openSourceRepositoryInBrowser,
     isLoading,
@@ -98,14 +70,9 @@ export const SettingsView: React.FC = () => {
   const timeZone = dashboard?.meta.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
   const databasePathEditable = dashboard?.meta.databasePathEditable ?? false;
   const databasePathDisabled = isLoading || isSyncing || isUpdatingDatabasePath || !databasePathEditable;
-  const pricingDisabled = isLoading || isSyncing || isUpdatingModelPricing;
-
-  const pricingNotes = (dashboard?.meta.pricingNotes ?? []).map((note) => translatePricingNote(locale, note));
-
   const settingsSections = [
     { id: "general", label: t("settingsGeneral"), icon: <SlidersHorizontal size={18} />, desc: t("settingsGeneralDescription") },
     { id: "data", label: t("settingsData"), icon: <Database size={18} />, desc: t("settingsDataDescription") },
-    { id: "pricing", label: t("settingsPricing"), icon: <CircleDollarSign size={18} />, desc: t("settingsPricingDescription") },
     { id: "about", label: t("settingsAbout"), icon: <Info size={18} />, desc: t("settingsAboutDescription") }
   ];
 
@@ -149,11 +116,6 @@ export const SettingsView: React.FC = () => {
   const handleDatabasePathSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     void saveDatabasePathOverride();
-  };
-
-  const handlePricingSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    void saveModelPricingSettings();
   };
 
   return (
@@ -360,153 +322,7 @@ export const SettingsView: React.FC = () => {
             </div>
           </section>
 
-          {/* 3. Model Pricing */}
-          <section className="settings-section panel" id="settings-pricing" data-settings-section="pricing">
-            <div className="settings-section-head">
-              <span className="settings-section-icon">
-                <CircleDollarSign size={20} />
-              </span>
-              <div className="settings-section-title-wrap">
-                <h2>{t("settingsPricing")}</h2>
-                <p>{t("settingsPricingDescription")}</p>
-              </div>
-            </div>
-
-            <div className="pricing-config-block">
-              <p className="config-hint pricing-intro">{t("modelPricingHint")}</p>
-              <form className="config-form pricing-form" onSubmit={handlePricingSubmit} noValidate>
-                <div className="pricing-model-list">
-                  {modelPricingDraft.map((draft) => {
-                    const setting = (dashboard?.meta.modelPricingSettings ?? []).find(
-                      (cand) => cand.model === draft.model
-                    );
-                    const modelId = draft.model.replaceAll(".", "-");
-
-                    return (
-                      <div
-                        key={draft.model}
-                        className={`pricing-model-card ${draft.enabled ? "is-relay-enabled" : ""}`}
-                      >
-                        <div className="pricing-model-top">
-                          <div className="pricing-model-title-group">
-                            <strong className="pricing-model-name">{draft.model}</strong>
-                            {draft.enabled ? (
-                              <span className="settings-pill is-primary">{t("relayPricingActive")}</span>
-                            ) : (
-                              <span className="settings-pill is-muted">{t("officialPricingActive")}</span>
-                            )}
-                          </div>
-                          <label className="settings-switch-label">
-                            <span className="settings-switch-text">{t("useRelayPricing")}</span>
-                            <span className="settings-switch">
-                              <input
-                                className="settings-switch-input"
-                                type="checkbox"
-                                checked={draft.enabled}
-                                onChange={(e) => toggleModelPricingEnabled(draft.model, e.target.checked)}
-                                disabled={pricingDisabled}
-                              />
-                              <span className="settings-switch-track" aria-hidden="true" />
-                            </span>
-                          </label>
-                        </div>
-                        <div className="pricing-rate-grid">
-                          {PRICING_RATE_FIELDS.map((field) => {
-                            const errorKey = pricingErrorKey(draft.model, field);
-                            const error = modelPricingErrors[errorKey];
-                            const inputId = `pricing-${modelId}-${field}`;
-                            const errorId = `${inputId}-error`;
-                            const officialRate = setting
-                              ? formatPricingInput(setting.officialRates[field])
-                              : "0.0000";
-
-                            return (
-                              <div
-                                key={field}
-                                className={`pricing-rate-item ${!draft.enabled ? "is-disabled" : ""}`}
-                              >
-                                <div className="pricing-rate-header">
-                                  <label htmlFor={inputId}>{pricingFieldLabel(field, t)}</label>
-                                  <span className="pricing-benchmark" title={t("officialPricingReference")}>
-                                    {t("officialBenchmarkRate")}: ${officialRate}
-                                  </span>
-                                </div>
-                                <div className={`pricing-input-wrap ${error ? "has-error" : ""}`}>
-                                  <span className="pricing-currency-symbol" aria-hidden="true">
-                                    $
-                                  </span>
-                                  <input
-                                    id={inputId}
-                                    type="number"
-                                    min="0"
-                                    step="0.0001"
-                                    inputMode="decimal"
-                                    value={draft.rates[field]}
-                                    onChange={(e) => updateModelPricingRate(draft.model, field, e.target.value)}
-                                    aria-invalid={!!error}
-                                    aria-describedby={error ? errorId : undefined}
-                                    disabled={pricingDisabled || !draft.enabled}
-                                  />
-                                  <span className="pricing-unit">{t("perMillionTokens")}</span>
-                                </div>
-                                {error && (
-                                  <small className="field-error" id={errorId} role="alert">
-                                    {error}
-                                  </small>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-                <div className="config-actions">
-                  <button
-                    className="action primary"
-                    type="submit"
-                    disabled={pricingDisabled || modelPricingDraft.length === 0}
-                  >
-                    <Save className="action-icon" size={16} />
-                    <span>{isUpdatingModelPricing ? t("savingPricing") : t("savePricing")}</span>
-                  </button>
-                  <button
-                    className="action"
-                    type="button"
-                    onClick={resetModelPricingPresetDraft}
-                    disabled={pricingDisabled || modelPricingDraft.length === 0}
-                  >
-                    <RotateCcw className="action-icon" size={16} />
-                    <span>{t("restoreRelayPreset")}</span>
-                  </button>
-                </div>
-                {modelPricingNotice && (
-                  <p className={`config-feedback ${modelPricingNotice.tone}`} role="status">
-                    {modelPricingNotice.text}
-                  </p>
-                )}
-              </form>
-
-              {pricingNotes.length > 0 ? (
-                <div className="settings-subcard pricing-notes-card">
-                  <h4 className="settings-subcard-title">
-                    <Info className="subcard-icon" size={16} /> {t("pricingNotesTitle")}
-                  </h4>
-                  <ul className="pricing-notes-list">
-                    {pricingNotes.map((note, idx) => (
-                      <li key={idx}>{note}</li>
-                    ))}
-                    <li>{t("cacheCreationAvailabilityNote")}</li>
-                  </ul>
-                </div>
-              ) : (
-                <p className="config-note">{t("cacheCreationAvailabilityNote")}</p>
-              )}
-            </div>
-          </section>
-
-          {/* 4. About */}
+          {/* About */}
           <section className="settings-section panel" id="settings-about" data-settings-section="about">
             <div className="settings-section-head">
               <span className="settings-section-icon">

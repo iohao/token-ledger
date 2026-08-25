@@ -11,13 +11,14 @@ use crate::date_keys::{add_days_to_date_key, last_n_date_keys, month_key_for};
 use crate::models::{
     add_usage_totals, empty_usage_totals, format_utc_timestamp, sort_breakdowns, usage_periods,
     DailyUsageSummary, DashboardMeta, DashboardPayload, DatabasePathSource, ModelUsageBreakdown,
-    MonthlyUsageSummary, ParsedSessionFile, SourceSessionRecord, StoredDailyAggregate,
-    StoredMonthlyAggregate, SyncContext, SyncCoverageGranularity, SyncDataSource, SyncPreview,
-    SyncProgress, SyncProgressPhase, SyncState, SyncStatus, UsagePeriod, UsageSummary,
+    MonthlyUsageSummary, ParsedSessionFile, PricingComparison, ProviderCostComparison,
+    SourceSessionRecord, StoredDailyAggregate, StoredMonthlyAggregate, SyncContext,
+    SyncCoverageGranularity, SyncDataSource, SyncPreview, SyncProgress, SyncProgressPhase,
+    SyncState, SyncStatus, UsagePeriod, UsageSummary,
 };
 use crate::parser::parse_session_file;
 use crate::pricing::{
-    cost_for_with_overrides, model_pricing_settings, pricing_notes, ModelPricingOverride,
+    cost_for, cost_for_provider, pricing_providers, PricingProvider, RelayPricingProvider,
 };
 use crate::store::UsageStore;
 
@@ -26,7 +27,8 @@ pub struct UsageRepository {
     pub database_path: PathBuf,
     pub time_zone: String,
     pub parse_version: i32,
-    pricing_overrides: Vec<ModelPricingOverride>,
+    relay_pricing_providers: Vec<RelayPricingProvider>,
+    openai_usd_per_rmb: f64,
     store: UsageStore,
 }
 
@@ -35,7 +37,8 @@ pub struct UsageRepositoryConfig {
     pub database_path: PathBuf,
     pub time_zone: String,
     pub parse_version: i32,
-    pub pricing_overrides: Vec<ModelPricingOverride>,
+    pub relay_pricing_providers: Vec<RelayPricingProvider>,
+    pub openai_usd_per_rmb: f64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -56,12 +59,20 @@ impl UsageRepository {
             database_path: store.database_path().to_path_buf(),
             time_zone: config.time_zone,
             parse_version: config.parse_version,
-            pricing_overrides: config.pricing_overrides,
+            relay_pricing_providers: config.relay_pricing_providers,
+            openai_usd_per_rmb: config.openai_usd_per_rmb,
             store,
         })
     }
 
     pub fn build_dashboard_meta(&self) -> DashboardMeta {
+        self.build_dashboard_meta_with_providers(self.pricing_providers())
+    }
+
+    fn build_dashboard_meta_with_providers(
+        &self,
+        pricing_providers: Vec<PricingProvider>,
+    ) -> DashboardMeta {
         DashboardMeta {
             codex_home_path: self.codex_home_path.display().to_string(),
             database_path: self.database_path.display().to_string(),
@@ -69,26 +80,66 @@ impl UsageRepository {
             database_path_editable: true,
             time_zone: self.time_zone.clone(),
             parse_version: self.parse_version,
-            pricing_notes: pricing_notes(),
-            model_pricing_settings: model_pricing_settings(&self.pricing_overrides),
+            pricing_providers,
         }
+    }
+
+    fn pricing_providers(&self) -> Vec<PricingProvider> {
+        pricing_providers(&self.relay_pricing_providers, self.openai_usd_per_rmb)
+    }
+
+    fn provider_cost_comparisons(
+        summaries: &[UsageSummary],
+        providers: &[PricingProvider],
+    ) -> Vec<PricingComparison> {
+        summaries
+            .iter()
+            .map(|summary| PricingComparison {
+                period: summary.period,
+                providers: providers
+                    .iter()
+                    .filter(|provider| provider.enabled)
+                    .map(|provider| {
+                        let result = cost_for_provider(&summary.models, provider);
+                        let cost_cny = result.cost_usd.and_then(|cost_usd| {
+                            provider
+                                .recharge_ratio_usd_per_rmb
+                                .map(|ratio| cost_usd / ratio)
+                        });
+                        ProviderCostComparison {
+                            provider_id: provider.id.clone(),
+                            is_complete: cost_cny.is_some(),
+                            cost_usd: result.cost_usd,
+                            cost_cny,
+                            fallback_models: result.fallback_models,
+                            unpriced_models: result.unpriced_models,
+                        }
+                    })
+                    .collect(),
+            })
+            .collect()
     }
 
     pub fn build_dashboard_payload(&self, include_sync_preview: bool) -> Result<DashboardPayload> {
         let status = self.current_sync_status()?;
+        let summaries = usage_periods()
+            .into_iter()
+            .map(|period| self.summary_with_status(period, &status))
+            .collect::<Result<Vec<_>>>()?;
+        let pricing_providers = self.pricing_providers();
+        let provider_cost_comparisons =
+            Self::provider_cost_comparisons(&summaries, &pricing_providers);
 
         Ok(DashboardPayload {
-            meta: self.build_dashboard_meta(),
+            meta: self.build_dashboard_meta_with_providers(pricing_providers.clone()),
             status: status.clone(),
             sync_preview: if include_sync_preview {
                 Some(self.sync_preview()?)
             } else {
                 None
             },
-            summaries: usage_periods()
-                .into_iter()
-                .map(|period| self.summary_with_status(period, &status))
-                .collect::<Result<Vec<_>>>()?,
+            summaries,
+            provider_cost_comparisons,
             daily_history: self.last_7_day_history_with_status(&status)?,
             activity_history: self.activity_history_with_status(&status)?,
             monthly_history: self.monthly_history_with_status(&status)?,
@@ -291,7 +342,6 @@ impl UsageRepository {
         let progress_stride = progress_stride(files_to_process);
         let batch_size = 64.min(progress_stride.max(16));
         let time_zone = &self.time_zone;
-        let pricing_overrides = &self.pricing_overrides;
 
         for chunk in dirty_entries.chunks(batch_size) {
             let parsed_chunk: Result<Vec<ParsedSessionFile>> = chunk
@@ -299,7 +349,7 @@ impl UsageRepository {
                 .map(|entry| {
                     let mut parsed_file =
                         parse_session_file(&entry.file_path, &sessions_root, time_zone)?;
-                    price_parsed_file(&mut parsed_file, pricing_overrides);
+                    price_parsed_file(&mut parsed_file);
                     Ok(parsed_file)
                 })
                 .collect();
@@ -491,15 +541,13 @@ impl UsageRepository {
 
     fn price_daily_rows(&self, rows: &mut [StoredDailyAggregate]) {
         for row in rows {
-            row.totals.cost_usd =
-                cost_for_with_overrides(&row.totals, &row.model, &self.pricing_overrides);
+            row.totals.cost_usd = cost_for(&row.totals, &row.model);
         }
     }
 
     fn price_monthly_rows(&self, rows: &mut [StoredMonthlyAggregate]) {
         for row in rows {
-            row.totals.cost_usd =
-                cost_for_with_overrides(&row.totals, &row.model, &self.pricing_overrides);
+            row.totals.cost_usd = cost_for(&row.totals, &row.model);
         }
     }
 
@@ -618,13 +666,9 @@ impl UsageRepository {
     }
 }
 
-fn price_parsed_file(
-    parsed_file: &mut ParsedSessionFile,
-    pricing_overrides: &[ModelPricingOverride],
-) {
+fn price_parsed_file(parsed_file: &mut ParsedSessionFile) {
     for usage in &mut parsed_file.usages {
-        usage.totals.cost_usd =
-            cost_for_with_overrides(&usage.totals, &usage.model, pricing_overrides);
+        usage.totals.cost_usd = cost_for(&usage.totals, &usage.model);
     }
 }
 
@@ -764,21 +808,14 @@ mod tests {
     }
 
     fn make_repository(temp_dir: &TempDir, parse_version: i32) -> UsageRepository {
-        make_repository_with_overrides(temp_dir, parse_version, Vec::new())
-    }
-
-    fn make_repository_with_overrides(
-        temp_dir: &TempDir,
-        parse_version: i32,
-        pricing_overrides: Vec<crate::pricing::ModelPricingOverride>,
-    ) -> UsageRepository {
         let database_path = temp_dir.path().join("usage.sqlite");
         UsageRepository::new(UsageRepositoryConfig {
             codex_home_path: temp_dir.path().to_path_buf(),
             database_path,
             time_zone: "Asia/Shanghai".to_string(),
             parse_version,
-            pricing_overrides,
+            relay_pricing_providers: Vec::new(),
+            openai_usd_per_rmb: crate::pricing::DEFAULT_OPENAI_USD_PER_RMB,
         })
         .expect("create repository")
     }
@@ -818,7 +855,7 @@ mod tests {
     }
 
     #[test]
-    fn pricing_override_reprices_existing_history_without_rescan() {
+    fn relay_pricing_does_not_reprice_existing_history() {
         let temp_dir = TempDir::new().expect("temp dir");
         let session = r#"
 {"type":"turn_context","timestamp":"2026-04-09T01:00:00.000Z","payload":{"model":"gpt-5.6-sol"}}
@@ -830,14 +867,11 @@ mod tests {
             .sync(false)
             .expect("sync official usage");
 
-        let mut overrides = crate::pricing::default_model_pricing_overrides();
-        overrides[0].enabled = true;
-        let relay_repository = make_repository_with_overrides(&temp_dir, 7, overrides);
-        let rows = relay_repository
+        let rows = official_repository
             .daily_history_between("2026-04-09", "2026-04-09")
-            .expect("query repriced history");
+            .expect("query official history");
 
-        assert!((rows[0].totals.cost_usd - 13.005).abs() < 0.000_001);
+        assert!((rows[0].totals.cost_usd - 7.1).abs() < 0.000_001);
     }
 
     #[test]
@@ -992,7 +1026,8 @@ mod tests {
             database_path,
             time_zone: "Invalid/TimeZone".to_string(),
             parse_version: 4,
-            pricing_overrides: Vec::new(),
+            relay_pricing_providers: Vec::new(),
+            openai_usd_per_rmb: crate::pricing::DEFAULT_OPENAI_USD_PER_RMB,
         })
         .expect("create repository");
 

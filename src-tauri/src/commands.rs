@@ -5,7 +5,7 @@ use crate::app_state::AppState;
 use crate::models::{
     DailyUsageSummary, DashboardMeta, DashboardPayload, SyncPreview, SyncProgress, SyncStatus,
 };
-use crate::pricing::ModelPricingOverride;
+use crate::pricing::RelayPricingProvider;
 
 const SYNC_PROGRESS_EVENT_NAME: &str = "sync-progress";
 const SOURCE_REPOSITORY_URL: &str = "https://github.com/iohao/token-ledger";
@@ -158,12 +158,13 @@ pub fn reset_database_path(state: State<'_, AppState>) -> Result<DashboardPayloa
 }
 
 #[tauri::command]
-pub fn set_model_pricing_settings(
-    settings: Vec<ModelPricingOverride>,
+pub fn set_pricing_providers(
+    relay_pricing_providers: Vec<RelayPricingProvider>,
+    openai_usd_per_rmb: f64,
     state: State<'_, AppState>,
 ) -> Result<DashboardPayload, String> {
     state
-        .set_model_pricing_overrides(settings)
+        .set_pricing_providers(relay_pricing_providers, openai_usd_per_rmb)
         .map_err(|error| error.to_string())?;
 
     let mut payload = state
