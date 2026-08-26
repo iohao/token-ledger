@@ -21,6 +21,7 @@ export const RELAY_PRICING_PAGE_SOURCE_ID: PageSourceId = "src/views/RelayPricin
 
 const DEFAULT_OPENAI_RATIO = "0.1400";
 const MIGRATED_RELAY_PROVIDER_ID = "migrated-relay";
+const RELAY_PRICING_SHOW_OFFICIAL_STORAGE_KEY = "tokenledger.relayPricing.showOfficial";
 const PRICE_FIELDS: Array<{ key: keyof ModelPricingRatesDTO; label: string }> = [
   { key: "inputUsdPerMillion", label: "relayPricingInput" },
   { key: "outputUsdPerMillion", label: "relayPricingOutput" },
@@ -114,11 +115,27 @@ export const RelayPricingView: React.FC = () => {
   const { dashboard, isLoading, isSyncing, loadDashboard } = useApp();
   const [relayProviders, setRelayProviders] = useState<DraftRelayProvider[]>([]);
   const [openaiRatio, setOpenaiRatio] = useState(DEFAULT_OPENAI_RATIO);
+  const [showOfficial, setShowOfficial] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(RELAY_PRICING_SHOW_OFFICIAL_STORAGE_KEY) === "true";
+    } catch {
+      return false;
+    }
+  });
   const [isDirty, setIsDirty] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveNotice, setSaveNotice] = useState<string | null>(null);
   const errorSummaryRef = useRef<HTMLDivElement>(null);
+
+  const handleToggleOfficial = (enabled: boolean) => {
+    setShowOfficial(enabled);
+    try {
+      localStorage.setItem(RELAY_PRICING_SHOW_OFFICIAL_STORAGE_KEY, String(enabled));
+    } catch {
+      // ignore
+    }
+  };
 
   const providers = dashboard?.meta.pricingProviders ?? [];
   const officialProvider = providers.find((provider) => provider.kind === "official");
@@ -289,10 +306,24 @@ export const RelayPricingView: React.FC = () => {
         description={t("relayPricingDescription")}
         pageSourceId={RELAY_PRICING_PAGE_SOURCE_ID}
         actions={
-          <button className="action primary" type="button" onClick={() => void saveProviders()} disabled={controlsDisabled || !isDirty}>
-            <Save className="action-icon" size={16} />
-            <span>{isSaving ? t("relayPricingSaving") : t("relayPricingSave")}</span>
-          </button>
+          <div className="relay-header-actions">
+            <label className="settings-switch-label">
+              <span className="settings-switch-text">{t("relayPricingShowOfficial")}</span>
+              <span className="settings-switch">
+                <input
+                  className="settings-switch-input"
+                  type="checkbox"
+                  checked={showOfficial}
+                  onChange={(event) => handleToggleOfficial(event.target.checked)}
+                />
+                <span className="settings-switch-track" aria-hidden="true" />
+              </span>
+            </label>
+            <button className="action primary" type="button" onClick={() => void saveProviders()} disabled={controlsDisabled || !isDirty}>
+              <Save className="action-icon" size={16} />
+              <span>{isSaving ? t("relayPricingSaving") : t("relayPricingSave")}</span>
+            </button>
+          </div>
         }
       />
 
@@ -300,6 +331,20 @@ export const RelayPricingView: React.FC = () => {
       {saveNotice && <p className="config-feedback good" role="status">{saveNotice}</p>}
 
       <section className="relay-provider-list" aria-label={t("relayPricingProvidersAria")}>
+        {showOfficial && officialProvider && (
+          <OfficialProviderCard
+            provider={officialProvider}
+            openaiRatio={openaiRatio}
+            controlsDisabled={controlsDisabled}
+            isDirty={isDirty}
+            isSaving={isSaving}
+            onSave={() => void saveProviders()}
+            onRatioChange={(value) => {
+              setOpenaiRatio(value);
+              markDirty();
+            }}
+          />
+        )}
         {relayProviders.map((provider) => (
           <RelayProviderCard
             key={provider.id}
@@ -325,6 +370,70 @@ export const RelayPricingView: React.FC = () => {
         <span>{t("relayPricingAddProvider")}</span>
       </button>
     </div>
+  );
+};
+
+const OfficialProviderCard: React.FC<{
+  provider: PricingProviderDTO;
+  openaiRatio: string;
+  controlsDisabled: boolean;
+  isDirty: boolean;
+  isSaving: boolean;
+  onSave: () => void;
+  onRatioChange: (value: string) => void;
+}> = ({
+  provider,
+  openaiRatio,
+  controlsDisabled,
+  isDirty,
+  isSaving,
+  onSave,
+  onRatioChange
+}) => {
+  const { t } = useTranslation();
+  return (
+    <article className="relay-provider-card panel is-official">
+      <div className="relay-provider-head">
+        <div>
+          <span className="relay-provider-type">{t("relayPricingOfficial")}</span>
+          <h2>{provider.name}</h2>
+          <p>{t("relayPricingOfficialDescription")}</p>
+        </div>
+        <span className="relay-fixed-badge">{t("relayPricingFixed")}</span>
+      </div>
+      <div className="relay-provider-config-row">
+        <RatioField
+          value={openaiRatio}
+          disabled={controlsDisabled}
+          onChange={onRatioChange}
+        />
+      </div>
+      <ModelPriceTable
+        prices={provider.modelPrices.map((price) => ({
+          model: price.model,
+          rates: {
+            inputUsdPerMillion: formatPrice(price.rates.inputUsdPerMillion),
+            outputUsdPerMillion: formatPrice(price.rates.outputUsdPerMillion),
+            cacheReadUsdPerMillion: formatPrice(price.rates.cacheReadUsdPerMillion),
+            cacheCreationUsdPerMillion: formatPrice(price.rates.cacheCreationUsdPerMillion)
+          }
+        }))}
+        multiplier="1.0000"
+        disabled={true}
+        readOnly={true}
+      />
+      <div className="relay-provider-footer relay-official-footer">
+        <button
+          className="action primary relay-provider-save-btn"
+          type="button"
+          onClick={onSave}
+          disabled={controlsDisabled || !isDirty}
+        >
+          <Save className="action-icon" size={16} />
+          <span>{isSaving ? t("relayPricingSaving") : t("relayPricingSave")}</span>
+        </button>
+      </div>
+    </article>
   );
 };
 
