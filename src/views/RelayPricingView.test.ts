@@ -59,8 +59,8 @@ describe("computeLowestModelsByProvider", () => {
     const relay2Sol = result.get("relay-2")?.get("gpt-5.6-sol");
 
     expect(relay1Sol?.isLowest).toBe(false);
-    // 0.8 / 1.0 = 80%
-    expect(relay1Sol?.diffPercent).toBe("80%");
+    // (5.0 - 4.0) / 4.0 = 25%
+    expect(relay1Sol?.diffPercent).toBe("25%");
 
     expect(relay2Sol?.isLowest).toBe(true);
     expect(relay2Sol?.diffPercent).toBeNull();
@@ -93,8 +93,8 @@ describe("computeLowestModelsByProvider", () => {
     expect(relay1Sol?.diffPercent).toBeNull();
 
     expect(relay2Sol?.isLowest).toBe(false);
-    // 5.0 / 17.85714 = 28%
-    expect(relay2Sol?.diffPercent).toBe("28%");
+    // (17.85714 - 5.0) / 5.0 = 257.1%
+    expect(relay2Sol?.diffPercent).toBe("257.1%");
   });
 
   it("handles comparison with official provider", () => {
@@ -120,7 +120,8 @@ describe("computeLowestModelsByProvider", () => {
     const relay1Sol = result.get("relay-1")?.get("gpt-5.6-sol");
 
     expect(officialSol?.isLowest).toBe(false);
-    expect(officialSol?.diffPercent).toBe("14%");
+    // (35.71428 - 5.0) / 5.0 = 614.3%
+    expect(officialSol?.diffPercent).toBe("614.3%");
 
     expect(relay1Sol?.isLowest).toBe(true);
     expect(relay1Sol?.diffPercent).toBeNull();

@@ -75,9 +75,9 @@ export function formatPriceDiffPercent(cost: number, lowestCost: number): string
   ) {
     return null;
   }
-  const ratio = (lowestCost / cost) * 100;
-  const rounded = Number(ratio.toFixed(1));
-  if (rounded <= 0 || rounded >= 100) {
+  const diffPercent = ((cost - lowestCost) / lowestCost) * 100;
+  const rounded = Number(diffPercent.toFixed(1));
+  if (rounded <= 0) {
     return null;
   }
   if (rounded % 1 === 0) {
