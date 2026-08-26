@@ -1,6 +1,11 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
-import type { DailyUsageSummaryDTO } from "../dto/dashboard";
+import type {
+  DailyUsageSummaryDTO,
+  ModelUsageBreakdownDTO,
+  PricingProviderDTO,
+  UsageTotalsDTO
+} from "../dto/dashboard";
 import { useApp } from "../context/AppContext";
 import {
   formatCurrency,
@@ -120,17 +125,84 @@ export interface DailyDetailTableProps {
   rows: DailyUsageSummaryDTO[];
   timeZone: string;
   eyebrow: string;
+  relayProviders?: PricingProviderDTO[];
+}
+
+function modelIdentity(model: string): string {
+  return model.trim().toLowerCase();
+}
+
+export function relayCostCny(
+  totals: UsageTotalsDTO,
+  model: string,
+  provider: PricingProviderDTO
+): number | null {
+  const ratio = provider.rechargeRatioUsdPerRmb;
+  const rates = provider.modelPrices.find((price) => modelIdentity(price.model) === modelIdentity(model))?.rates;
+
+  if (ratio === null || !Number.isFinite(ratio) || ratio <= 0 || !rates) {
+    return null;
+  }
+
+  const inputTokens = Math.max(totals.inputTokens, 0);
+  const cacheReadTokens = Math.min(Math.max(totals.cachedInputTokens, 0), inputTokens);
+  const remainingInputTokens = inputTokens - cacheReadTokens;
+  const cacheCreationTokens = Math.min(
+    Math.max(totals.cacheCreationInputTokens, 0),
+    remainingInputTokens
+  );
+  const regularInputTokens = remainingInputTokens - cacheCreationTokens;
+  const costUsd =
+    (regularInputTokens / 1_000_000) * rates.inputUsdPerMillion +
+    (cacheReadTokens / 1_000_000) * rates.cacheReadUsdPerMillion +
+    (cacheCreationTokens / 1_000_000) * rates.cacheCreationUsdPerMillion +
+    (Math.max(totals.outputTokens, 0) / 1_000_000) * rates.outputUsdPerMillion;
+
+  return costUsd / ratio;
+}
+
+function relayCostsForModels(
+  models: ModelUsageBreakdownDTO[],
+  provider: PricingProviderDTO
+): number | null {
+  let total = 0;
+
+  for (const model of models) {
+    const cost = relayCostCny(model.totals, model.model, provider);
+    if (cost === null) {
+      return null;
+    }
+    total += cost;
+  }
+
+  return total;
+}
+
+function formatCny(value: number, locale: string): string {
+  return new Intl.NumberFormat(locale, {
+    style: "currency",
+    currency: "CNY",
+    currencyDisplay: locale === "zh-CN" ? "narrowSymbol" : "symbol",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(value);
 }
 
 export const DailyDetailTable: React.FC<DailyDetailTableProps> = ({
   title,
   rows,
   timeZone,
-  eyebrow
+  eyebrow,
+  relayProviders
 }) => {
   const { t } = useTranslation();
   const { locale } = useApp();
   const totals = sumTotals(rows);
+  const showRelayPrices = relayProviders !== undefined;
+  const displayedRelayProviders = relayProviders ?? [];
+  const relayTotals = displayedRelayProviders.map((provider) =>
+    relayCostsForModels(rows.flatMap((row) => row.models), provider)
+  );
 
   const flatRows = rows.flatMap((row) => {
     const dateLabel = formatDateLabel(row.dateKey, timeZone, locale);
@@ -155,7 +227,8 @@ export const DailyDetailTable: React.FC<DailyDetailTableProps> = ({
             requestCount: 0,
             costUSD: 0
           },
-          isSubtotal: false
+          isSubtotal: false,
+          relayCosts: displayedRelayProviders.map(() => 0)
         }
       ];
     }
@@ -167,7 +240,10 @@ export const DailyDetailTable: React.FC<DailyDetailTableProps> = ({
       showGroupCell: index === 0,
       modelLabel: formatModelLabel(model.model, model.isFallback, locale),
       totals: model.totals,
-      isSubtotal: false
+      isSubtotal: false,
+      relayCosts: displayedRelayProviders.map((provider) =>
+        relayCostCny(model.totals, model.model, provider)
+      )
     }));
 
     if (hasMultipleModels) {
@@ -178,7 +254,10 @@ export const DailyDetailTable: React.FC<DailyDetailTableProps> = ({
         showGroupCell: false,
         modelLabel: t("subtotalLabel"),
         totals: row.totals,
-        isSubtotal: true
+        isSubtotal: true,
+        relayCosts: displayedRelayProviders.map((provider) =>
+          relayCostsForModels(row.models, provider)
+        )
       });
     }
 
@@ -205,7 +284,13 @@ export const DailyDetailTable: React.FC<DailyDetailTableProps> = ({
             <col className="daily-detail-col-metric" />
             <col className="daily-detail-col-metric" />
             <col className="daily-detail-col-metric" />
-            <col className="daily-detail-col-model-cost" />
+            {showRelayPrices ? (
+              displayedRelayProviders.map((provider) => (
+                <col key={provider.id} className="daily-detail-col-relay-cost" />
+              ))
+            ) : (
+              <col className="daily-detail-col-model-cost" />
+            )}
           </colgroup>
           <thead>
             <tr>
@@ -218,7 +303,15 @@ export const DailyDetailTable: React.FC<DailyDetailTableProps> = ({
               <th>{t("cacheCreationInput")}</th>
               <th>{t("reasoning")}</th>
               <th>{t("total")}</th>
-              <th className="daily-detail-model-cost-header">{t("cost")}</th>
+              {showRelayPrices ? (
+                displayedRelayProviders.map((provider) => (
+                  <th key={provider.id} className="daily-detail-relay-cost-header" title={provider.name}>
+                    {provider.name}
+                  </th>
+                ))
+              ) : (
+                <th className="daily-detail-model-cost-header">{t("cost")}</th>
+              )}
             </tr>
           </thead>
           <tbody>
@@ -261,7 +354,15 @@ export const DailyDetailTable: React.FC<DailyDetailTableProps> = ({
                 <td className="daily-detail-total-metric">
                   <AlignedTokenCount value={row.totals.totalTokens} />
                 </td>
-                <td className="cost-cell daily-detail-model-cost-cell">{formatCurrency(row.totals.costUSD, locale)}</td>
+                {showRelayPrices ? (
+                  displayedRelayProviders.map((provider, index) => (
+                    <td key={provider.id} className="cost-cell daily-detail-relay-cost-cell">
+                      {row.relayCosts[index] === null ? <span className="muted">—</span> : formatCny(row.relayCosts[index], locale)}
+                    </td>
+                  ))
+                ) : (
+                  <td className="cost-cell daily-detail-model-cost-cell">{formatCurrency(row.totals.costUSD, locale)}</td>
+                )}
               </tr>
             ))}
           </tbody>
@@ -292,7 +393,15 @@ export const DailyDetailTable: React.FC<DailyDetailTableProps> = ({
               <td className="daily-detail-total-metric">
                 <AlignedTokenCount value={totals.totalTokens} />
               </td>
-              <td className="cost-cell daily-detail-model-cost-cell">{formatCurrency(totals.costUSD, locale)}</td>
+              {showRelayPrices ? (
+                displayedRelayProviders.map((provider, index) => (
+                  <td key={provider.id} className="cost-cell daily-detail-relay-cost-cell">
+                    {relayTotals[index] === null ? <span className="muted">—</span> : formatCny(relayTotals[index], locale)}
+                  </td>
+                ))
+              ) : (
+                <td className="cost-cell daily-detail-model-cost-cell">{formatCurrency(totals.costUSD, locale)}</td>
+              )}
             </tr>
           </tfoot>
         </table>

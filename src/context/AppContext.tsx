@@ -697,7 +697,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         normalizedTab !== "monthlyHistory" &&
         normalizedTab !== "monthlyDetail" &&
         normalizedTab !== "settings" &&
-        normalizedTab !== "dailyDetail"
+        normalizedTab !== "dailyDetail" &&
+        normalizedTab !== "relayPricing"
       ) {
         return;
       }

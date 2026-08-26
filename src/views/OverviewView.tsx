@@ -45,6 +45,9 @@ export const OverviewView: React.FC = () => {
   const pendingSessions = syncPreview
     ? syncPreview.newSessions + syncPreview.changedSessions + syncPreview.removedSessions
     : null;
+  const relayProviders = dashboard?.meta.pricingProviders.filter(
+    (provider) => provider.kind === "relay" && provider.enabled
+  ) ?? [];
 
   const syncState = isSyncing ? "syncing" : (dashboard?.status.state ?? "idle");
 
@@ -171,6 +174,7 @@ export const OverviewView: React.FC = () => {
           rows={dashboard?.dailyHistory ?? []}
           timeZone={timeZone}
           eyebrow={t("dailySummaryEyebrow")}
+          relayProviders={relayProviders}
         />
       </section>
     </div>

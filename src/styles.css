@@ -1528,7 +1528,9 @@ h3 {
 }
 
 .daily-detail-model-cost-cell,
-.daily-detail-model-cost-header {
+.daily-detail-model-cost-header,
+.daily-detail-relay-cost-cell,
+.daily-detail-relay-cost-header {
   padding-left: 8px !important;
   padding-right: 10px !important;
 }
@@ -1581,6 +1583,10 @@ h3 {
 
 .daily-detail-col-model-cost {
   width: 96px;
+}
+
+.daily-detail-col-relay-cost {
+  width: 108px;
 }
 
 .daily-detail-table tfoot td {

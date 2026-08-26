@@ -59,6 +59,6 @@ description = "Allows the frontend to reset the SQLite database path to default.
 commands.allow = ["reset_database_path"]
 
 [[permission]]
-identifier = "allow-set-model-pricing-settings"
-description = "Allows the frontend to update relay model pricing settings."
-commands.allow = ["set_model_pricing_settings"]
+identifier = "allow-set-pricing-providers"
+description = "Allows the frontend to update relay pricing providers."
+commands.allow = ["set_pricing_providers"]
