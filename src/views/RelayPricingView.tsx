@@ -1,10 +1,11 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   CircleAlert,
   CircleDollarSign,
   Plus,
   Save,
-  Trash2
+  Trash2,
+  TrendingUp
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { updatePricingProviders } from "../api/tauri";
@@ -16,6 +17,7 @@ import type {
   RelayPricingProviderDTO
 } from "../dto/dashboard";
 import type { PageSourceId } from "../types";
+import { formatPriceDiffPercent } from "../utils/format";
 
 export const RELAY_PRICING_PAGE_SOURCE_ID: PageSourceId = "src/views/RelayPricingView.tsx";
 
@@ -29,6 +31,17 @@ const PRICE_FIELDS: Array<{ key: keyof ModelPricingRatesDTO; label: string }> = 
   { key: "cacheReadUsdPerMillion", label: "relayPricingCacheRead" },
   { key: "cacheCreationUsdPerMillion", label: "relayPricingCacheCreation" }
 ];
+
+export type ComparableProviderInput = {
+  id: string;
+  multiplier: string | number | null;
+  rechargeRatioUsdPerRmb: string | number | null;
+};
+
+export type ProviderModelPriceComparison = {
+  isLowest: boolean;
+  diffPercent: string | null;
+};
 
 type DraftRelayProvider = {
   id: string;
@@ -71,12 +84,87 @@ function createProviderId(): string {
   return `relay-${Date.now()}`;
 }
 
-function parsePositive(value: string): number | null {
+export function parsePositive(value: string): number | null {
   if (!value.trim()) {
     return null;
   }
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+export function computeLowestModelsByProvider(
+  providers: ComparableProviderInput[],
+  modelPrices: Array<{ model: string; rates: ModelPricingRatesDTO }>
+): Map<string, Map<string, ProviderModelPriceComparison>> {
+  const comparable: Array<{
+    id: string;
+    multiplier: number;
+    rechargeRatio: number;
+  }> = [];
+
+  for (const p of providers) {
+    const multiplier =
+      typeof p.multiplier === "number"
+        ? p.multiplier > 0 && Number.isFinite(p.multiplier)
+          ? p.multiplier
+          : null
+        : parsePositive(String(p.multiplier ?? ""));
+    const ratio =
+      typeof p.rechargeRatioUsdPerRmb === "number"
+        ? p.rechargeRatioUsdPerRmb > 0 && Number.isFinite(p.rechargeRatioUsdPerRmb)
+          ? p.rechargeRatioUsdPerRmb
+          : null
+        : parsePositive(String(p.rechargeRatioUsdPerRmb ?? ""));
+
+    if (multiplier !== null && ratio !== null) {
+      comparable.push({
+        id: p.id,
+        multiplier,
+        rechargeRatio: ratio
+      });
+    }
+  }
+
+  const result = new Map<string, Map<string, ProviderModelPriceComparison>>();
+  for (const p of providers) {
+    result.set(p.id, new Map());
+  }
+
+  if (comparable.length < 2) {
+    return result;
+  }
+
+  for (const price of modelPrices) {
+    const baseRate = price.rates.inputUsdPerMillion;
+    const rateToCompare = baseRate > 0 ? baseRate : 1;
+
+    let minCostRmb = Number.POSITIVE_INFINITY;
+    const providerCosts: Array<{ id: string; costRmb: number }> = [];
+
+    for (const p of comparable) {
+      const costRmb = (rateToCompare * p.multiplier) / p.rechargeRatio;
+      providerCosts.push({ id: p.id, costRmb });
+      if (costRmb < minCostRmb) {
+        minCostRmb = costRmb;
+      }
+    }
+
+    if (!Number.isFinite(minCostRmb) || minCostRmb <= 0) {
+      continue;
+    }
+
+    for (const { id, costRmb } of providerCosts) {
+      const isLowest = Math.abs(costRmb - minCostRmb) < 1e-6;
+      const diffPercent = isLowest ? null : formatPriceDiffPercent(costRmb, minCostRmb);
+
+      result.get(id)?.set(price.model, {
+        isLowest,
+        diffPercent
+      });
+    }
+  }
+
+  return result;
 }
 
 export const RelayPricingView: React.FC = () => {
@@ -168,6 +256,25 @@ export const RelayPricingView: React.FC = () => {
   const visibleOfficialPrices = (officialProvider?.modelPrices ?? []).filter((price) =>
     visibleModels.has(price.model)
   );
+
+  const modelComparisonsByProvider = useMemo(() => {
+    const allProviders: ComparableProviderInput[] = [];
+    if (showOfficial && officialProvider) {
+      allProviders.push({
+        id: officialProvider.id,
+        multiplier: "1.0000",
+        rechargeRatioUsdPerRmb: openaiRatio
+      });
+    }
+    for (const provider of relayProviders) {
+      allProviders.push({
+        id: provider.id,
+        multiplier: provider.multiplier,
+        rechargeRatioUsdPerRmb: provider.rechargeRatioUsdPerRmb
+      });
+    }
+    return computeLowestModelsByProvider(allProviders, officialProvider?.modelPrices ?? []);
+  }, [showOfficial, officialProvider, openaiRatio, relayProviders]);
 
   useEffect(() => {
     if (isDirty || !officialProvider) {
@@ -306,6 +413,7 @@ export const RelayPricingView: React.FC = () => {
             openaiRatio={openaiRatio}
             visibleModels={visibleModels}
             onToggleModelVisibility={handleToggleModelVisibility}
+            modelComparisons={modelComparisonsByProvider.get(officialProvider.id)}
             controlsDisabled={controlsDisabled}
             isDirty={isDirty}
             isSaving={isSaving}
@@ -321,6 +429,7 @@ export const RelayPricingView: React.FC = () => {
             key={provider.id}
             provider={provider}
             officialPrices={visibleOfficialPrices}
+            modelComparisons={modelComparisonsByProvider.get(provider.id)}
             controlsDisabled={controlsDisabled}
             isDirty={isDirty}
             isSaving={isSaving}
@@ -347,6 +456,7 @@ const OfficialProviderCard: React.FC<{
   openaiRatio: string;
   visibleModels: Set<string>;
   onToggleModelVisibility: (model: string, visible: boolean) => void;
+  modelComparisons?: Map<string, ProviderModelPriceComparison>;
   controlsDisabled: boolean;
   isDirty: boolean;
   isSaving: boolean;
@@ -357,6 +467,7 @@ const OfficialProviderCard: React.FC<{
   openaiRatio,
   visibleModels,
   onToggleModelVisibility,
+  modelComparisons,
   controlsDisabled,
   isDirty,
   isSaving,
@@ -386,6 +497,7 @@ const OfficialProviderCard: React.FC<{
         prices={provider.modelPrices ?? []}
         visibleModels={visibleModels}
         onToggleModelVisibility={onToggleModelVisibility}
+        modelComparisons={modelComparisons}
       />
       <div className="relay-provider-footer relay-official-footer">
         <button
@@ -405,6 +517,7 @@ const OfficialProviderCard: React.FC<{
 const RelayProviderCard: React.FC<{
   provider: DraftRelayProvider;
   officialPrices: Array<{ model: string; rates: ModelPricingRatesDTO }>;
+  modelComparisons?: Map<string, ProviderModelPriceComparison>;
   controlsDisabled: boolean;
   isDirty: boolean;
   isSaving: boolean;
@@ -414,6 +527,7 @@ const RelayProviderCard: React.FC<{
 }> = ({
   provider,
   officialPrices,
+  modelComparisons,
   controlsDisabled,
   isDirty,
   isSaving,
@@ -485,6 +599,7 @@ const RelayProviderCard: React.FC<{
       <RelayRatePreviewTable
         officialPrices={officialPrices}
         multiplier={provider.multiplier}
+        modelComparisons={modelComparisons}
       />
       <div className="relay-provider-footer">
         <button
@@ -566,7 +681,8 @@ const OfficialModelTable: React.FC<{
   prices: Array<{ model: string; rates: ModelPricingRatesDTO }>;
   visibleModels: Set<string>;
   onToggleModelVisibility: (model: string, visible: boolean) => void;
-}> = ({ prices, visibleModels, onToggleModelVisibility }) => {
+  modelComparisons?: Map<string, ProviderModelPriceComparison>;
+}> = ({ prices, visibleModels, onToggleModelVisibility, modelComparisons }) => {
   const { t } = useTranslation();
   if (prices.length === 0) {
     return <p className="relay-no-models">{t("relayPricingNoModels")}</p>;
@@ -585,10 +701,24 @@ const OfficialModelTable: React.FC<{
         <tbody>
           {prices.map((price) => {
             const isVisible = visibleModels.has(price.model);
+            const comparison = modelComparisons?.get(price.model);
             return (
               <tr key={price.model}>
                 <td>
-                  <code>{price.model}</code>
+                  <div className="relay-model-name-cell">
+                    {comparison?.isLowest && (
+                      <span className="relay-model-lowest-badge">
+                        {t("lowestTag")}
+                      </span>
+                    )}
+                    {comparison && !comparison.isLowest && comparison.diffPercent !== null && (
+                      <span className="relay-model-diff-badge">
+                        <TrendingUp size={10} className="relay-model-diff-icon" aria-hidden="true" />
+                        <span>{comparison.diffPercent}</span>
+                      </span>
+                    )}
+                    <code>{price.model}</code>
+                  </div>
                 </td>
                 {PRICE_FIELDS.map((field) => (
                   <td key={field.key}>
@@ -622,7 +752,8 @@ const OfficialModelTable: React.FC<{
 const RelayRatePreviewTable: React.FC<{
   officialPrices: Array<{ model: string; rates: ModelPricingRatesDTO }>;
   multiplier: string;
-}> = ({ officialPrices, multiplier }) => {
+  modelComparisons?: Map<string, ProviderModelPriceComparison>;
+}> = ({ officialPrices, multiplier, modelComparisons }) => {
   const { t } = useTranslation();
   if (officialPrices.length === 0) {
     return <p className="relay-no-models">{t("relayPricingNoVisibleModels")}</p>;
@@ -640,43 +771,59 @@ const RelayRatePreviewTable: React.FC<{
           </tr>
         </thead>
         <tbody>
-          {officialPrices.map((price) => (
-            <tr key={price.model}>
-              <td>
-                <code>{price.model}</code>
-              </td>
-              {PRICE_FIELDS.map((field) => {
-                const baseRate = price.rates[field.key];
-                const hasMultiplier =
-                  numericMultiplier !== null && Math.abs(numericMultiplier - 1) > 0.00001;
-                const effectivePrice =
-                  numericMultiplier !== null ? baseRate * numericMultiplier : null;
+          {officialPrices.map((price) => {
+            const comparison = modelComparisons?.get(price.model);
+            return (
+              <tr key={price.model}>
+                <td>
+                  <div className="relay-model-name-cell">
+                    {comparison?.isLowest && (
+                      <span className="relay-model-lowest-badge">
+                        {t("lowestTag")}
+                      </span>
+                    )}
+                    {comparison && !comparison.isLowest && comparison.diffPercent !== null && (
+                      <span className="relay-model-diff-badge">
+                        <TrendingUp size={10} className="relay-model-diff-icon" aria-hidden="true" />
+                        <span>{comparison.diffPercent}</span>
+                      </span>
+                    )}
+                    <code>{price.model}</code>
+                  </div>
+                </td>
+                {PRICE_FIELDS.map((field) => {
+                  const baseRate = price.rates[field.key];
+                  const hasMultiplier =
+                    numericMultiplier !== null && Math.abs(numericMultiplier - 1) > 0.00001;
+                  const effectivePrice =
+                    numericMultiplier !== null ? baseRate * numericMultiplier : null;
 
-                return (
-                  <td key={field.key}>
-                    <div className="relay-readonly-rate">
-                      {effectivePrice !== null ? (
-                        <>
-                          <strong>${formatDisplayRate(effectivePrice)} / 1M</strong>
-                          {hasMultiplier && (
-                            <small className="relay-rate-subtext">
-                              <span>
-                                {t("relayPricingOfficialBase", {
-                                  price: formatDisplayRate(baseRate)
-                                })}
-                              </span>
-                            </small>
-                          )}
-                        </>
-                      ) : (
-                        <span className="muted">—</span>
-                      )}
-                    </div>
-                  </td>
-                );
-              })}
-            </tr>
-          ))}
+                  return (
+                    <td key={field.key}>
+                      <div className="relay-readonly-rate">
+                        {effectivePrice !== null ? (
+                          <>
+                            <strong>${formatDisplayRate(effectivePrice)} / 1M</strong>
+                            {hasMultiplier && (
+                              <small className="relay-rate-subtext">
+                                <span>
+                                  {t("relayPricingOfficialBase", {
+                                    price: formatDisplayRate(baseRate)
+                                  })}
+                                </span>
+                              </small>
+                            )}
+                          </>
+                        ) : (
+                          <span className="muted">—</span>
+                        )}
+                      </div>
+                    </td>
+                  );
+                })}
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>

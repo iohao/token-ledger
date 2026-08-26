@@ -992,8 +992,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         applyTheme("system", false);
       }
     };
-    systemThemeQuery.addEventListener("change", handleSystemThemeChange);
-    return () => systemThemeQuery.removeEventListener("change", handleSystemThemeChange);
+    systemThemeQuery?.addEventListener("change", handleSystemThemeChange);
+    return () => systemThemeQuery?.removeEventListener("change", handleSystemThemeChange);
   }, []);
 
   // Sync Progress listener from Tauri

@@ -1,19 +1,24 @@
 import { THEME_STORAGE_KEY, type ResolvedTheme, type ThemeMode } from "../types";
 
-export const systemThemeQuery = window.matchMedia("(prefers-color-scheme: light)");
+export const systemThemeQuery =
+  typeof window !== "undefined" && typeof window.matchMedia === "function"
+    ? window.matchMedia("(prefers-color-scheme: light)")
+    : null;
 
 export function detectInitialThemeMode(): ThemeMode {
   try {
-    const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
-    if (stored === "dark" || stored === "light" || stored === "system") {
-      return stored;
+    if (typeof window !== "undefined") {
+      const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
+      if (stored === "dark" || stored === "light" || stored === "system") {
+        return stored;
+      }
     }
   } catch {}
   return "system";
 }
 
 export function resolveTheme(themeMode: ThemeMode): ResolvedTheme {
-  return themeMode === "system" ? (systemThemeQuery.matches ? "light" : "dark") : themeMode;
+  return themeMode === "system" ? (systemThemeQuery?.matches ? "light" : "dark") : themeMode;
 }
 
 export function applyTheme(themeMode: ThemeMode, persist = true): void {
