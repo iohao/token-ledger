@@ -117,6 +117,7 @@ impl AppSettings {
                 name: "Migrated relay".to_string(),
                 enabled: false,
                 recharge_ratio_usd_per_rmb: None,
+                multiplier: Some(1.0),
                 model_prices,
             }]
         });
@@ -883,6 +884,7 @@ mod tests {
             name: "Relay A".to_string(),
             enabled: false,
             recharge_ratio_usd_per_rmb: Some(0.14),
+            multiplier: Some(1.0),
             model_prices: Vec::new(),
         }];
 

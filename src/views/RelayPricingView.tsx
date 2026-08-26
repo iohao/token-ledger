@@ -1,8 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
-  ArrowDownToLine,
-  BadgeDollarSign,
-  CheckCircle2,
   CircleAlert,
   CircleDollarSign,
   Plus,
@@ -16,11 +13,9 @@ import { useApp } from "../context/AppContext";
 import type {
   ModelPricingRatesDTO,
   PricingProviderDTO,
-  RelayPricingProviderDTO,
-  UsagePeriod
+  RelayPricingProviderDTO
 } from "../dto/dashboard";
 import type { PageSourceId } from "../types";
-import { formatCny, formatCurrency, periodLabel } from "../utils/format";
 
 export const RELAY_PRICING_PAGE_SOURCE_ID: PageSourceId = "src/views/RelayPricingView.tsx";
 
@@ -43,11 +38,18 @@ type DraftRelayProvider = {
   name: string;
   enabled: boolean;
   rechargeRatioUsdPerRmb: string;
+  multiplier: string;
   modelPrices: DraftModelPrice[];
 };
 
 function formatPrice(value: number): string {
   return value.toFixed(4);
+}
+
+function formatDisplayRate(value: number): string {
+  return Number.isInteger(Math.round(value * 10000) / 10)
+    ? value.toFixed(3)
+    : value.toFixed(4);
 }
 
 function toDraftProvider(provider: PricingProviderDTO): DraftRelayProvider {
@@ -59,6 +61,10 @@ function toDraftProvider(provider: PricingProviderDTO): DraftRelayProvider {
       provider.rechargeRatioUsdPerRmb === null
         ? ""
         : formatPrice(provider.rechargeRatioUsdPerRmb),
+    multiplier:
+      provider.multiplier === null || provider.multiplier === undefined
+        ? "1.0000"
+        : formatPrice(provider.multiplier),
     modelPrices: provider.modelPrices.map((price) => ({
       model: price.model,
       rates: {
@@ -105,14 +111,13 @@ function parsePositive(value: string): number | null {
 
 export const RelayPricingView: React.FC = () => {
   const { t } = useTranslation();
-  const { dashboard, locale, isLoading, isSyncing, loadDashboard } = useApp();
+  const { dashboard, isLoading, isSyncing, loadDashboard } = useApp();
   const [relayProviders, setRelayProviders] = useState<DraftRelayProvider[]>([]);
   const [openaiRatio, setOpenaiRatio] = useState(DEFAULT_OPENAI_RATIO);
   const [isDirty, setIsDirty] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveNotice, setSaveNotice] = useState<string | null>(null);
-  const [period, setPeriod] = useState<UsagePeriod>("monthToDate");
   const errorSummaryRef = useRef<HTMLDivElement>(null);
 
   const providers = dashboard?.meta.pricingProviders ?? [];
@@ -142,21 +147,6 @@ export const RelayPricingView: React.FC = () => {
     }
   }, [saveError]);
 
-  const comparison = dashboard?.providerCostComparisons.find((item) => item.period === period);
-  const comparisonRows = useMemo(() => {
-    const byId = new Map(providers.map((provider) => [provider.id, provider]));
-    return (comparison?.providers ?? [])
-      .map((row) => ({ ...row, provider: byId.get(row.providerId) }))
-      .filter((row): row is typeof row & { provider: PricingProviderDTO } => Boolean(row.provider))
-      .sort((left, right) => {
-        if (left.isComplete !== right.isComplete) {
-          return left.isComplete ? -1 : 1;
-        }
-        return (left.costCny ?? Number.POSITIVE_INFINITY) - (right.costCny ?? Number.POSITIVE_INFINITY);
-      });
-  }, [comparison?.providers, providers]);
-
-  const comparisonUsable = comparisonRows.filter((row) => row.isComplete);
   const controlsDisabled = isLoading || isSyncing || isSaving;
 
   const markDirty = () => {
@@ -178,6 +168,7 @@ export const RelayPricingView: React.FC = () => {
         name: "",
         enabled: false,
         rechargeRatioUsdPerRmb: "",
+        multiplier: "1.0000",
         modelPrices: []
       }
     ]);
@@ -193,9 +184,21 @@ export const RelayPricingView: React.FC = () => {
         (model) => !usedModels.has(model.toLowerCase())
       );
       const nextModel = availableModels[0] ?? "";
+      const officialMatch = officialProvider?.modelPrices.find(
+        (p) => p.model.toLowerCase() === nextModel.toLowerCase()
+      );
+      const initialRates = officialMatch
+        ? {
+            inputUsdPerMillion: formatPrice(officialMatch.rates.inputUsdPerMillion),
+            outputUsdPerMillion: formatPrice(officialMatch.rates.outputUsdPerMillion),
+            cacheReadUsdPerMillion: formatPrice(officialMatch.rates.cacheReadUsdPerMillion),
+            cacheCreationUsdPerMillion: formatPrice(officialMatch.rates.cacheCreationUsdPerMillion)
+          }
+        : emptyRates();
+
       return {
         ...provider,
-        modelPrices: [...provider.modelPrices, { model: nextModel, rates: emptyRates() }]
+        modelPrices: [...provider.modelPrices, { model: nextModel, rates: initialRates }]
       };
     });
   };
@@ -217,6 +220,11 @@ export const RelayPricingView: React.FC = () => {
       const ratio = parsePositive(provider.rechargeRatioUsdPerRmb);
       if (ratio === null && (provider.enabled || provider.id !== MIGRATED_RELAY_PROVIDER_ID)) {
         setSaveError(t("relayPricingRatioError", { provider: name }));
+        return;
+      }
+      const multiplier = parsePositive(provider.multiplier);
+      if (multiplier === null) {
+        setSaveError(t("relayPricingMultiplierError", { provider: name }));
         return;
       }
 
@@ -252,6 +260,7 @@ export const RelayPricingView: React.FC = () => {
         name,
         enabled: provider.enabled,
         rechargeRatioUsdPerRmb: ratio,
+        multiplier,
         modelPrices
       });
     }
@@ -271,16 +280,6 @@ export const RelayPricingView: React.FC = () => {
     }
   };
 
-  const formatCnyValue = (value: number) => formatCny(value, locale);
-
-  const rmbEquivalent = (price: string, ratio: string) => {
-    const numericPrice = parseNonNegative(price);
-    const numericRatio = parsePositive(ratio);
-    return numericPrice === null || numericRatio === null
-      ? t("relayPricingRmbUnavailable")
-      : `${formatCnyValue(numericPrice / numericRatio)} / 1M`;
-  };
-
   return (
     <div className="page-stack relay-pricing-page">
       <PageHeader
@@ -297,83 +296,26 @@ export const RelayPricingView: React.FC = () => {
         }
       />
 
-      <section className="relay-comparison panel" aria-labelledby="relay-comparison-title">
-        <div className="relay-section-head">
-          <div>
-            <span className="relay-section-kicker"><BadgeDollarSign size={15} /> {t("relayPricingCompareKicker")}</span>
-            <h2 id="relay-comparison-title">{t("relayPricingCompareTitle")}</h2>
-            <p>{t("relayPricingCompareDescription")}</p>
-          </div>
-          <label className="relay-period-select">
-            <span>{t("relayPricingPeriod")}</span>
-            <select value={period} onChange={(event) => setPeriod(event.target.value as UsagePeriod)}>
-              {(["today", "last7Days", "monthToDate"] as UsagePeriod[]).map((value) => (
-                <option key={value} value={value}>{periodLabel(value, locale)}</option>
-              ))}
-            </select>
-          </label>
-        </div>
-
-        {comparisonRows.length === 0 ? (
-          <p className="relay-empty-comparison">{t("relayPricingNoUsage")}</p>
-        ) : (
-          <div className="relay-comparison-grid">
-            {comparisonRows.map((row, index) => (
-              <article key={row.providerId} className={`relay-cost-card ${index === 0 && row.isComplete ? "is-lowest" : ""} ${!row.isComplete ? "is-incomplete" : ""}`}>
-                <div className="relay-cost-card-head">
-                  <div>
-                    <strong>{row.provider.name}</strong>
-                    <span>{row.provider.kind === "official" ? t("relayPricingOfficial") : t("relayPricingRelay")}</span>
-                  </div>
-                  {index === 0 && row.isComplete && <span className="relay-lowest-badge"><CheckCircle2 size={14} /> {t("relayPricingLowest")}</span>}
-                </div>
-                {row.isComplete && row.costUsd !== null && row.costCny !== null ? (
-                  <>
-                    <strong className="relay-cost-cny">{formatCny(row.costCny, locale)}</strong>
-                    <span className="relay-cost-usd">{formatCurrency(row.costUsd, locale)} {t("relayPricingCreditCost")}</span>
-                  </>
-                ) : (
-                  <div className="relay-incomplete-copy"><CircleAlert size={16} /> {t("relayPricingIncomplete")}</div>
-                )}
-                {row.fallbackModels.length > 0 && <p className="relay-cost-note">{t("relayPricingFallback", { models: row.fallbackModels.join(", ") })}</p>}
-                {row.unpricedModels.length > 0 && <p className="relay-cost-note is-warning">{t("relayPricingUnpriced", { models: row.unpricedModels.join(", ") })}</p>}
-              </article>
-            ))}
-          </div>
-        )}
-        {comparisonUsable.length > 0 && <p className="relay-comparison-footnote"><ArrowDownToLine size={14} /> {t("relayPricingCompareFootnote")}</p>}
-      </section>
-
       {saveError && <div className="relay-error-summary" ref={errorSummaryRef} tabIndex={-1} role="alert"><CircleAlert size={17} /> {saveError}</div>}
       {saveNotice && <p className="config-feedback good" role="status">{saveNotice}</p>}
 
       <section className="relay-provider-list" aria-label={t("relayPricingProvidersAria")}>
-        {officialProvider && (
-          <OfficialProviderCard
-            provider={officialProvider}
-            openaiRatio={openaiRatio}
-            controlsDisabled={controlsDisabled}
-            onRatioChange={(value) => {
-              setOpenaiRatio(value);
-              markDirty();
-            }}
-            rmbEquivalent={rmbEquivalent}
-          />
-        )}
-
         {relayProviders.map((provider) => (
           <RelayProviderCard
             key={provider.id}
             provider={provider}
             officialModels={officialModels}
+            officialProvider={officialProvider}
             controlsDisabled={controlsDisabled}
+            isDirty={isDirty}
+            isSaving={isSaving}
+            onSave={() => void saveProviders()}
             onUpdate={updateRelay}
             onRemove={() => {
               setRelayProviders((current) => current.filter((item) => item.id !== provider.id));
               markDirty();
             }}
             onAddModel={() => addModelPrice(provider.id)}
-            rmbEquivalent={rmbEquivalent}
           />
         ))}
       </section>
@@ -386,42 +328,29 @@ export const RelayPricingView: React.FC = () => {
   );
 };
 
-const OfficialProviderCard: React.FC<{
-  provider: PricingProviderDTO;
-  openaiRatio: string;
-  controlsDisabled: boolean;
-  onRatioChange: (value: string) => void;
-  rmbEquivalent: (price: string, ratio: string) => string;
-}> = ({ provider, openaiRatio, controlsDisabled, onRatioChange, rmbEquivalent }) => {
-  const { t } = useTranslation();
-  return (
-    <article className="relay-provider-card panel is-official">
-      <div className="relay-provider-head">
-        <div>
-          <span className="relay-provider-type">{t("relayPricingOfficial")}</span>
-          <h2>{provider.name}</h2>
-          <p>{t("relayPricingOfficialDescription")}</p>
-        </div>
-        <span className="relay-fixed-badge">{t("relayPricingFixed")}</span>
-      </div>
-      <RatioField value={openaiRatio} disabled={controlsDisabled} onChange={onRatioChange} />
-      <ModelPriceTable prices={provider.modelPrices.map((price) => ({
-        model: price.model,
-        rates: Object.fromEntries(PRICE_FIELDS.map((field) => [field.key, formatPrice(price.rates[field.key])])) as DraftModelPrice["rates"]
-      }))} ratio={openaiRatio} disabled readOnly rmbEquivalent={rmbEquivalent} />
-    </article>
-  );
-};
-
 const RelayProviderCard: React.FC<{
   provider: DraftRelayProvider;
   officialModels: string[];
+  officialProvider?: PricingProviderDTO;
   controlsDisabled: boolean;
+  isDirty: boolean;
+  isSaving: boolean;
+  onSave: () => void;
   onUpdate: (id: string, update: (provider: DraftRelayProvider) => DraftRelayProvider) => void;
   onRemove: () => void;
   onAddModel: () => void;
-  rmbEquivalent: (price: string, ratio: string) => string;
-}> = ({ provider, officialModels, controlsDisabled, onUpdate, onRemove, onAddModel, rmbEquivalent }) => {
+}> = ({
+  provider,
+  officialModels,
+  officialProvider,
+  controlsDisabled,
+  isDirty,
+  isSaving,
+  onSave,
+  onUpdate,
+  onRemove,
+  onAddModel
+}) => {
   const { t } = useTranslation();
   const usedModels = useMemo(
     () => new Set(provider.modelPrices.map((price) => price.model.trim().toLowerCase())),
@@ -466,17 +395,24 @@ const RelayProviderCard: React.FC<{
           </button>
         </div>
       </div>
-      <RatioField
-        value={provider.rechargeRatioUsdPerRmb}
-        disabled={controlsDisabled}
-        onChange={(value) => onUpdate(provider.id, (item) => ({ ...item, rechargeRatioUsdPerRmb: value }))}
-      />
+      <div className="relay-provider-config-row">
+        <RatioField
+          value={provider.rechargeRatioUsdPerRmb}
+          disabled={controlsDisabled}
+          onChange={(value) => onUpdate(provider.id, (item) => ({ ...item, rechargeRatioUsdPerRmb: value }))}
+        />
+        <MultiplierField
+          value={provider.multiplier}
+          disabled={controlsDisabled}
+          onChange={(value) => onUpdate(provider.id, (item) => ({ ...item, multiplier: value }))}
+        />
+      </div>
       <ModelPriceTable
         prices={provider.modelPrices}
-        ratio={provider.rechargeRatioUsdPerRmb}
+        multiplier={provider.multiplier}
         disabled={controlsDisabled}
         officialModels={officialModels}
-        rmbEquivalent={rmbEquivalent}
+        officialProvider={officialProvider}
         onChange={(index, update) => onUpdate(provider.id, (item) => ({
           ...item,
           modelPrices: item.modelPrices.map((price, candidate) => candidate === index ? update(price) : price)
@@ -486,9 +422,20 @@ const RelayProviderCard: React.FC<{
           modelPrices: item.modelPrices.filter((_, candidate) => candidate !== index)
         }))}
       />
-      <button className="relay-add-model" type="button" onClick={onAddModel} disabled={controlsDisabled || !canAddModel}>
-        <Plus size={16} /> {t("relayPricingAddModel")}
-      </button>
+      <div className="relay-provider-footer">
+        <button className="relay-add-model" type="button" onClick={onAddModel} disabled={controlsDisabled || !canAddModel}>
+          <Plus size={16} /> {t("relayPricingAddModel")}
+        </button>
+        <button
+          className="action primary relay-provider-save-btn"
+          type="button"
+          onClick={onSave}
+          disabled={controlsDisabled || !isDirty}
+        >
+          <Save className="action-icon" size={16} />
+          <span>{isSaving ? t("relayPricingSaving") : t("relayPricingSave")}</span>
+        </button>
+      </div>
     </article>
   );
 };
@@ -504,20 +451,33 @@ const RatioField: React.FC<{ value: string; disabled: boolean; onChange: (value:
   );
 };
 
+const MultiplierField: React.FC<{ value: string; disabled: boolean; onChange: (value: string) => void }> = ({ value, disabled, onChange }) => {
+  const { t } = useTranslation();
+  return (
+    <label className="relay-multiplier-field">
+      <span>{t("relayPricingMultiplier")}</span>
+      <span className="relay-multiplier-input"><span>×</span><input type="number" min="0" step="0.01" inputMode="decimal" value={value} onChange={(event) => onChange(event.target.value)} disabled={disabled} /></span>
+      <small>{t("relayPricingMultiplierHint")}</small>
+    </label>
+  );
+};
+
 const ModelPriceTable: React.FC<{
   prices: DraftModelPrice[];
-  ratio: string;
+  multiplier: string;
   disabled: boolean;
   readOnly?: boolean;
   officialModels?: string[];
-  rmbEquivalent: (price: string, ratio: string) => string;
+  officialProvider?: PricingProviderDTO;
   onChange?: (index: number, update: (price: DraftModelPrice) => DraftModelPrice) => void;
   onRemove?: (index: number) => void;
-}> = ({ prices, ratio, disabled, readOnly = false, officialModels = [], rmbEquivalent, onChange, onRemove }) => {
+}> = ({ prices, multiplier, disabled, readOnly = false, officialModels = [], officialProvider, onChange, onRemove }) => {
   const { t } = useTranslation();
   if (prices.length === 0) {
     return <p className="relay-no-models">{t("relayPricingNoModels")}</p>;
   }
+
+  const numericMultiplier = parsePositive(multiplier);
 
   return (
     <div className="relay-model-table-wrap">
@@ -556,7 +516,24 @@ const ModelPriceTable: React.FC<{
                   ) : (
                     <select
                       value={price.model}
-                      onChange={(event) => onChange?.(index, (item) => ({ ...item, model: event.target.value }))}
+                      onChange={(event) => {
+                        const newModel = event.target.value;
+                        const officialMatch = officialProvider?.modelPrices.find(
+                          (p) => p.model.toLowerCase() === newModel.toLowerCase()
+                        );
+                        onChange?.(index, (item) => ({
+                          ...item,
+                          model: newModel,
+                          rates: officialMatch
+                            ? {
+                                inputUsdPerMillion: formatPrice(officialMatch.rates.inputUsdPerMillion),
+                                outputUsdPerMillion: formatPrice(officialMatch.rates.outputUsdPerMillion),
+                                cacheReadUsdPerMillion: formatPrice(officialMatch.rates.cacheReadUsdPerMillion),
+                                cacheCreationUsdPerMillion: formatPrice(officialMatch.rates.cacheCreationUsdPerMillion)
+                              }
+                            : item.rates
+                        }));
+                      }}
                       disabled={disabled}
                       aria-label={t("relayPricingModel")}
                     >
@@ -573,19 +550,64 @@ const ModelPriceTable: React.FC<{
                     </select>
                   )}
                 </td>
-                {PRICE_FIELDS.map((field) => (
-                  <td key={field.key}>
-                    {readOnly ? (
-                      <div className="relay-readonly-rate"><strong>${price.rates[field.key]} / 1M</strong><small>{rmbEquivalent(price.rates[field.key], ratio)}</small></div>
-                    ) : (
-                      <label className="relay-rate-input">
-                        <span className="sr-only">{t(field.label)}</span>
-                        <span>$</span><input type="number" min="0" step="0.0001" inputMode="decimal" value={price.rates[field.key]} onChange={(event) => onChange?.(index, (item) => ({ ...item, rates: { ...item.rates, [field.key]: event.target.value } }))} disabled={disabled} />
-                        <small>{rmbEquivalent(price.rates[field.key], ratio)}</small>
-                      </label>
-                    )}
-                  </td>
-                ))}
+                {PRICE_FIELDS.map((field) => {
+                  const numericRate = parseNonNegative(price.rates[field.key]);
+                  const hasMultiplier =
+                    numericRate !== null &&
+                    numericMultiplier !== null &&
+                    Math.abs(numericMultiplier - 1) > 0.00001;
+                  const effectivePrice =
+                    numericRate !== null && numericMultiplier !== null
+                      ? numericRate * numericMultiplier
+                      : numericRate;
+                  const actualPriceText =
+                    hasMultiplier && effectivePrice !== null
+                      ? `$${formatDisplayRate(effectivePrice)}`
+                      : null;
+
+                  return (
+                    <td key={field.key}>
+                      {readOnly ? (
+                        <div className="relay-readonly-rate">
+                          <strong>${price.rates[field.key]} / 1M</strong>
+                          {actualPriceText && (
+                            <small className="relay-rate-subtext">
+                              <span className="relay-actual-price">
+                                {t("relayPricingActualPrice", { price: actualPriceText })}
+                              </span>
+                            </small>
+                          )}
+                        </div>
+                      ) : (
+                        <label className="relay-rate-input">
+                          <span className="sr-only">{t(field.label)}</span>
+                          <span>$</span>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.0001"
+                            inputMode="decimal"
+                            value={price.rates[field.key]}
+                            onChange={(event) =>
+                              onChange?.(index, (item) => ({
+                                ...item,
+                                rates: { ...item.rates, [field.key]: event.target.value }
+                              }))
+                            }
+                            disabled={disabled}
+                          />
+                          {actualPriceText && (
+                            <small className="relay-rate-subtext">
+                              <span className="relay-actual-price">
+                                {t("relayPricingActualPrice", { price: actualPriceText })}
+                              </span>
+                            </small>
+                          )}
+                        </label>
+                      )}
+                    </td>
+                  );
+                })}
                 {!readOnly && <td><button className="relay-icon-button" type="button" onClick={() => onRemove?.(index)} disabled={disabled} aria-label={t("relayPricingDeleteModel")} title={t("relayPricingDeleteModel")}><Trash2 size={16} /></button></td>}
               </tr>
             );

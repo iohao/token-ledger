@@ -44,6 +44,8 @@ pub struct RelayPricingProvider {
     pub enabled: bool,
     pub recharge_ratio_usd_per_rmb: Option<f64>,
     #[serde(default)]
+    pub multiplier: Option<f64>,
+    #[serde(default)]
     pub model_prices: Vec<ProviderModelPricing>,
 }
 
@@ -62,6 +64,7 @@ pub struct PricingProvider {
     pub name: String,
     pub enabled: bool,
     pub recharge_ratio_usd_per_rmb: Option<f64>,
+    pub multiplier: Option<f64>,
     pub model_prices: Vec<ProviderModelPricing>,
 }
 
@@ -148,6 +151,7 @@ pub fn pricing_providers(
         name: "OpenAI 官方".to_string(),
         enabled: true,
         recharge_ratio_usd_per_rmb: Some(openai_usd_per_rmb),
+        multiplier: Some(1.0),
         model_prices: OFFICIAL_MODELS
             .iter()
             .filter_map(|model| {
@@ -166,6 +170,7 @@ pub fn pricing_providers(
             name: relay.name,
             enabled: relay.enabled,
             recharge_ratio_usd_per_rmb: relay.recharge_ratio_usd_per_rmb,
+            multiplier: relay.multiplier.or(Some(1.0)),
             model_prices: relay.model_prices,
         }))
         .collect()
@@ -202,6 +207,16 @@ pub fn validate_relay_pricing_providers(
             bail!("{name} needs a recharge ratio before it can be saved");
         }
 
+        let multiplier = match provider.multiplier {
+            Some(m) => {
+                if !m.is_finite() || m <= 0.0 {
+                    bail!("{name} multiplier must be a positive finite number");
+                }
+                Some(m)
+            }
+            None => Some(1.0),
+        };
+
         let mut models = HashSet::new();
         let mut model_prices = Vec::with_capacity(provider.model_prices.len());
         for price in &provider.model_prices {
@@ -225,6 +240,7 @@ pub fn validate_relay_pricing_providers(
             name: name.to_string(),
             enabled: provider.enabled,
             recharge_ratio_usd_per_rmb,
+            multiplier,
             model_prices,
         });
     }
@@ -252,6 +268,7 @@ pub fn cost_for_provider(
     let mut total = 0.0;
     let mut fallback_models = Vec::new();
     let mut unpriced_models = Vec::new();
+    let multiplier = provider.multiplier.unwrap_or(1.0);
 
     for usage in models {
         let identity = pricing_identity(&usage.model);
@@ -273,7 +290,7 @@ pub fn cost_for_provider(
         if is_fallback && !matches!(provider.kind, PricingProviderKind::Official) {
             fallback_models.push(usage.model.clone());
         }
-        total += cost_for_rates(&usage.totals, rates);
+        total += cost_for_rates(&usage.totals, rates) * multiplier;
     }
 
     ProviderCostResult {
@@ -355,6 +372,7 @@ mod tests {
             name: "Relay A".to_string(),
             enabled: true,
             recharge_ratio_usd_per_rmb: Some(0.14),
+            multiplier: Some(1.0),
             model_prices: vec![ProviderModelPricing {
                 model: "gpt-5.6-sol".to_string(),
                 rates: ModelPricingRates {
@@ -387,12 +405,45 @@ mod tests {
     }
 
     #[test]
+    fn provider_pricing_applies_multiplier() {
+        let relay = RelayPricingProvider {
+            id: "relay-discount".to_string(),
+            name: "Relay Discount".to_string(),
+            enabled: true,
+            recharge_ratio_usd_per_rmb: Some(0.14),
+            multiplier: Some(0.15),
+            model_prices: vec![ProviderModelPricing {
+                model: "gpt-5.6-sol".to_string(),
+                rates: ModelPricingRates {
+                    input_usd_per_million: 5.0,
+                    output_usd_per_million: 30.0,
+                    cache_read_usd_per_million: 0.5,
+                    cache_creation_usd_per_million: 5.0,
+                },
+            }],
+        };
+        let providers = pricing_providers(&[relay], 0.14);
+        let result = cost_for_provider(
+            &[ModelUsageBreakdown {
+                model: "gpt-5.6-sol".to_string(),
+                is_fallback: false,
+                totals: totals(1_000_000, 0, 0, 0),
+            }],
+            &providers[1],
+        );
+
+        // 1M input tokens at $5.00 * 0.15 multiplier = $0.75
+        assert!((result.cost_usd.unwrap_or_default() - 0.75).abs() < 0.000_001);
+    }
+
+    #[test]
     fn enabled_provider_requires_a_recharge_ratio() {
         let provider = RelayPricingProvider {
             id: "legacy".to_string(),
             name: "Migrated relay".to_string(),
             enabled: true,
             recharge_ratio_usd_per_rmb: None,
+            multiplier: Some(1.0),
             model_prices: vec![],
         };
 

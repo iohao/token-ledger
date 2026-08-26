@@ -153,11 +153,12 @@ export function relayCostCny(
     remainingInputTokens
   );
   const regularInputTokens = remainingInputTokens - cacheCreationTokens;
+  const multiplier = provider.multiplier ?? 1;
   const costUsd =
-    (regularInputTokens / 1_000_000) * rates.inputUsdPerMillion +
+    ((regularInputTokens / 1_000_000) * rates.inputUsdPerMillion +
     (cacheReadTokens / 1_000_000) * rates.cacheReadUsdPerMillion +
     (cacheCreationTokens / 1_000_000) * rates.cacheCreationUsdPerMillion +
-    (Math.max(totals.outputTokens, 0) / 1_000_000) * rates.outputUsdPerMillion;
+    (Math.max(totals.outputTokens, 0) / 1_000_000) * rates.outputUsdPerMillion) * multiplier;
 
   return costUsd / ratio;
 }

@@ -2290,6 +2290,7 @@ select {
 .relay-rate-input small,
 .relay-readonly-rate small,
 .relay-ratio-field small,
+.relay-multiplier-field small,
 .relay-cost-note {
   color: var(--text-muted);
   font-size: 12px;
@@ -2320,7 +2321,8 @@ select {
 }
 
 .relay-period-select,
-.relay-ratio-field {
+.relay-ratio-field,
+.relay-multiplier-field {
   display: grid;
   gap: 6px;
   color: var(--text-muted);
@@ -2331,6 +2333,7 @@ select {
 .relay-period-select select,
 .relay-provider-name-field input,
 .relay-ratio-input input,
+.relay-multiplier-input input,
 .relay-model-table input,
 .relay-model-table select {
   min-height: 36px;
@@ -2484,12 +2487,26 @@ select {
   font-weight: 700;
 }
 
-.relay-ratio-field {
-  width: fit-content;
-  margin: 20px 0;
+.relay-provider-config-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 24px;
+  margin: 18px 0;
 }
 
-.relay-ratio-input {
+.relay-provider-config-row .relay-ratio-field,
+.relay-provider-config-row .relay-multiplier-field {
+  margin: 0;
+}
+
+.relay-ratio-field,
+.relay-multiplier-field {
+  width: fit-content;
+}
+
+.relay-ratio-input,
+.relay-multiplier-input {
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -2497,7 +2514,8 @@ select {
   font-size: 14px;
 }
 
-.relay-ratio-input input {
+.relay-ratio-input input,
+.relay-multiplier-input input {
   width: 104px;
   padding: 0 8px;
   text-align: right;
@@ -2569,7 +2587,40 @@ select {
 .relay-readonly-rate small {
   grid-column: 1 / -1;
   margin-top: 5px;
+}
+
+.relay-rate-subtext {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.relay-actual-price {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(35, 122, 93, 0.2);
+  color: #34d399;
+  border: 1px solid rgba(74, 174, 137, 0.35);
+  font-family: var(--font-mono, "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
   white-space: nowrap;
+  width: fit-content;
+}
+
+[data-theme="light"] .relay-actual-price {
+  background: rgba(22, 98, 76, 0.1);
+  color: #16624c;
+  border-color: rgba(22, 98, 76, 0.25);
+}
+
+.relay-rmb-price {
+  color: var(--text-muted);
+  font-size: 11px;
 }
 
 .relay-readonly-rate {
@@ -2612,6 +2663,18 @@ select {
   align-items: center;
   gap: 7px;
   font-weight: 700;
+}
+
+.relay-provider-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.relay-provider-footer .relay-add-model {
+  margin-top: 0;
 }
 
 .relay-add-model {
@@ -2664,4 +2727,16 @@ select {
     width: 100%;
     justify-content: space-between;
   }
+
+  .relay-provider-footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .relay-provider-footer .relay-add-model,
+  .relay-provider-footer .relay-provider-save-btn {
+    width: 100%;
+    justify-content: center;
+  }
 }
+
