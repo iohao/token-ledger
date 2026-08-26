@@ -1261,7 +1261,7 @@ h3 {
 
 .summary-provider-cost {
   display: grid;
-  grid-template-columns: minmax(auto, max-content) 58px;
+  grid-template-columns: minmax(auto, max-content) 52px;
   align-items: baseline;
   justify-content: end;
   gap: 6px;
@@ -1288,12 +1288,21 @@ h3 {
 }
 
 .summary-provider-diff {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
   font-family: var(--mono-font);
   font-size: 0.68rem;
   font-weight: 550;
   color: var(--danger, #e06c78);
   text-align: right;
   white-space: nowrap;
+}
+
+.summary-provider-diff-icon {
+  flex-shrink: 0;
+  opacity: 0.85;
 }
 
 .summary-provider-diff.is-empty {

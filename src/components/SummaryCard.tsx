@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Coins } from "lucide-react";
+import { Coins, TrendingUp } from "lucide-react";
 import type {
   PricingComparisonDTO,
   PricingProviderDTO,
@@ -211,7 +211,8 @@ export const SummaryCard: React.FC<SummaryCardProps> = ({
                     )}
                     {diffPercent !== null ? (
                       <span className="summary-provider-diff">
-                        {diffPercent}
+                        <TrendingUp size={10} className="summary-provider-diff-icon" aria-hidden="true" />
+                        <span>{diffPercent}</span>
                       </span>
                     ) : (
                       <span className="summary-provider-diff is-empty" aria-hidden="true" />
