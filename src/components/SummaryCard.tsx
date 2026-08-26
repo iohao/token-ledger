@@ -187,21 +187,14 @@ export const SummaryCard: React.FC<SummaryCardProps> = ({
                   </div>
                   <div className="summary-provider-cost">
                     {row.isComplete && row.costCny !== null ? (
-                      <>
-                        <strong
-                          className={`summary-provider-cny${isLowest ? " is-lowest" : ""}`}
-                        >
-                          <AnimatedNumber
-                            value={row.costCny}
-                            formatter={(val) => formatCny(val, locale)}
-                          />
-                        </strong>
-                        {diffPercent !== null && (
-                          <span className="summary-provider-diff">
-                            {diffPercent}
-                          </span>
-                        )}
-                      </>
+                      <strong
+                        className={`summary-provider-cny${isLowest ? " is-lowest" : ""}`}
+                      >
+                        <AnimatedNumber
+                          value={row.costCny}
+                          formatter={(val) => formatCny(val, locale)}
+                        />
+                      </strong>
                     ) : (
                       <span
                         className="summary-provider-incomplete"
@@ -215,6 +208,13 @@ export const SummaryCard: React.FC<SummaryCardProps> = ({
                       >
                         —
                       </span>
+                    )}
+                    {diffPercent !== null ? (
+                      <span className="summary-provider-diff">
+                        {diffPercent}
+                      </span>
+                    ) : (
+                      <span className="summary-provider-diff is-empty" aria-hidden="true" />
                     )}
                   </div>
                 </div>

@@ -81,9 +81,9 @@ export function formatPriceDiffPercent(cost: number, lowestCost: number): string
     return null;
   }
   if (rounded % 1 === 0) {
-    return `${rounded.toFixed(0)}%`;
+    return `↑ ${rounded.toFixed(0)}%`;
   }
-  return `${rounded.toFixed(1)}%`;
+  return `↑ ${rounded.toFixed(1)}%`;
 }
 
 export function formatInteger(value: number, locale: Locale): string {

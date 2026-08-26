@@ -1017,9 +1017,11 @@ select {
 }
 
 .summary-provider-cost {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(auto, max-content) 58px;
   align-items: baseline;
-  gap: 5px;
+  justify-content: end;
+  gap: 6px;
   flex-shrink: 0;
   font-variant-numeric: tabular-nums;
 }
@@ -1029,6 +1031,8 @@ select {
   font-weight: 550;
   font-size: 0.77rem;
   color: var(--text-secondary);
+  text-align: right;
+  white-space: nowrap;
 }
 
 .summary-provider-cny.is-lowest {
@@ -1043,17 +1047,18 @@ select {
 .summary-provider-diff {
   font-family: var(--mono-font);
   font-size: 0.68rem;
-  font-weight: 500;
-  color: var(--text-muted);
+  font-weight: 550;
+  color: var(--danger);
+  text-align: right;
+  white-space: nowrap;
 }
 
-.summary-provider-diff.is-lowest {
-  color: #34d399;
-  font-weight: 600;
+.summary-provider-diff.is-empty {
+  visibility: hidden;
 }
 
-[data-theme="light"] .summary-provider-diff.is-lowest {
-  color: #16624c;
+[data-theme="light"] .summary-provider-diff {
+  color: var(--danger);
 }
 
 .summary-provider-incomplete {
@@ -1061,6 +1066,8 @@ select {
   font-size: 0.73rem;
   color: var(--text-muted);
   opacity: 0.6;
+  text-align: right;
+  white-space: nowrap;
 }
 
 .summary-provider-empty {
