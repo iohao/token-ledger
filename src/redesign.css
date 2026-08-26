@@ -2289,8 +2289,6 @@ select {
 .relay-comparison-footnote,
 .relay-rate-input small,
 .relay-readonly-rate small,
-.relay-ratio-field small,
-.relay-multiplier-field small,
 .relay-cost-note {
   color: var(--text-muted);
   font-size: 12px;
@@ -2320,9 +2318,7 @@ select {
   line-height: 1.55;
 }
 
-.relay-period-select,
-.relay-ratio-field,
-.relay-multiplier-field {
+.relay-period-select {
   display: grid;
   gap: 6px;
   color: var(--text-muted);
@@ -2331,9 +2327,6 @@ select {
 }
 
 .relay-period-select select,
-.relay-provider-name-field input,
-.relay-ratio-input input,
-.relay-multiplier-input input,
 .relay-model-table input,
 .relay-model-table select {
   min-height: 36px;
@@ -2479,46 +2472,96 @@ select {
   gap: 10px;
 }
 
-.relay-provider-name-field input {
-  width: min(360px, 100%);
-  margin-top: 6px;
-  padding: 0 10px;
-  font-size: 20px;
-  font-weight: 700;
-}
-
-.relay-provider-config-row {
+.relay-provider-config-bar {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-start;
-  gap: 24px;
-  margin: 18px 0;
+  align-items: flex-end;
+  gap: 16px;
+  margin: 14px 0 16px;
 }
 
-.relay-provider-config-row .relay-ratio-field,
-.relay-provider-config-row .relay-multiplier-field {
-  margin: 0;
+.relay-config-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
-.relay-ratio-field,
-.relay-multiplier-field {
-  width: fit-content;
+.relay-config-field.relay-name-field {
+  flex: 1 1 240px;
+  min-width: 180px;
+  max-width: 380px;
 }
 
-.relay-ratio-input,
-.relay-multiplier-input {
-  display: inline-flex;
+.relay-config-field.relay-ratio-field {
+  flex: 0 0 auto;
+  min-width: 175px;
+}
+
+.relay-config-field.relay-multiplier-field {
+  flex: 0 0 auto;
+  min-width: 120px;
+}
+
+.relay-field-label {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.relay-field-control {
+  display: flex;
   align-items: center;
-  gap: 7px;
-  color: var(--text);
-  font-size: 14px;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  background: var(--surface-raised);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.relay-ratio-input input,
-.relay-multiplier-input input {
-  width: 104px;
-  padding: 0 8px;
+.relay-field-control:focus-within {
+  border-color: var(--accent);
+  outline: 1px solid var(--accent);
+}
+
+.relay-affix-label {
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.relay-plain-input {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  min-height: 34px;
+  padding: 0 6px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  outline: none;
+}
+
+.relay-name-control .relay-plain-input {
+  padding: 0;
+  font-weight: 500;
+}
+
+.relay-num-input {
+  width: 80px;
   text-align: right;
+  font-family: var(--mono-font, ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
+}
+
+.relay-plain-input:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
 }
 
 .relay-model-table-wrap {
@@ -2748,9 +2791,21 @@ select {
     width: 100%;
   }
 
-  .relay-period-select select,
-  .relay-provider-name-field input {
+  .relay-period-select select {
     width: 100%;
+  }
+
+  .relay-provider-config-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .relay-config-field.relay-name-field,
+  .relay-config-field.relay-ratio-field,
+  .relay-config-field.relay-multiplier-field {
+    width: 100%;
+    max-width: none;
   }
 
   .relay-provider-actions {

@@ -374,8 +374,9 @@ const OfficialProviderCard: React.FC<{
         </div>
         <span className="relay-fixed-badge">{t("relayPricingFixed")}</span>
       </div>
-      <div className="relay-provider-config-row">
+      <div className="relay-provider-config-bar">
         <RatioField
+          id="official-ratio"
           value={openaiRatio}
           disabled={controlsDisabled}
           onChange={onRatioChange}
@@ -425,17 +426,7 @@ const RelayProviderCard: React.FC<{
   return (
     <article className={`relay-provider-card panel ${provider.enabled ? "is-enabled" : "is-disabled"}`}>
       <div className="relay-provider-head">
-        <div className="relay-provider-name-field">
-          <span className="relay-provider-type">{t("relayPricingRelay")}</span>
-          <label className="sr-only" htmlFor={`relay-name-${provider.id}`}>{t("relayPricingProviderName")}</label>
-          <input
-            id={`relay-name-${provider.id}`}
-            value={provider.name}
-            placeholder={t("relayPricingProviderNamePlaceholder")}
-            onChange={(event) => onUpdate(provider.id, (item) => ({ ...item, name: event.target.value }))}
-            disabled={controlsDisabled}
-          />
-        </div>
+        <span className="relay-provider-type">{t("relayPricingRelay")}</span>
         <div className="relay-provider-actions">
           <label className="settings-switch-label">
             <span className="settings-switch-text">{provider.enabled ? t("relayPricingEnabled") : t("relayPricingDisabled")}</span>
@@ -450,18 +441,42 @@ const RelayProviderCard: React.FC<{
               <span className="settings-switch-track" aria-hidden="true" />
             </span>
           </label>
-          <button className="relay-icon-button" type="button" onClick={onRemove} disabled={controlsDisabled} aria-label={t("relayPricingDeleteProvider")} title={t("relayPricingDeleteProvider")}>
+          <button
+            className="relay-icon-button"
+            type="button"
+            onClick={onRemove}
+            disabled={controlsDisabled}
+            aria-label={t("relayPricingDeleteProvider")}
+            title={t("relayPricingDeleteProvider")}
+          >
             <Trash2 size={17} />
           </button>
         </div>
       </div>
-      <div className="relay-provider-config-row">
+      <div className="relay-provider-config-bar">
+        <div className="relay-config-field relay-name-field">
+          <label className="relay-field-label" htmlFor={`relay-name-${provider.id}`}>
+            {t("relayPricingProviderName")}
+          </label>
+          <div className="relay-field-control relay-name-control">
+            <input
+              id={`relay-name-${provider.id}`}
+              className="relay-plain-input"
+              value={provider.name}
+              placeholder={t("relayPricingProviderNamePlaceholder")}
+              onChange={(event) => onUpdate(provider.id, (item) => ({ ...item, name: event.target.value }))}
+              disabled={controlsDisabled}
+            />
+          </div>
+        </div>
         <RatioField
+          id={`relay-ratio-${provider.id}`}
           value={provider.rechargeRatioUsdPerRmb}
           disabled={controlsDisabled}
           onChange={(value) => onUpdate(provider.id, (item) => ({ ...item, rechargeRatioUsdPerRmb: value }))}
         />
         <MultiplierField
+          id={`relay-multiplier-${provider.id}`}
           value={provider.multiplier}
           disabled={controlsDisabled}
           onChange={(value) => onUpdate(provider.id, (item) => ({ ...item, multiplier: value }))}
@@ -486,25 +501,64 @@ const RelayProviderCard: React.FC<{
   );
 };
 
-const RatioField: React.FC<{ value: string; disabled: boolean; onChange: (value: string) => void }> = ({ value, disabled, onChange }) => {
+const RatioField: React.FC<{
+  id: string;
+  value: string;
+  disabled: boolean;
+  onChange: (value: string) => void;
+}> = ({ id, value, disabled, onChange }) => {
   const { t } = useTranslation();
   return (
-    <label className="relay-ratio-field">
-      <span>{t("relayPricingRechargeRatio")}</span>
-      <span className="relay-ratio-input"><span>1 RMB =</span><input type="number" min="0" step="0.0001" inputMode="decimal" value={value} onChange={(event) => onChange(event.target.value)} disabled={disabled} /><span>$</span></span>
-      <small>{t("relayPricingRechargeRatioHint")}</small>
-    </label>
+    <div className="relay-config-field relay-ratio-field">
+      <label className="relay-field-label" htmlFor={id}>
+        {t("relayPricingRechargeRatio")}
+      </label>
+      <div className="relay-field-control relay-compound-control">
+        <span className="relay-affix-label">1 RMB =</span>
+        <input
+          id={id}
+          className="relay-plain-input relay-num-input"
+          type="number"
+          min="0"
+          step="0.0001"
+          inputMode="decimal"
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          disabled={disabled}
+        />
+        <span className="relay-affix-label">$</span>
+      </div>
+    </div>
   );
 };
 
-const MultiplierField: React.FC<{ value: string; disabled: boolean; onChange: (value: string) => void }> = ({ value, disabled, onChange }) => {
+const MultiplierField: React.FC<{
+  id: string;
+  value: string;
+  disabled: boolean;
+  onChange: (value: string) => void;
+}> = ({ id, value, disabled, onChange }) => {
   const { t } = useTranslation();
   return (
-    <label className="relay-multiplier-field">
-      <span>{t("relayPricingMultiplier")}</span>
-      <span className="relay-multiplier-input"><span>×</span><input type="number" min="0" step="0.01" inputMode="decimal" value={value} onChange={(event) => onChange(event.target.value)} disabled={disabled} /></span>
-      <small>{t("relayPricingMultiplierHint")}</small>
-    </label>
+    <div className="relay-config-field relay-multiplier-field">
+      <label className="relay-field-label" htmlFor={id}>
+        {t("relayPricingMultiplier")}
+      </label>
+      <div className="relay-field-control relay-compound-control">
+        <span className="relay-affix-label">×</span>
+        <input
+          id={id}
+          className="relay-plain-input relay-num-input"
+          type="number"
+          min="0"
+          step="0.01"
+          inputMode="decimal"
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          disabled={disabled}
+        />
+      </div>
+    </div>
   );
 };
 
