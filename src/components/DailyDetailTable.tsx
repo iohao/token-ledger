@@ -8,6 +8,7 @@ import type {
 } from "../dto/dashboard";
 import { useApp } from "../context/AppContext";
 import {
+  formatCny,
   formatCurrency,
   formatDateLabel,
   formatInteger,
@@ -178,16 +179,6 @@ function relayCostsForModels(
   return total;
 }
 
-function formatCny(value: number, locale: string): string {
-  return new Intl.NumberFormat(locale, {
-    style: "currency",
-    currency: "CNY",
-    currencyDisplay: locale === "zh-CN" ? "narrowSymbol" : "symbol",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  }).format(value);
-}
-
 export const DailyDetailTable: React.FC<DailyDetailTableProps> = ({
   title,
   rows,
@@ -203,6 +194,8 @@ export const DailyDetailTable: React.FC<DailyDetailTableProps> = ({
   const relayTotals = displayedRelayProviders.map((provider) =>
     relayCostsForModels(rows.flatMap((row) => row.models), provider)
   );
+
+  const showCacheCreation = totals.cacheCreationInputTokens > 0;
 
   const flatRows = rows.flatMap((row) => {
     const dateLabel = formatDateLabel(row.dateKey, timeZone, locale);
@@ -281,7 +274,7 @@ export const DailyDetailTable: React.FC<DailyDetailTableProps> = ({
             <col className="daily-detail-col-metric" />
             <col className="daily-detail-col-metric" />
             <col className="daily-detail-col-metric" />
-            <col className="daily-detail-col-metric" />
+            {showCacheCreation && <col className="daily-detail-col-metric" />}
             <col className="daily-detail-col-metric" />
             <col className="daily-detail-col-metric" />
             {showRelayPrices ? (
@@ -300,7 +293,7 @@ export const DailyDetailTable: React.FC<DailyDetailTableProps> = ({
               <th>{t("input")}</th>
               <th>{t("output")}</th>
               <th>{t("cachedInput")}</th>
-              <th>{t("cacheCreationInput")}</th>
+              {showCacheCreation && <th>{t("cacheCreationInput")}</th>}
               <th>{t("reasoning")}</th>
               <th>{t("total")}</th>
               {showRelayPrices ? (
@@ -345,9 +338,11 @@ export const DailyDetailTable: React.FC<DailyDetailTableProps> = ({
                 <td>
                   <AlignedTokenCount value={row.totals.cachedInputTokens} />
                 </td>
-                <td>
-                  <AlignedTokenCount value={row.totals.cacheCreationInputTokens} />
-                </td>
+                {showCacheCreation && (
+                  <td>
+                    <AlignedTokenCount value={row.totals.cacheCreationInputTokens} />
+                  </td>
+                )}
                 <td>
                   <AlignedTokenCount value={row.totals.reasoningOutputTokens} />
                 </td>
@@ -384,9 +379,11 @@ export const DailyDetailTable: React.FC<DailyDetailTableProps> = ({
               <td>
                 <AlignedTokenCount value={totals.cachedInputTokens} />
               </td>
-              <td>
-                <AlignedTokenCount value={totals.cacheCreationInputTokens} />
-              </td>
+              {showCacheCreation && (
+                <td>
+                  <AlignedTokenCount value={totals.cacheCreationInputTokens} />
+                </td>
+              )}
               <td>
                 <AlignedTokenCount value={totals.reasoningOutputTokens} />
               </td>

@@ -20,7 +20,7 @@ import type {
   UsagePeriod
 } from "../dto/dashboard";
 import type { PageSourceId } from "../types";
-import { formatCurrency, periodLabel } from "../utils/format";
+import { formatCny, formatCurrency, periodLabel } from "../utils/format";
 
 export const RELAY_PRICING_PAGE_SOURCE_ID: PageSourceId = "src/views/RelayPricingView.tsx";
 
@@ -258,21 +258,14 @@ export const RelayPricingView: React.FC = () => {
     }
   };
 
-  const formatCny = (value: number) =>
-    new Intl.NumberFormat(locale, {
-      style: "currency",
-      currency: "CNY",
-      currencyDisplay: locale === "zh-CN" ? "narrowSymbol" : "symbol",
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    }).format(value);
+  const formatCnyValue = (value: number) => formatCny(value, locale);
 
   const rmbEquivalent = (price: string, ratio: string) => {
     const numericPrice = parseNonNegative(price);
     const numericRatio = parsePositive(ratio);
     return numericPrice === null || numericRatio === null
       ? t("relayPricingRmbUnavailable")
-      : `${formatCny(numericPrice / numericRatio)} / 1M`;
+      : `${formatCnyValue(numericPrice / numericRatio)} / 1M`;
   };
 
   return (
@@ -323,7 +316,7 @@ export const RelayPricingView: React.FC = () => {
                 </div>
                 {row.isComplete && row.costUsd !== null && row.costCny !== null ? (
                   <>
-                    <strong className="relay-cost-cny">{formatCny(row.costCny)}</strong>
+                    <strong className="relay-cost-cny">{formatCny(row.costCny, locale)}</strong>
                     <span className="relay-cost-usd">{formatCurrency(row.costUsd, locale)} {t("relayPricingCreditCost")}</span>
                   </>
                 ) : (

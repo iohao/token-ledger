@@ -162,7 +162,14 @@ export const OverviewView: React.FC = () => {
 
       <section className="summary-grid">
         {(dashboard?.summaries ?? []).map((summary) => (
-          <SummaryCard key={summary.period} summary={summary} />
+          <SummaryCard
+            key={summary.period}
+            summary={summary}
+            pricingProviders={dashboard?.meta.pricingProviders}
+            comparison={dashboard?.providerCostComparisons.find(
+              (item) => item.period === summary.period
+            )}
+          />
         ))}
       </section>
 

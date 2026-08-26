@@ -4,6 +4,7 @@ import { ENGLISH_MONTH_LABELS } from "../types";
 
 const numberFormatterCache = new Map<Locale, Intl.NumberFormat>();
 const currencyFormatterCache = new Map<Locale, Intl.NumberFormat>();
+const cnyCurrencyFormatterCache = new Map<Locale, Intl.NumberFormat>();
 const timestampFormatterCache = new Map<string, Intl.DateTimeFormat>();
 const dateInputFormatterCache = new Map<string, Intl.DateTimeFormat>();
 const calendarDateFormatterCache = new Map<Locale, Intl.DateTimeFormat>();
@@ -43,6 +44,25 @@ export function localeCurrencyFormatter(locale: Locale): Intl.NumberFormat {
     currencyFormatterCache.set(locale, formatter);
   }
   return formatter;
+}
+
+export function localeCnyFormatter(locale: Locale): Intl.NumberFormat {
+  let formatter = cnyCurrencyFormatterCache.get(locale);
+  if (!formatter) {
+    formatter = new Intl.NumberFormat(locale, {
+      style: "currency",
+      currency: "CNY",
+      currencyDisplay: locale === "zh-CN" ? "narrowSymbol" : "symbol",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
+    cnyCurrencyFormatterCache.set(locale, formatter);
+  }
+  return formatter;
+}
+
+export function formatCny(value: number, locale: Locale): string {
+  return localeCnyFormatter(locale).format(value);
 }
 
 export function formatInteger(value: number, locale: Locale): string {
