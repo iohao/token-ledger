@@ -199,8 +199,7 @@ export const DailyDetailTable: React.FC<DailyDetailTableProps> = ({
 
   const flatRows = rows.flatMap((row) => {
     const dateLabel = formatDateLabel(row.dateKey, timeZone, locale);
-    const hasMultipleModels = row.models.length > 1;
-    const rowSpan = hasMultipleModels ? row.models.length + 1 : Math.max(row.models.length, 1);
+    const rowSpan = row.models.length + 1;
 
     if (row.models.length === 0) {
       return [
@@ -239,20 +238,18 @@ export const DailyDetailTable: React.FC<DailyDetailTableProps> = ({
       )
     }));
 
-    if (hasMultipleModels) {
-      modelRows.push({
-        key: `${row.dateKey}-subtotal`,
-        dateLabel,
-        rowSpan,
-        showGroupCell: false,
-        modelLabel: t("subtotalLabel"),
-        totals: row.totals,
-        isSubtotal: true,
-        relayCosts: displayedRelayProviders.map((provider) =>
-          relayCostsForModels(row.models, provider)
-        )
-      });
-    }
+    modelRows.push({
+      key: `${row.dateKey}-subtotal`,
+      dateLabel,
+      rowSpan,
+      showGroupCell: false,
+      modelLabel: t("subtotalLabel"),
+      totals: row.totals,
+      isSubtotal: true,
+      relayCosts: displayedRelayProviders.map((provider) =>
+        relayCostsForModels(row.models, provider)
+      )
+    });
 
     return modelRows;
   });
@@ -276,7 +273,6 @@ export const DailyDetailTable: React.FC<DailyDetailTableProps> = ({
             <col className="daily-detail-col-metric" />
             {showCacheCreation && <col className="daily-detail-col-metric" />}
             <col className="daily-detail-col-metric" />
-            <col className="daily-detail-col-metric" />
             {showRelayPrices ? (
               displayedRelayProviders.map((provider) => (
                 <col key={provider.id} className="daily-detail-col-relay-cost" />
@@ -294,7 +290,6 @@ export const DailyDetailTable: React.FC<DailyDetailTableProps> = ({
               <th>{t("output")}</th>
               <th>{t("cachedInput")}</th>
               {showCacheCreation && <th>{t("cacheCreationInput")}</th>}
-              <th>{t("reasoning")}</th>
               <th>{t("total")}</th>
               {showRelayPrices ? (
                 displayedRelayProviders.map((provider) => (
@@ -343,9 +338,6 @@ export const DailyDetailTable: React.FC<DailyDetailTableProps> = ({
                     <AlignedTokenCount value={row.totals.cacheCreationInputTokens} />
                   </td>
                 )}
-                <td>
-                  <AlignedTokenCount value={row.totals.reasoningOutputTokens} />
-                </td>
                 <td className="daily-detail-total-metric">
                   <AlignedTokenCount value={row.totals.totalTokens} />
                 </td>
@@ -384,9 +376,6 @@ export const DailyDetailTable: React.FC<DailyDetailTableProps> = ({
                   <AlignedTokenCount value={totals.cacheCreationInputTokens} />
                 </td>
               )}
-              <td>
-                <AlignedTokenCount value={totals.reasoningOutputTokens} />
-              </td>
               <td className="daily-detail-total-metric">
                 <AlignedTokenCount value={totals.totalTokens} />
               </td>

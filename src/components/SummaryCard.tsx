@@ -122,13 +122,6 @@ export const SummaryCard: React.FC<SummaryCardProps> = ({
             />
           </span>
         )}
-        <span>
-          {t("reasoning")}:{" "}
-          <AnimatedNumber
-            value={summary.totals.reasoningOutputTokens}
-            formatter={(val) => formatTokenCount(Math.round(val), locale)}
-          />
-        </span>
       </div>
 
       <div className="summary-providers-section">
