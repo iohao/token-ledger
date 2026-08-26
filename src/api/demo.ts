@@ -65,10 +65,8 @@ const DEMO_META: DashboardMetaDTO = {
       name: "示例中转",
       enabled: true,
       rechargeRatioUsdPerRmb: 0.14,
-      multiplier: 1.0,
-      modelPrices: [
-        { model: "gpt-5.4", rates: pricingRates([3.2, 19.2, 0.32, 3.2]) }
-      ]
+      multiplier: 0.8,
+      modelPrices: []
     }
   ]
 };
@@ -348,8 +346,8 @@ function buildDemoPricingComparisons(
 
       const multiplier = provider.multiplier ?? 1.0;
       for (const modelUsage of summary.models) {
-        const supplied = provider.modelPrices.find((price) => price.model === modelUsage.model);
-        const official = DEMO_META.pricingProviders[0].modelPrices.find(
+        const supplied = provider.modelPrices?.find((price) => price.model === modelUsage.model);
+        const official = DEMO_META.pricingProviders[0]?.modelPrices?.find(
           (price) => price.model === modelUsage.model
         );
         const rates = supplied?.rates ?? official?.rates;

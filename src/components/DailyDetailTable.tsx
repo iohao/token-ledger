@@ -136,10 +136,13 @@ function modelIdentity(model: string): string {
 export function relayCostCny(
   totals: UsageTotalsDTO,
   model: string,
-  provider: PricingProviderDTO
+  provider: PricingProviderDTO,
+  officialProvider?: PricingProviderDTO
 ): number | null {
   const ratio = provider.rechargeRatioUsdPerRmb;
-  const rates = provider.modelPrices.find((price) => modelIdentity(price.model) === modelIdentity(model))?.rates;
+  const rates =
+    provider.modelPrices?.find((price) => modelIdentity(price.model) === modelIdentity(model))?.rates ??
+    officialProvider?.modelPrices?.find((price) => modelIdentity(price.model) === modelIdentity(model))?.rates;
 
   if (ratio === null || !Number.isFinite(ratio) || ratio <= 0 || !rates) {
     return null;
@@ -165,12 +168,13 @@ export function relayCostCny(
 
 function relayCostsForModels(
   models: ModelUsageBreakdownDTO[],
-  provider: PricingProviderDTO
+  provider: PricingProviderDTO,
+  officialProvider?: PricingProviderDTO
 ): number | null {
   let total = 0;
 
   for (const model of models) {
-    const cost = relayCostCny(model.totals, model.model, provider);
+    const cost = relayCostCny(model.totals, model.model, provider, officialProvider);
     if (cost === null) {
       return null;
     }
@@ -188,12 +192,13 @@ export const DailyDetailTable: React.FC<DailyDetailTableProps> = ({
   relayProviders
 }) => {
   const { t } = useTranslation();
-  const { locale } = useApp();
+  const { locale, dashboard } = useApp();
+  const officialProvider = dashboard?.meta.pricingProviders.find((p) => p.kind === "official");
   const totals = sumTotals(rows);
   const showRelayPrices = relayProviders !== undefined;
   const displayedRelayProviders = relayProviders ?? [];
   const relayTotals = displayedRelayProviders.map((provider) =>
-    relayCostsForModels(rows.flatMap((row) => row.models), provider)
+    relayCostsForModels(rows.flatMap((row) => row.models), provider, officialProvider)
   );
 
   const showCacheCreation = totals.cacheCreationInputTokens > 0;
@@ -235,7 +240,7 @@ export const DailyDetailTable: React.FC<DailyDetailTableProps> = ({
       totals: model.totals,
       isSubtotal: false,
       relayCosts: displayedRelayProviders.map((provider) =>
-        relayCostCny(model.totals, model.model, provider)
+        relayCostCny(model.totals, model.model, provider, officialProvider)
       )
     }));
 
@@ -248,7 +253,7 @@ export const DailyDetailTable: React.FC<DailyDetailTableProps> = ({
       totals: row.totals,
       isSubtotal: true,
       relayCosts: displayedRelayProviders.map((provider) =>
-        relayCostsForModels(row.models, provider)
+        relayCostsForModels(row.models, provider, officialProvider)
       )
     });
 

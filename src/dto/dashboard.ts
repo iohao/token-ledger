@@ -42,7 +42,7 @@ export interface RelayPricingProviderDTO {
   enabled: boolean;
   rechargeRatioUsdPerRmb: number | null;
   multiplier?: number | null;
-  modelPrices: ProviderModelPricingDTO[];
+  modelPrices?: ProviderModelPricingDTO[];
 }
 
 export interface PricingProviderDTO extends RelayPricingProviderDTO {

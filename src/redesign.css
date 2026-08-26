@@ -2618,6 +2618,26 @@ select {
   border-color: rgba(22, 98, 76, 0.25);
 }
 
+.relay-model-table th.relay-col-checkbox,
+.relay-model-table td.relay-cell-checkbox {
+  text-align: center;
+  width: 120px;
+}
+
+.relay-checkbox-wrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.relay-checkbox {
+  width: 17px;
+  height: 17px;
+  cursor: pointer;
+  accent-color: var(--accent, #6366f1);
+}
+
 .relay-rmb-price {
   color: var(--text-muted);
   font-size: 11px;
