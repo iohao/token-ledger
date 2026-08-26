@@ -65,6 +65,27 @@ export function formatCny(value: number, locale: Locale): string {
   return localeCnyFormatter(locale).format(value);
 }
 
+export function formatPriceDiffPercent(cost: number, lowestCost: number): string | null {
+  if (
+    !Number.isFinite(cost) ||
+    !Number.isFinite(lowestCost) ||
+    lowestCost <= 0 ||
+    cost <= 0 ||
+    cost <= lowestCost
+  ) {
+    return null;
+  }
+  const ratio = (lowestCost / cost) * 100;
+  const rounded = Number(ratio.toFixed(1));
+  if (rounded <= 0 || rounded >= 100) {
+    return null;
+  }
+  if (rounded % 1 === 0) {
+    return `${rounded.toFixed(0)}%`;
+  }
+  return `${rounded.toFixed(1)}%`;
+}
+
 export function formatInteger(value: number, locale: Locale): string {
   return localeNumberFormatter(locale).format(value);
 }

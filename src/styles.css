@@ -1283,6 +1283,22 @@ h3 {
   color: #16624c;
 }
 
+.summary-provider-diff {
+  font-family: var(--mono-font);
+  font-size: 0.68rem;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.summary-provider-diff.is-lowest {
+  color: var(--moss, #34d399);
+  font-weight: 600;
+}
+
+[data-theme="light"] .summary-provider-diff.is-lowest {
+  color: #16624c;
+}
+
 .summary-provider-incomplete {
   font-size: 0.73rem;
   color: var(--text-muted);

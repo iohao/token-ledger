@@ -117,6 +117,10 @@ export const RelayPricingView: React.FC = () => {
 
   const providers = dashboard?.meta.pricingProviders ?? [];
   const officialProvider = providers.find((provider) => provider.kind === "official");
+  const officialModels = useMemo(
+    () => officialProvider?.modelPrices.map((price) => price.model) ?? [],
+    [officialProvider]
+  );
 
   useEffect(() => {
     if (isDirty || !officialProvider) {
@@ -181,10 +185,19 @@ export const RelayPricingView: React.FC = () => {
   };
 
   const addModelPrice = (providerId: string) => {
-    updateRelay(providerId, (provider) => ({
-      ...provider,
-      modelPrices: [...provider.modelPrices, { model: "", rates: emptyRates() }]
-    }));
+    updateRelay(providerId, (provider) => {
+      const usedModels = new Set(
+        provider.modelPrices.map((price) => price.model.trim().toLowerCase())
+      );
+      const availableModels = officialModels.filter(
+        (model) => !usedModels.has(model.toLowerCase())
+      );
+      const nextModel = availableModels[0] ?? "";
+      return {
+        ...provider,
+        modelPrices: [...provider.modelPrices, { model: nextModel, rates: emptyRates() }]
+      };
+    });
   };
 
   const saveProviders = async () => {
@@ -352,6 +365,7 @@ export const RelayPricingView: React.FC = () => {
           <RelayProviderCard
             key={provider.id}
             provider={provider}
+            officialModels={officialModels}
             controlsDisabled={controlsDisabled}
             onUpdate={updateRelay}
             onRemove={() => {
@@ -401,13 +415,24 @@ const OfficialProviderCard: React.FC<{
 
 const RelayProviderCard: React.FC<{
   provider: DraftRelayProvider;
+  officialModels: string[];
   controlsDisabled: boolean;
   onUpdate: (id: string, update: (provider: DraftRelayProvider) => DraftRelayProvider) => void;
   onRemove: () => void;
   onAddModel: () => void;
   rmbEquivalent: (price: string, ratio: string) => string;
-}> = ({ provider, controlsDisabled, onUpdate, onRemove, onAddModel, rmbEquivalent }) => {
+}> = ({ provider, officialModels, controlsDisabled, onUpdate, onRemove, onAddModel, rmbEquivalent }) => {
   const { t } = useTranslation();
+  const usedModels = useMemo(
+    () => new Set(provider.modelPrices.map((price) => price.model.trim().toLowerCase())),
+    [provider.modelPrices]
+  );
+  const availableOfficialModels = useMemo(
+    () => officialModels.filter((model) => !usedModels.has(model.toLowerCase())),
+    [officialModels, usedModels]
+  );
+  const canAddModel = officialModels.length === 0 || availableOfficialModels.length > 0;
+
   return (
     <article className={`relay-provider-card panel ${provider.enabled ? "is-enabled" : "is-disabled"}`}>
       <div className="relay-provider-head">
@@ -450,6 +475,7 @@ const RelayProviderCard: React.FC<{
         prices={provider.modelPrices}
         ratio={provider.rechargeRatioUsdPerRmb}
         disabled={controlsDisabled}
+        officialModels={officialModels}
         rmbEquivalent={rmbEquivalent}
         onChange={(index, update) => onUpdate(provider.id, (item) => ({
           ...item,
@@ -460,7 +486,7 @@ const RelayProviderCard: React.FC<{
           modelPrices: item.modelPrices.filter((_, candidate) => candidate !== index)
         }))}
       />
-      <button className="relay-add-model" type="button" onClick={onAddModel} disabled={controlsDisabled}>
+      <button className="relay-add-model" type="button" onClick={onAddModel} disabled={controlsDisabled || !canAddModel}>
         <Plus size={16} /> {t("relayPricingAddModel")}
       </button>
     </article>
@@ -483,10 +509,11 @@ const ModelPriceTable: React.FC<{
   ratio: string;
   disabled: boolean;
   readOnly?: boolean;
+  officialModels?: string[];
   rmbEquivalent: (price: string, ratio: string) => string;
   onChange?: (index: number, update: (price: DraftModelPrice) => DraftModelPrice) => void;
   onRemove?: (index: number) => void;
-}> = ({ prices, ratio, disabled, readOnly = false, rmbEquivalent, onChange, onRemove }) => {
+}> = ({ prices, ratio, disabled, readOnly = false, officialModels = [], rmbEquivalent, onChange, onRemove }) => {
   const { t } = useTranslation();
   if (prices.length === 0) {
     return <p className="relay-no-models">{t("relayPricingNoModels")}</p>;
@@ -503,27 +530,66 @@ const ModelPriceTable: React.FC<{
           </tr>
         </thead>
         <tbody>
-          {prices.map((price, index) => (
-            <tr key={`${price.model}-${index}`}>
-              <td>
-                {readOnly ? <code>{price.model}</code> : <input value={price.model} placeholder="gpt-5.6-sol" onChange={(event) => onChange?.(index, (item) => ({ ...item, model: event.target.value }))} disabled={disabled} aria-label={t("relayPricingModel")} />}
-              </td>
-              {PRICE_FIELDS.map((field) => (
-                <td key={field.key}>
+          {prices.map((price, index) => {
+            const otherSelectedModels = new Set(
+              prices
+                .filter((_, i) => i !== index)
+                .map((p) => p.model.trim().toLowerCase())
+                .filter(Boolean)
+            );
+            const availableOptions = officialModels.filter(
+              (model) => !otherSelectedModels.has(model.toLowerCase())
+            );
+            const isCurrentModelInOptions = availableOptions.some(
+              (m) => m.toLowerCase() === price.model.trim().toLowerCase()
+            );
+            const selectOptions =
+              price.model && !isCurrentModelInOptions
+                ? [price.model, ...availableOptions]
+                : availableOptions;
+
+            return (
+              <tr key={`${index}-${price.model}`}>
+                <td>
                   {readOnly ? (
-                    <div className="relay-readonly-rate"><strong>${price.rates[field.key]} / 1M</strong><small>{rmbEquivalent(price.rates[field.key], ratio)}</small></div>
+                    <code>{price.model}</code>
                   ) : (
-                    <label className="relay-rate-input">
-                      <span className="sr-only">{t(field.label)}</span>
-                      <span>$</span><input type="number" min="0" step="0.0001" inputMode="decimal" value={price.rates[field.key]} onChange={(event) => onChange?.(index, (item) => ({ ...item, rates: { ...item.rates, [field.key]: event.target.value } }))} disabled={disabled} />
-                      <small>{rmbEquivalent(price.rates[field.key], ratio)}</small>
-                    </label>
+                    <select
+                      value={price.model}
+                      onChange={(event) => onChange?.(index, (item) => ({ ...item, model: event.target.value }))}
+                      disabled={disabled}
+                      aria-label={t("relayPricingModel")}
+                    >
+                      {!price.model && (
+                        <option value="" disabled>
+                          {t("relayPricingSelectModel")}
+                        </option>
+                      )}
+                      {selectOptions.map((model) => (
+                        <option key={model} value={model}>
+                          {model}
+                        </option>
+                      ))}
+                    </select>
                   )}
                 </td>
-              ))}
-              {!readOnly && <td><button className="relay-icon-button" type="button" onClick={() => onRemove?.(index)} disabled={disabled} aria-label={t("relayPricingDeleteModel")} title={t("relayPricingDeleteModel")}><Trash2 size={16} /></button></td>}
-            </tr>
-          ))}
+                {PRICE_FIELDS.map((field) => (
+                  <td key={field.key}>
+                    {readOnly ? (
+                      <div className="relay-readonly-rate"><strong>${price.rates[field.key]} / 1M</strong><small>{rmbEquivalent(price.rates[field.key], ratio)}</small></div>
+                    ) : (
+                      <label className="relay-rate-input">
+                        <span className="sr-only">{t(field.label)}</span>
+                        <span>$</span><input type="number" min="0" step="0.0001" inputMode="decimal" value={price.rates[field.key]} onChange={(event) => onChange?.(index, (item) => ({ ...item, rates: { ...item.rates, [field.key]: event.target.value } }))} disabled={disabled} />
+                        <small>{rmbEquivalent(price.rates[field.key], ratio)}</small>
+                      </label>
+                    )}
+                  </td>
+                ))}
+                {!readOnly && <td><button className="relay-icon-button" type="button" onClick={() => onRemove?.(index)} disabled={disabled} aria-label={t("relayPricingDeleteModel")} title={t("relayPricingDeleteModel")}><Trash2 size={16} /></button></td>}
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>

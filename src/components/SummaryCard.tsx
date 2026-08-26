@@ -11,6 +11,7 @@ import { AnimatedNumber } from "./AnimatedNumber";
 import {
   formatCny,
   formatInteger,
+  formatPriceDiffPercent,
   formatTokenCount,
   nonCachedInputTokens,
   periodLabel
@@ -71,6 +72,8 @@ export const SummaryCard: React.FC<SummaryCardProps> = ({
   );
   const lowestProviderId =
     completeRows.length > 1 ? completeRows[0]?.providerId : null;
+  const lowestCost =
+    completeRows.length > 1 ? (completeRows[0]?.costCny ?? null) : null;
 
   return (
     <article className={`summary-card panel${isHighlighting ? " is-updated" : ""}`}>
@@ -158,6 +161,10 @@ export const SummaryCard: React.FC<SummaryCardProps> = ({
           ) : (
             comparisonRows.map((row) => {
               const isLowest = row.providerId === lowestProviderId;
+              const diffPercent =
+                !isLowest && lowestCost !== null && row.costCny !== null
+                  ? formatPriceDiffPercent(row.costCny, lowestCost)
+                  : null;
 
               return (
                 <div
@@ -180,14 +187,21 @@ export const SummaryCard: React.FC<SummaryCardProps> = ({
                   </div>
                   <div className="summary-provider-cost">
                     {row.isComplete && row.costCny !== null ? (
-                      <strong
-                        className={`summary-provider-cny${isLowest ? " is-lowest" : ""}`}
-                      >
-                        <AnimatedNumber
-                          value={row.costCny}
-                          formatter={(val) => formatCny(val, locale)}
-                        />
-                      </strong>
+                      <>
+                        <strong
+                          className={`summary-provider-cny${isLowest ? " is-lowest" : ""}`}
+                        >
+                          <AnimatedNumber
+                            value={row.costCny}
+                            formatter={(val) => formatCny(val, locale)}
+                          />
+                        </strong>
+                        {diffPercent !== null && (
+                          <span className="summary-provider-diff">
+                            {diffPercent}
+                          </span>
+                        )}
+                      </>
                     ) : (
                       <span
                         className="summary-provider-incomplete"

@@ -1040,6 +1040,22 @@ select {
   color: #16624c;
 }
 
+.summary-provider-diff {
+  font-family: var(--mono-font);
+  font-size: 0.68rem;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.summary-provider-diff.is-lowest {
+  color: #34d399;
+  font-weight: 600;
+}
+
+[data-theme="light"] .summary-provider-diff.is-lowest {
+  color: #16624c;
+}
+
 .summary-provider-incomplete {
   font-family: var(--mono-font);
   font-size: 0.73rem;
@@ -2300,7 +2316,8 @@ select {
 .relay-period-select select,
 .relay-provider-name-field input,
 .relay-ratio-input input,
-.relay-model-table input {
+.relay-model-table input,
+.relay-model-table select {
   min-height: 36px;
   border: 1px solid var(--border-strong);
   border-radius: 7px;
@@ -2508,7 +2525,9 @@ select {
 }
 
 .relay-model-table td > input,
-.relay-model-table td:first-child input {
+.relay-model-table td > select,
+.relay-model-table td:first-child input,
+.relay-model-table td:first-child select {
   width: 100%;
   padding: 0 8px;
 }
