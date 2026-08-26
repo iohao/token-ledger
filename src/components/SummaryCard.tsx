@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ChevronRight } from "lucide-react";
+import { Coins } from "lucide-react";
 import type {
   PricingComparisonDTO,
   PricingProviderDTO,
@@ -126,30 +126,49 @@ export const SummaryCard: React.FC<SummaryCardProps> = ({
 
       <div className="summary-providers-section">
         <div className="summary-providers-header">
-          <span className="summary-providers-title">{t("providerCosts")}</span>
-          <button
-            type="button"
-            className="summary-providers-action"
-            onClick={() => setActiveTab("relayPricing")}
-            title={t("navRelayPricing")}
-          >
-            <span>{t("manageRelayProviders")}</span>
-            <ChevronRight size={12} />
-          </button>
+          <div className="summary-providers-title-group">
+            <Coins size={12} className="summary-providers-icon" />
+            <span className="summary-providers-title">{t("providerCosts")}</span>
+            {comparisonRows.length > 0 && (
+              <span className="summary-providers-count">
+                {comparisonRows.length}
+              </span>
+            )}
+          </div>
         </div>
 
         <div className="summary-provider-list">
           {comparisonRows.length === 0 ? (
-            <div className="summary-provider-empty">
+            <div
+              className="summary-provider-empty"
+              role="button"
+              tabIndex={0}
+              onClick={() => setActiveTab("relayPricing")}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  setActiveTab("relayPricing");
+                }
+              }}
+            >
               <span>{t("noRelayProvidersConfigured")}</span>
+              <span className="summary-provider-empty-action">
+                {t("manageRelayProviders")} &rarr;
+              </span>
             </div>
           ) : (
             comparisonRows.map((row) => {
               const isLowest = row.providerId === lowestProviderId;
 
               return (
-                <div key={row.providerId} className="summary-provider-row">
+                <div
+                  key={row.providerId}
+                  className="summary-provider-row"
+                >
                   <div className="summary-provider-identity">
+                    <span
+                      className={`summary-provider-dot${isLowest ? " is-lowest" : ""}`}
+                      aria-hidden="true"
+                    />
                     <span className="summary-provider-name" title={row.provider.name}>
                       {row.provider.name}
                     </span>
@@ -161,7 +180,9 @@ export const SummaryCard: React.FC<SummaryCardProps> = ({
                   </div>
                   <div className="summary-provider-cost">
                     {row.isComplete && row.costCny !== null ? (
-                      <strong className="summary-provider-cny">
+                      <strong
+                        className={`summary-provider-cny${isLowest ? " is-lowest" : ""}`}
+                      >
                         <AnimatedNumber
                           value={row.costCny}
                           formatter={(val) => formatCny(val, locale)}
