@@ -2502,6 +2502,21 @@ select {
   min-width: 120px;
 }
 
+.relay-config-action {
+  margin-left: auto;
+  display: flex;
+  align-items: flex-end;
+  flex: 0 0 auto;
+}
+
+.relay-provider-save-btn {
+  min-height: 36px;
+  height: 36px;
+  padding: 0 14px;
+  font-size: 13px;
+  border-radius: 7px;
+}
+
 .relay-field-label {
   color: var(--text-muted);
   font-size: 12px;
@@ -2790,21 +2805,6 @@ select {
   gap: 16px;
 }
 
-.relay-provider-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-top: 14px;
-}
-
-.relay-official-footer {
-  justify-content: flex-end;
-}
-
-.relay-provider-footer .relay-add-model {
-  margin-top: 0;
-}
 
 .relay-add-model {
   margin-top: 12px;
@@ -2874,14 +2874,10 @@ select {
     gap: 10px;
   }
 
-  .relay-provider-footer {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .relay-provider-footer .relay-add-model,
-  .relay-provider-footer .relay-provider-save-btn {
+  .relay-config-action,
+  .relay-config-action .relay-provider-save-btn {
     width: 100%;
+    margin-left: 0;
     justify-content: center;
   }
 }

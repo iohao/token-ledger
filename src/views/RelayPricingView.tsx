@@ -92,6 +92,61 @@ export function parsePositive(value: string): number | null {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
+export function getProviderEffectiveCost(provider: {
+  multiplier?: string | number | null;
+  rechargeRatioUsdPerRmb?: string | number | null;
+}): number | null {
+  const multiplier =
+    provider.multiplier === undefined || provider.multiplier === null
+      ? 1.0
+      : typeof provider.multiplier === "number"
+        ? provider.multiplier > 0 && Number.isFinite(provider.multiplier)
+          ? provider.multiplier
+          : null
+        : parsePositive(String(provider.multiplier));
+
+  const ratio =
+    typeof provider.rechargeRatioUsdPerRmb === "number"
+      ? provider.rechargeRatioUsdPerRmb > 0 && Number.isFinite(provider.rechargeRatioUsdPerRmb)
+        ? provider.rechargeRatioUsdPerRmb
+        : null
+      : parsePositive(String(provider.rechargeRatioUsdPerRmb ?? ""));
+
+  if (multiplier === null || ratio === null || ratio <= 0) {
+    return null;
+  }
+
+  const cost = multiplier / ratio;
+  return Number.isFinite(cost) && cost > 0 ? cost : null;
+}
+
+export function compareRelayProvidersByPrice<
+  T extends {
+    name?: string;
+    multiplier?: string | number | null;
+    rechargeRatioUsdPerRmb?: string | number | null;
+  }
+>(a: T, b: T): number {
+  const costA = getProviderEffectiveCost(a);
+  const costB = getProviderEffectiveCost(b);
+
+  if (costA !== null && costB !== null) {
+    if (Math.abs(costA - costB) > 1e-9) {
+      return costA - costB;
+    }
+    return (a.name ?? "").localeCompare(b.name ?? "");
+  }
+
+  if (costA !== null) {
+    return -1;
+  }
+  if (costB !== null) {
+    return 1;
+  }
+
+  return (a.name ?? "").localeCompare(b.name ?? "");
+}
+
 export function computeLowestModelsByProvider(
   providers: ComparableProviderInput[],
   modelPrices: Array<{ model: string; rates: ModelPricingRatesDTO }>
@@ -170,7 +225,13 @@ export function computeLowestModelsByProvider(
 export const RelayPricingView: React.FC = () => {
   const { t } = useTranslation();
   const { dashboard, isLoading, isSyncing, loadDashboard } = useApp();
-  const [relayProviders, setRelayProviders] = useState<DraftRelayProvider[]>([]);
+  const [relayProviders, setRelayProviders] = useState<DraftRelayProvider[]>(() => {
+    const list = (dashboard?.meta.pricingProviders ?? [])
+      .filter((provider) => provider.kind === "relay")
+      .map(toDraftProvider);
+    list.sort(compareRelayProvidersByPrice);
+    return list;
+  });
   const [openaiRatio, setOpenaiRatio] = useState(DEFAULT_OPENAI_RATIO);
   const [showOfficial, setShowOfficial] = useState<boolean>(() => {
     try {
@@ -285,9 +346,11 @@ export const RelayPricingView: React.FC = () => {
         ? DEFAULT_OPENAI_RATIO
         : formatPrice(officialProvider.rechargeRatioUsdPerRmb)
     );
-    setRelayProviders(
-      providers.filter((provider) => provider.kind === "relay").map(toDraftProvider)
-    );
+    const relayList = providers
+      .filter((provider) => provider.kind === "relay")
+      .map(toDraftProvider);
+    relayList.sort(compareRelayProvidersByPrice);
+    setRelayProviders(relayList);
   }, [isDirty, officialProvider, providers]);
 
   useEffect(() => {
@@ -357,6 +420,8 @@ export const RelayPricingView: React.FC = () => {
         modelPrices: []
       });
     }
+
+    payload.sort(compareRelayProvidersByPrice);
 
     setIsSaving(true);
     setSaveError(null);
@@ -492,6 +557,17 @@ const OfficialProviderCard: React.FC<{
           disabled={controlsDisabled}
           onChange={onRatioChange}
         />
+        <div className="relay-config-action">
+          <button
+            className="action primary relay-provider-save-btn"
+            type="button"
+            onClick={onSave}
+            disabled={controlsDisabled || !isDirty}
+          >
+            <Save className="action-icon" size={16} />
+            <span>{isSaving ? t("relayPricingSaving") : t("relayPricingSave")}</span>
+          </button>
+        </div>
       </div>
       <OfficialModelTable
         prices={provider.modelPrices ?? []}
@@ -499,17 +575,6 @@ const OfficialProviderCard: React.FC<{
         onToggleModelVisibility={onToggleModelVisibility}
         modelComparisons={modelComparisons}
       />
-      <div className="relay-provider-footer relay-official-footer">
-        <button
-          className="action primary relay-provider-save-btn"
-          type="button"
-          onClick={onSave}
-          disabled={controlsDisabled || !isDirty}
-        >
-          <Save className="action-icon" size={16} />
-          <span>{isSaving ? t("relayPricingSaving") : t("relayPricingSave")}</span>
-        </button>
-      </div>
     </article>
   );
 };
@@ -595,23 +660,23 @@ const RelayProviderCard: React.FC<{
           disabled={controlsDisabled}
           onChange={(value) => onUpdate(provider.id, (item) => ({ ...item, multiplier: value }))}
         />
+        <div className="relay-config-action">
+          <button
+            className="action primary relay-provider-save-btn"
+            type="button"
+            onClick={onSave}
+            disabled={controlsDisabled || !isDirty}
+          >
+            <Save className="action-icon" size={16} />
+            <span>{isSaving ? t("relayPricingSaving") : t("relayPricingSave")}</span>
+          </button>
+        </div>
       </div>
       <RelayRatePreviewTable
         officialPrices={officialPrices}
         multiplier={provider.multiplier}
         modelComparisons={modelComparisons}
       />
-      <div className="relay-provider-footer">
-        <button
-          className="action primary relay-provider-save-btn"
-          type="button"
-          onClick={onSave}
-          disabled={controlsDisabled || !isDirty}
-        >
-          <Save className="action-icon" size={16} />
-          <span>{isSaving ? t("relayPricingSaving") : t("relayPricingSave")}</span>
-        </button>
-      </div>
     </article>
   );
 };

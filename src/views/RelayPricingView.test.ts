@@ -1,5 +1,9 @@
 import { describe, expect, it } from "bun:test";
-import { computeLowestModelsByProvider } from "./RelayPricingView";
+import {
+  compareRelayProvidersByPrice,
+  computeLowestModelsByProvider,
+  getProviderEffectiveCost
+} from "./RelayPricingView";
 
 const mockOfficialPrices = [
   {
@@ -173,3 +177,62 @@ describe("computeLowestModelsByProvider", () => {
     expect(result.get("relay-2")?.size).toBe(0);
   });
 });
+
+describe("getProviderEffectiveCost", () => {
+  it("calculates effective cost correctly with standard numeric and string values", () => {
+    expect(getProviderEffectiveCost({ multiplier: "1.0000", rechargeRatioUsdPerRmb: "1.0000" })).toBeCloseTo(1.0);
+    expect(getProviderEffectiveCost({ multiplier: "0.8000", rechargeRatioUsdPerRmb: "1.0000" })).toBeCloseTo(0.8);
+    expect(getProviderEffectiveCost({ multiplier: 0.5, rechargeRatioUsdPerRmb: 2.0 })).toBeCloseTo(0.25);
+    expect(getProviderEffectiveCost({ multiplier: "1.0000", rechargeRatioUsdPerRmb: "0.1400" })).toBeCloseTo(7.142857);
+  });
+
+  it("defaults multiplier to 1.0 when omitted or null", () => {
+    expect(getProviderEffectiveCost({ rechargeRatioUsdPerRmb: "1.0000" })).toBeCloseTo(1.0);
+    expect(getProviderEffectiveCost({ multiplier: null, rechargeRatioUsdPerRmb: "2.0000" })).toBeCloseTo(0.5);
+  });
+
+  it("returns null for missing, non-positive or invalid inputs", () => {
+    expect(getProviderEffectiveCost({ multiplier: "1.0000", rechargeRatioUsdPerRmb: "" })).toBeNull();
+    expect(getProviderEffectiveCost({ multiplier: "1.0000", rechargeRatioUsdPerRmb: "0" })).toBeNull();
+    expect(getProviderEffectiveCost({ multiplier: "1.0000", rechargeRatioUsdPerRmb: "-1" })).toBeNull();
+    expect(getProviderEffectiveCost({ multiplier: "0", rechargeRatioUsdPerRmb: "1.0000" })).toBeNull();
+    expect(getProviderEffectiveCost({ multiplier: "abc", rechargeRatioUsdPerRmb: "1.0000" })).toBeNull();
+    expect(getProviderEffectiveCost({ multiplier: "", rechargeRatioUsdPerRmb: "1.0000" })).toBeNull();
+  });
+});
+
+describe("compareRelayProvidersByPrice", () => {
+  it("sorts providers by effective cost ascending (lowest price first)", () => {
+    const providers = [
+      { id: "p1", name: "Standard 1:1", multiplier: "1.0000", rechargeRatioUsdPerRmb: "1.0000" }, // cost 1.0
+      { id: "p2", name: "Discount 0.8x", multiplier: "0.8000", rechargeRatioUsdPerRmb: "1.0000" }, // cost 0.8
+      { id: "p3", name: "High Discount 2:1", multiplier: "1.0000", rechargeRatioUsdPerRmb: "2.0000" }, // cost 0.5
+      { id: "p4", name: "Expensive Relay", multiplier: "1.0000", rechargeRatioUsdPerRmb: "0.1400" }, // cost ~7.14
+    ];
+
+    const sorted = [...providers].sort(compareRelayProvidersByPrice);
+    expect(sorted.map((p) => p.id)).toEqual(["p3", "p2", "p1", "p4"]);
+  });
+
+  it("places providers with unconfigured/invalid price at the end", () => {
+    const providers = [
+      { id: "unconfigured", name: "New Provider", multiplier: "1.0000", rechargeRatioUsdPerRmb: "" },
+      { id: "valid-expensive", name: "Expensive", multiplier: "1.2000", rechargeRatioUsdPerRmb: "1.0000" },
+      { id: "valid-cheap", name: "Cheap", multiplier: "0.6000", rechargeRatioUsdPerRmb: "1.0000" },
+    ];
+
+    const sorted = [...providers].sort(compareRelayProvidersByPrice);
+    expect(sorted.map((p) => p.id)).toEqual(["valid-cheap", "valid-expensive", "unconfigured"]);
+  });
+
+  it("breaks ties by provider name alphabetically", () => {
+    const providers = [
+      { id: "b", name: "Beta Relay", multiplier: "1.0000", rechargeRatioUsdPerRmb: "1.0000" },
+      { id: "a", name: "Alpha Relay", multiplier: "1.0000", rechargeRatioUsdPerRmb: "1.0000" },
+    ];
+
+    const sorted = [...providers].sort(compareRelayProvidersByPrice);
+    expect(sorted.map((p) => p.name)).toEqual(["Alpha Relay", "Beta Relay"]);
+  });
+});
+
