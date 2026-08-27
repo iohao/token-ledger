@@ -2,7 +2,10 @@ import { describe, expect, it } from "bun:test";
 import {
   compareRelayProvidersByPrice,
   computeLowestModelsByProvider,
-  getProviderEffectiveCost
+  countCustomizedModels,
+  getProviderEffectiveCost,
+  isRateEqual,
+  mergeWithOfficialModelPrices
 } from "./RelayPricingView";
 
 const mockOfficialPrices = [
@@ -12,7 +15,7 @@ const mockOfficialPrices = [
       inputUsdPerMillion: 5.0,
       outputUsdPerMillion: 30.0,
       cacheReadUsdPerMillion: 0.5,
-      cacheCreationUsdPerMillion: 5.0
+      cacheCreationUsdPerMillion: 6.25
     }
   },
   {
@@ -235,4 +238,134 @@ describe("compareRelayProvidersByPrice", () => {
     expect(sorted.map((p) => p.name)).toEqual(["Alpha Relay", "Beta Relay"]);
   });
 });
+
+describe("computeLowestModelsByProvider with custom benchmark pricing", () => {
+  it("uses provider-specific benchmark rates when determining lowest price per model", () => {
+    // relay-1 has lower baseline for sol ($3 vs official $5), but higher baseline for mini ($1.5 vs official $0.75)
+    // relay-2 has standard official baselines ($5 for sol, $0.75 for mini)
+    // Both have 1.0 multiplier and 1.0 recharge ratio
+    const result = computeLowestModelsByProvider(
+      [
+        {
+          id: "relay-1",
+          multiplier: "1.0000",
+          rechargeRatioUsdPerRmb: "1.0000",
+          modelPrices: [
+            {
+              model: "gpt-5.6-sol",
+              rates: {
+                inputUsdPerMillion: 3.0,
+                outputUsdPerMillion: 18.0,
+                cacheReadUsdPerMillion: 0.3,
+                cacheCreationUsdPerMillion: 3.0
+              }
+            },
+            {
+              model: "gpt-5.4-mini",
+              rates: {
+                inputUsdPerMillion: 1.5,
+                outputUsdPerMillion: 9.0,
+                cacheReadUsdPerMillion: 0.15,
+                cacheCreationUsdPerMillion: 1.5
+              }
+            }
+          ]
+        },
+        {
+          id: "relay-2",
+          multiplier: "1.0000",
+          rechargeRatioUsdPerRmb: "1.0000",
+          modelPrices: [
+            {
+              model: "gpt-5.6-sol",
+              rates: {
+                inputUsdPerMillion: 5.0,
+                outputUsdPerMillion: 30.0,
+                cacheReadUsdPerMillion: 0.5,
+                cacheCreationUsdPerMillion: 6.25
+              }
+            },
+            {
+              model: "gpt-5.4-mini",
+              rates: {
+                inputUsdPerMillion: 0.75,
+                outputUsdPerMillion: 4.52,
+                cacheReadUsdPerMillion: 0.075,
+                cacheCreationUsdPerMillion: 0.75
+              }
+            }
+          ]
+        }
+      ],
+      mockOfficialPrices
+    );
+
+    // For gpt-5.6-sol: relay-1 is lowest ($3 vs $5, diff is 66.7% higher on relay-2)
+    expect(result.get("relay-1")?.get("gpt-5.6-sol")?.isLowest).toBe(true);
+    expect(result.get("relay-2")?.get("gpt-5.6-sol")?.isLowest).toBe(false);
+    expect(result.get("relay-2")?.get("gpt-5.6-sol")?.diffPercent).toBe("66.7%");
+
+    // For gpt-5.4-mini: relay-2 is lowest ($0.75 vs $1.5, diff is 100% higher on relay-1)
+    expect(result.get("relay-2")?.get("gpt-5.4-mini")?.isLowest).toBe(true);
+    expect(result.get("relay-1")?.get("gpt-5.4-mini")?.isLowest).toBe(false);
+    expect(result.get("relay-1")?.get("gpt-5.4-mini")?.diffPercent).toBe("100%");
+  });
+});
+
+describe("countCustomizedModels & mergeWithOfficialModelPrices", () => {
+  it("detects customized models accurately", () => {
+    const official = mockOfficialPrices;
+    expect(countCustomizedModels(undefined, official)).toBe(0);
+    expect(countCustomizedModels([], official)).toBe(0);
+    expect(countCustomizedModels(official, official)).toBe(0);
+
+    const customized = [
+      {
+        model: "gpt-5.6-sol",
+        rates: {
+          inputUsdPerMillion: 4.0, // changed from 5.0
+          outputUsdPerMillion: 30.0,
+          cacheReadUsdPerMillion: 0.5,
+          cacheCreationUsdPerMillion: 6.25
+        }
+      },
+      {
+        model: "gpt-5.4-mini",
+        rates: { ...mockOfficialPrices[1].rates }
+      }
+    ];
+
+    expect(countCustomizedModels(customized, official)).toBe(1);
+  });
+
+  it("merges custom prices with missing official models", () => {
+    const official = mockOfficialPrices;
+    const partialCustom = [
+      {
+        model: "gpt-5.6-sol",
+        rates: {
+          inputUsdPerMillion: 4.0,
+          outputUsdPerMillion: 24.0,
+          cacheReadUsdPerMillion: 0.4,
+          cacheCreationUsdPerMillion: 4.0
+        }
+      }
+    ];
+
+    const merged = mergeWithOfficialModelPrices(partialCustom, official);
+    expect(merged.length).toBe(2);
+    expect(merged[0].rates.inputUsdPerMillion).toBe(4.0);
+    expect(merged[1].rates.inputUsdPerMillion).toBe(0.75);
+  });
+
+  it("isRateEqual handles floating point equality correctly", () => {
+    const a = { inputUsdPerMillion: 5.0, outputUsdPerMillion: 30.0, cacheReadUsdPerMillion: 0.5, cacheCreationUsdPerMillion: 6.25 };
+    const b = { inputUsdPerMillion: 5.0000001, outputUsdPerMillion: 30.0, cacheReadUsdPerMillion: 0.5, cacheCreationUsdPerMillion: 6.25 };
+    const c = { inputUsdPerMillion: 5.1, outputUsdPerMillion: 30.0, cacheReadUsdPerMillion: 0.5, cacheCreationUsdPerMillion: 6.25 };
+
+    expect(isRateEqual(a, b)).toBe(true);
+    expect(isRateEqual(a, c)).toBe(false);
+  });
+});
+
 

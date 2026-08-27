@@ -871,7 +871,7 @@ mod tests {
             .daily_history_between("2026-04-09", "2026-04-09")
             .expect("query official history");
 
-        assert!((rows[0].totals.cost_usd - 7.1).abs() < 0.000_001);
+        assert!((rows[0].totals.cost_usd - 7.225).abs() < 0.000_001);
     }
 
     #[test]

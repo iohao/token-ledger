@@ -116,8 +116,8 @@ fn pricing_identity(model: &str) -> String {
 
 fn official_pricing_for(model: &str) -> Option<ModelPricingRates> {
     match pricing_identity(model).as_str() {
-        "gpt-5.6-sol" => Some(rates(5.0, 30.0, 0.5, 5.0)),
-        "gpt-5.6-terra" => Some(rates(2.5, 15.0, 0.25, 2.5)),
+        "gpt-5.6-sol" => Some(rates(5.0, 30.0, 0.5, 6.25)),
+        "gpt-5.6-terra" => Some(rates(2.0, 12.0, 0.2, 2.5)),
         "gpt-5.6-luna" => Some(rates(1.0, 6.0, 0.1, 1.0)),
         "gpt-5.5" => Some(rates(5.0, 30.0, 0.5, 5.0)),
         "gpt-5.4" => Some(rates(2.5, 15.0, 0.25, 2.5)),
@@ -284,19 +284,20 @@ pub fn generate_plugin_pricing_toml_for_provider(
     for model in OFFICIAL_MODELS {
         if let Some(base) = official_pricing_for(model) {
             let rates = if let Some(relay) = active_relay {
-                if let Some(custom) = relay
+                let base_rate = if let Some(custom) = relay
                     .model_prices
                     .iter()
                     .find(|p| pricing_identity(&p.model) == pricing_identity(model))
                 {
-                    custom.rates.clone()
+                    &custom.rates
                 } else {
-                    ModelPricingRates {
-                        input_usd_per_million: base.input_usd_per_million * multiplier,
-                        output_usd_per_million: base.output_usd_per_million * multiplier,
-                        cache_read_usd_per_million: base.cache_read_usd_per_million * multiplier,
-                        cache_creation_usd_per_million: base.cache_creation_usd_per_million * multiplier,
-                    }
+                    &base
+                };
+                ModelPricingRates {
+                    input_usd_per_million: base_rate.input_usd_per_million * multiplier,
+                    output_usd_per_million: base_rate.output_usd_per_million * multiplier,
+                    cache_read_usd_per_million: base_rate.cache_read_usd_per_million * multiplier,
+                    cache_creation_usd_per_million: base_rate.cache_creation_usd_per_million * multiplier,
                 }
             } else {
                 base
@@ -498,7 +499,7 @@ mod tests {
                     input_usd_per_million: 5.0,
                     output_usd_per_million: 30.0,
                     cache_read_usd_per_million: 0.5,
-                    cache_creation_usd_per_million: 5.0,
+                    cache_creation_usd_per_million: 6.25,
                 },
             }],
         };
@@ -545,5 +546,31 @@ mod tests {
         assert!(toml.contains("[models.\"gpt-5.6-sol\"]"));
         assert!(toml.contains("input_per_million = \"0.7500\""));
         assert!(toml.contains("output_per_million = \"4.5000\""));
+    }
+
+    #[test]
+    fn test_generate_plugin_pricing_toml_with_custom_model_prices() {
+        let relay = RelayPricingProvider {
+            id: "relay-custom".to_string(),
+            name: "Relay Custom".to_string(),
+            enabled: true,
+            recharge_ratio_usd_per_rmb: Some(0.14),
+            multiplier: Some(0.5),
+            model_prices: vec![ProviderModelPricing {
+                model: "gpt-5.4".to_string(),
+                rates: ModelPricingRates {
+                    input_usd_per_million: 2.0,
+                    output_usd_per_million: 10.0,
+                    cache_read_usd_per_million: 0.2,
+                    cache_creation_usd_per_million: 2.0,
+                },
+            }],
+        };
+
+        let toml = super::generate_plugin_pricing_toml(&[relay]);
+        // Custom base $2.0 * 0.5 multiplier = $1.0000
+        assert!(toml.contains("[models.\"gpt-5.4\"]"));
+        assert!(toml.contains("input_per_million = \"1.0000\""));
+        assert!(toml.contains("output_per_million = \"5.0000\""));
     }
 }

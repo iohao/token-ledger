@@ -3,9 +3,12 @@ import {
   CircleAlert,
   CircleDollarSign,
   Plus,
+  RotateCcw,
   Save,
+  SlidersHorizontal,
   Trash2,
-  TrendingUp
+  TrendingUp,
+  X
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { updatePricingProviders } from "../api/tauri";
@@ -14,6 +17,7 @@ import { useApp } from "../context/AppContext";
 import type {
   ModelPricingRatesDTO,
   PricingProviderDTO,
+  ProviderModelPricingDTO,
   RelayPricingProviderDTO
 } from "../dto/dashboard";
 import type { PageSourceId } from "../types";
@@ -36,6 +40,7 @@ export type ComparableProviderInput = {
   id: string;
   multiplier: string | number | null;
   rechargeRatioUsdPerRmb: string | number | null;
+  modelPrices?: ProviderModelPricingDTO[];
 };
 
 export type ProviderModelPriceComparison = {
@@ -49,6 +54,7 @@ type DraftRelayProvider = {
   enabled: boolean;
   rechargeRatioUsdPerRmb: string;
   multiplier: string;
+  modelPrices: ProviderModelPricingDTO[];
 };
 
 function formatPrice(value: number): string {
@@ -61,7 +67,50 @@ function formatDisplayRate(value: number): string {
     : value.toFixed(4);
 }
 
-function toDraftProvider(provider: PricingProviderDTO): DraftRelayProvider {
+export function isRateEqual(a: ModelPricingRatesDTO, b: ModelPricingRatesDTO): boolean {
+  return (
+    Math.abs(a.inputUsdPerMillion - b.inputUsdPerMillion) < 1e-6 &&
+    Math.abs(a.outputUsdPerMillion - b.outputUsdPerMillion) < 1e-6 &&
+    Math.abs(a.cacheReadUsdPerMillion - b.cacheReadUsdPerMillion) < 1e-6 &&
+    Math.abs(a.cacheCreationUsdPerMillion - b.cacheCreationUsdPerMillion) < 1e-6
+  );
+}
+
+export function countCustomizedModels(
+  providerPrices: ProviderModelPricingDTO[] | undefined,
+  officialPrices: ProviderModelPricingDTO[]
+): number {
+  if (!providerPrices || providerPrices.length === 0) {
+    return 0;
+  }
+  const officialMap = new Map(officialPrices.map((p) => [p.model, p.rates]));
+  let count = 0;
+  for (const price of providerPrices) {
+    const officialRate = officialMap.get(price.model);
+    if (!officialRate || !isRateEqual(price.rates, officialRate)) {
+      count++;
+    }
+  }
+  return count;
+}
+
+export function mergeWithOfficialModelPrices(
+  customPrices: ProviderModelPricingDTO[] | undefined,
+  officialPrices: ProviderModelPricingDTO[]
+): ProviderModelPricingDTO[] {
+  const customMap = new Map((customPrices ?? []).map((p) => [p.model, p.rates]));
+  return officialPrices.map((official) => ({
+    model: official.model,
+    rates: customMap.has(official.model)
+      ? { ...customMap.get(official.model)! }
+      : { ...official.rates }
+  }));
+}
+
+function toDraftProvider(
+  provider: PricingProviderDTO,
+  defaultOfficialPrices: ProviderModelPricingDTO[] = []
+): DraftRelayProvider {
   return {
     id: provider.id,
     name: provider.name,
@@ -73,7 +122,8 @@ function toDraftProvider(provider: PricingProviderDTO): DraftRelayProvider {
     multiplier:
       provider.multiplier === null || provider.multiplier === undefined
         ? "1.0000"
-        : formatPrice(provider.multiplier)
+        : formatPrice(provider.multiplier),
+    modelPrices: mergeWithOfficialModelPrices(provider.modelPrices, defaultOfficialPrices)
   };
 }
 
@@ -82,6 +132,14 @@ function createProviderId(): string {
     return crypto.randomUUID();
   }
   return `relay-${Date.now()}`;
+}
+
+export function parseNonNegative(value: string): number | null {
+  if (!value.trim()) {
+    return null;
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
 }
 
 export function parsePositive(value: string): number | null {
@@ -155,6 +213,7 @@ export function computeLowestModelsByProvider(
     id: string;
     multiplier: number;
     rechargeRatio: number;
+    modelPricesMap: Map<string, ModelPricingRatesDTO>;
   }> = [];
 
   for (const p of providers) {
@@ -175,7 +234,8 @@ export function computeLowestModelsByProvider(
       comparable.push({
         id: p.id,
         multiplier,
-        rechargeRatio: ratio
+        rechargeRatio: ratio,
+        modelPricesMap: new Map((p.modelPrices ?? []).map((m) => [m.model, m.rates]))
       });
     }
   }
@@ -190,13 +250,16 @@ export function computeLowestModelsByProvider(
   }
 
   for (const price of modelPrices) {
-    const baseRate = price.rates.inputUsdPerMillion;
-    const rateToCompare = baseRate > 0 ? baseRate : 1;
+    const defaultBaseRate = price.rates.inputUsdPerMillion;
 
     let minCostRmb = Number.POSITIVE_INFINITY;
     const providerCosts: Array<{ id: string; costRmb: number }> = [];
 
     for (const p of comparable) {
+      const providerRates = p.modelPricesMap.get(price.model);
+      const baseRate = providerRates ? providerRates.inputUsdPerMillion : defaultBaseRate;
+      const rateToCompare = baseRate > 0 ? baseRate : (defaultBaseRate > 0 ? defaultBaseRate : 1);
+
       const costRmb = (rateToCompare * p.multiplier) / p.rechargeRatio;
       providerCosts.push({ id: p.id, costRmb });
       if (costRmb < minCostRmb) {
@@ -225,10 +288,15 @@ export function computeLowestModelsByProvider(
 export const RelayPricingView: React.FC = () => {
   const { t } = useTranslation();
   const { dashboard, isLoading, isSyncing, loadDashboard } = useApp();
+  const providers = dashboard?.meta.pricingProviders ?? [];
+  const officialProvider = providers.find((provider) => provider.kind === "official");
+  const officialPrices = officialProvider?.modelPrices ?? [];
+  const officialModels = officialPrices.map((price) => price.model);
+
   const [relayProviders, setRelayProviders] = useState<DraftRelayProvider[]>(() => {
-    const list = (dashboard?.meta.pricingProviders ?? [])
+    const list = providers
       .filter((provider) => provider.kind === "relay")
-      .map(toDraftProvider);
+      .map((provider) => toDraftProvider(provider, officialPrices));
     list.sort(compareRelayProvidersByPrice);
     return list;
   });
@@ -259,6 +327,7 @@ export const RelayPricingView: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveNotice, setSaveNotice] = useState<string | null>(null);
+  const [editingBenchmarkProvider, setEditingBenchmarkProvider] = useState<DraftRelayProvider | null>(null);
   const errorSummaryRef = useRef<HTMLDivElement>(null);
 
   const handleToggleOfficial = (enabled: boolean) => {
@@ -269,10 +338,6 @@ export const RelayPricingView: React.FC = () => {
       // ignore
     }
   };
-
-  const providers = dashboard?.meta.pricingProviders ?? [];
-  const officialProvider = providers.find((provider) => provider.kind === "official");
-  const officialModels = officialProvider?.modelPrices?.map((price) => price.model) ?? [];
 
   useEffect(() => {
     if (officialModels.length > 0 && !hasInitializedVisibleModels) {
@@ -324,14 +389,16 @@ export const RelayPricingView: React.FC = () => {
       allProviders.push({
         id: officialProvider.id,
         multiplier: "1.0000",
-        rechargeRatioUsdPerRmb: openaiRatio
+        rechargeRatioUsdPerRmb: openaiRatio,
+        modelPrices: officialProvider.modelPrices
       });
     }
     for (const provider of relayProviders) {
       allProviders.push({
         id: provider.id,
         multiplier: provider.multiplier,
-        rechargeRatioUsdPerRmb: provider.rechargeRatioUsdPerRmb
+        rechargeRatioUsdPerRmb: provider.rechargeRatioUsdPerRmb,
+        modelPrices: provider.modelPrices
       });
     }
     return computeLowestModelsByProvider(allProviders, officialProvider?.modelPrices ?? []);
@@ -348,7 +415,7 @@ export const RelayPricingView: React.FC = () => {
     );
     const relayList = providers
       .filter((provider) => provider.kind === "relay")
-      .map(toDraftProvider);
+      .map((provider) => toDraftProvider(provider, officialProvider.modelPrices ?? []));
     relayList.sort(compareRelayProvidersByPrice);
     setRelayProviders(relayList);
   }, [isDirty, officialProvider, providers]);
@@ -380,10 +447,22 @@ export const RelayPricingView: React.FC = () => {
         name: "",
         enabled: false,
         rechargeRatioUsdPerRmb: "",
-        multiplier: "1.0000"
+        multiplier: "1.0000",
+        modelPrices: (officialProvider?.modelPrices ?? []).map((p) => ({
+          model: p.model,
+          rates: { ...p.rates }
+        }))
       }
     ]);
     markDirty();
+  };
+
+  const handleApplyBenchmarkRates = (providerId: string, updatedPrices: ProviderModelPricingDTO[]) => {
+    updateRelay(providerId, (provider) => ({
+      ...provider,
+      modelPrices: updatedPrices
+    }));
+    setEditingBenchmarkProvider(null);
   };
 
   const saveProviders = async () => {
@@ -417,7 +496,7 @@ export const RelayPricingView: React.FC = () => {
         enabled: provider.enabled,
         rechargeRatioUsdPerRmb: ratio,
         multiplier,
-        modelPrices: []
+        modelPrices: provider.modelPrices
       });
     }
 
@@ -488,6 +567,7 @@ export const RelayPricingView: React.FC = () => {
             key={provider.id}
             provider={provider}
             officialPrices={visibleOfficialPrices}
+            allOfficialPrices={officialPrices}
             modelComparisons={modelComparisonsByProvider.get(provider.id)}
             controlsDisabled={controlsDisabled}
             isDirty={isDirty}
@@ -498,6 +578,7 @@ export const RelayPricingView: React.FC = () => {
               setRelayProviders((current) => current.filter((item) => item.id !== provider.id));
               markDirty();
             }}
+            onOpenBenchmarkModal={setEditingBenchmarkProvider}
           />
         ))}
       </section>
@@ -506,6 +587,15 @@ export const RelayPricingView: React.FC = () => {
         <Plus size={18} />
         <span>{t("relayPricingAddProvider")}</span>
       </button>
+
+      {editingBenchmarkProvider && (
+        <RelayBenchmarkModal
+          provider={editingBenchmarkProvider}
+          officialPrices={officialPrices}
+          onClose={() => setEditingBenchmarkProvider(null)}
+          onApply={handleApplyBenchmarkRates}
+        />
+      )}
     </div>
   );
 };
@@ -576,6 +666,7 @@ const OfficialProviderCard: React.FC<{
 const RelayProviderCard: React.FC<{
   provider: DraftRelayProvider;
   officialPrices: Array<{ model: string; rates: ModelPricingRatesDTO }>;
+  allOfficialPrices: Array<{ model: string; rates: ModelPricingRatesDTO }>;
   modelComparisons?: Map<string, ProviderModelPriceComparison>;
   controlsDisabled: boolean;
   isDirty: boolean;
@@ -583,23 +674,34 @@ const RelayProviderCard: React.FC<{
   onSave: () => void;
   onUpdate: (id: string, update: (provider: DraftRelayProvider) => DraftRelayProvider) => void;
   onRemove: () => void;
+  onOpenBenchmarkModal: (provider: DraftRelayProvider) => void;
 }> = ({
   provider,
   officialPrices,
+  allOfficialPrices,
   modelComparisons,
   controlsDisabled,
   isDirty,
   isSaving,
   onSave,
   onUpdate,
-  onRemove
+  onRemove,
+  onOpenBenchmarkModal
 }) => {
   const { t } = useTranslation();
+  const customizedCount = countCustomizedModels(provider.modelPrices, allOfficialPrices);
 
   return (
     <article className={`relay-provider-card panel ${provider.enabled ? "is-enabled" : "is-disabled"}`}>
       <div className="relay-provider-head">
-        <span className="relay-provider-type">{t("relayPricingRelay")}</span>
+        <div className="relay-provider-head-left">
+          <span className="relay-provider-type">{t("relayPricingRelay")}</span>
+          <span className={`relay-benchmark-tag ${customizedCount > 0 ? "is-customized" : "is-default"}`}>
+            {customizedCount > 0
+              ? t("relayPricingBenchmarkCustomCount", { count: customizedCount })
+              : t("relayPricingBenchmarkDefault")}
+          </span>
+        </div>
         <div className="relay-provider-actions">
           <label className="settings-switch-label">
             <span className="settings-switch-text">{provider.enabled ? t("relayPricingEnabled") : t("relayPricingDisabled")}</span>
@@ -654,6 +756,18 @@ const RelayProviderCard: React.FC<{
           disabled={controlsDisabled}
           onChange={(value) => onUpdate(provider.id, (item) => ({ ...item, multiplier: value }))}
         />
+        <div className="relay-config-field relay-benchmark-field">
+          <span className="relay-field-label">{t("officialBenchmarkRate")}</span>
+          <button
+            className="action secondary relay-edit-benchmark-btn"
+            type="button"
+            onClick={() => onOpenBenchmarkModal(provider)}
+            disabled={controlsDisabled}
+          >
+            <SlidersHorizontal size={14} />
+            <span>{t("relayPricingEditBenchmark")}</span>
+          </button>
+        </div>
         <div className="relay-config-action">
           <button
             className="action primary relay-provider-save-btn"
@@ -668,6 +782,7 @@ const RelayProviderCard: React.FC<{
       </div>
       <RelayRatePreviewTable
         officialPrices={officialPrices}
+        providerPrices={provider.modelPrices}
         multiplier={provider.multiplier}
         modelComparisons={modelComparisons}
       />
@@ -810,15 +925,20 @@ const OfficialModelTable: React.FC<{
 
 const RelayRatePreviewTable: React.FC<{
   officialPrices: Array<{ model: string; rates: ModelPricingRatesDTO }>;
+  providerPrices?: ProviderModelPricingDTO[];
   multiplier: string;
   modelComparisons?: Map<string, ProviderModelPriceComparison>;
-}> = ({ officialPrices, multiplier, modelComparisons }) => {
+}> = ({ officialPrices, providerPrices, multiplier, modelComparisons }) => {
   const { t } = useTranslation();
   if (officialPrices.length === 0) {
     return <p className="relay-no-models">{t("relayPricingNoVisibleModels")}</p>;
   }
 
   const numericMultiplier = parsePositive(multiplier);
+  const providerPriceMap = useMemo(
+    () => new Map((providerPrices ?? []).map((p) => [p.model, p.rates])),
+    [providerPrices]
+  );
 
   return (
     <div className="relay-model-table-wrap">
@@ -830,10 +950,12 @@ const RelayRatePreviewTable: React.FC<{
           </tr>
         </thead>
         <tbody>
-          {officialPrices.map((price) => {
-            const comparison = modelComparisons?.get(price.model);
+          {officialPrices.map((officialPrice) => {
+            const comparison = modelComparisons?.get(officialPrice.model);
+            const providerRates = providerPriceMap.get(officialPrice.model) ?? officialPrice.rates;
+
             return (
-              <tr key={price.model}>
+              <tr key={officialPrice.model}>
                 <td>
                   <div className="relay-model-name-cell">
                     {comparison?.isLowest && (
@@ -847,11 +969,11 @@ const RelayRatePreviewTable: React.FC<{
                         <span>{comparison.diffPercent}</span>
                       </span>
                     )}
-                    <code>{price.model}</code>
+                    <code>{officialPrice.model}</code>
                   </div>
                 </td>
                 {PRICE_FIELDS.map((field) => {
-                  const baseRate = price.rates[field.key];
+                  const baseRate = providerRates[field.key];
                   const hasMultiplier =
                     numericMultiplier !== null && Math.abs(numericMultiplier - 1) > 0.00001;
                   const effectivePrice =
@@ -885,6 +1007,264 @@ const RelayRatePreviewTable: React.FC<{
           })}
         </tbody>
       </table>
+    </div>
+  );
+};
+
+interface RelayBenchmarkModalProps {
+  provider: DraftRelayProvider;
+  officialPrices: Array<{ model: string; rates: ModelPricingRatesDTO }>;
+  onClose: () => void;
+  onApply: (providerId: string, updatedPrices: ProviderModelPricingDTO[]) => void;
+}
+
+type DraftModelPriceRow = {
+  model: string;
+  inputUsdPerMillion: string;
+  outputUsdPerMillion: string;
+  cacheReadUsdPerMillion: string;
+  cacheCreationUsdPerMillion: string;
+};
+
+const RelayBenchmarkModal: React.FC<RelayBenchmarkModalProps> = ({
+  provider,
+  officialPrices,
+  onClose,
+  onApply
+}) => {
+  const { t } = useTranslation();
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const officialPriceMap = useMemo(
+    () => new Map(officialPrices.map((p) => [p.model, p.rates])),
+    [officialPrices]
+  );
+
+  const [draftRows, setDraftRows] = useState<DraftModelPriceRow[]>(() => {
+    const providerMap = new Map((provider.modelPrices ?? []).map((p) => [p.model, p.rates]));
+    return officialPrices.map((official) => {
+      const currentRates = providerMap.get(official.model) ?? official.rates;
+      return {
+        model: official.model,
+        inputUsdPerMillion: formatPrice(currentRates.inputUsdPerMillion),
+        outputUsdPerMillion: formatPrice(currentRates.outputUsdPerMillion),
+        cacheReadUsdPerMillion: formatPrice(currentRates.cacheReadUsdPerMillion),
+        cacheCreationUsdPerMillion: formatPrice(currentRates.cacheCreationUsdPerMillion)
+      };
+    });
+  });
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
+  const updateField = (model: string, key: keyof ModelPricingRatesDTO, value: string) => {
+    setDraftRows((current) =>
+      current.map((row) => (row.model === model ? { ...row, [key]: value } : row))
+    );
+    setErrorMessage(null);
+  };
+
+  const resetRowToOfficial = (model: string) => {
+    const officialRate = officialPriceMap.get(model);
+    if (!officialRate) {
+      return;
+    }
+    setDraftRows((current) =>
+      current.map((row) =>
+        row.model === model
+          ? {
+              model,
+              inputUsdPerMillion: formatPrice(officialRate.inputUsdPerMillion),
+              outputUsdPerMillion: formatPrice(officialRate.outputUsdPerMillion),
+              cacheReadUsdPerMillion: formatPrice(officialRate.cacheReadUsdPerMillion),
+              cacheCreationUsdPerMillion: formatPrice(officialRate.cacheCreationUsdPerMillion)
+            }
+          : row
+      )
+    );
+    setErrorMessage(null);
+  };
+
+  const resetAllToOfficial = () => {
+    setDraftRows(
+      officialPrices.map((official) => ({
+        model: official.model,
+        inputUsdPerMillion: formatPrice(official.rates.inputUsdPerMillion),
+        outputUsdPerMillion: formatPrice(official.rates.outputUsdPerMillion),
+        cacheReadUsdPerMillion: formatPrice(official.rates.cacheReadUsdPerMillion),
+        cacheCreationUsdPerMillion: formatPrice(official.rates.cacheCreationUsdPerMillion)
+      }))
+    );
+    setErrorMessage(null);
+  };
+
+  const handleApply = () => {
+    const parsedPrices: ProviderModelPricingDTO[] = [];
+
+    for (const row of draftRows) {
+      const input = parseNonNegative(row.inputUsdPerMillion);
+      const output = parseNonNegative(row.outputUsdPerMillion);
+      const cacheRead = parseNonNegative(row.cacheReadUsdPerMillion);
+      const cacheCreation = parseNonNegative(row.cacheCreationUsdPerMillion);
+
+      if (input === null || output === null || cacheRead === null || cacheCreation === null) {
+        setErrorMessage(t("relayPricingRateError", { model: row.model }));
+        return;
+      }
+
+      parsedPrices.push({
+        model: row.model,
+        rates: {
+          inputUsdPerMillion: input,
+          outputUsdPerMillion: output,
+          cacheReadUsdPerMillion: cacheRead,
+          cacheCreationUsdPerMillion: cacheCreation
+        }
+      });
+    }
+
+    onApply(provider.id, parsedPrices);
+  };
+
+  return (
+    <div className="modal-backdrop" onClick={onClose} role="presentation">
+      <div
+        className="modal-dialog"
+        onClick={(event) => event.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="benchmark-modal-title"
+      >
+        <div className="modal-header">
+          <div>
+            <h2 id="benchmark-modal-title">
+              {t("relayPricingBenchmarkModalTitle")} - {provider.name || t("relayPricingRelay")}
+            </h2>
+            <p>{t("relayPricingBenchmarkModalDesc")}</p>
+          </div>
+          <button
+            className="modal-close-btn"
+            type="button"
+            onClick={onClose}
+            aria-label={t("relayPricingModalCancel")}
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="modal-body">
+          {errorMessage && <div className="relay-modal-error">{errorMessage}</div>}
+
+          <div className="relay-model-table-wrap">
+            <table className="relay-modal-table">
+              <thead>
+                <tr>
+                  <th>{t("relayPricingModel")}</th>
+                  {PRICE_FIELDS.map((field) => (
+                    <th key={field.key}>{t(field.label)}</th>
+                  ))}
+                  <th style={{ width: 90, textAlign: "center" }}>{t("relayPricingActions")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {draftRows.map((row) => {
+                  const officialRate = officialPriceMap.get(row.model);
+                  const isModified =
+                    officialRate !== undefined &&
+                    (Math.abs(Number(row.inputUsdPerMillion) - officialRate.inputUsdPerMillion) > 1e-4 ||
+                      Math.abs(Number(row.outputUsdPerMillion) - officialRate.outputUsdPerMillion) > 1e-4 ||
+                      Math.abs(Number(row.cacheReadUsdPerMillion) - officialRate.cacheReadUsdPerMillion) > 1e-4 ||
+                      Math.abs(Number(row.cacheCreationUsdPerMillion) - officialRate.cacheCreationUsdPerMillion) > 1e-4);
+
+                  return (
+                    <tr key={row.model} className={isModified ? "is-modified" : ""}>
+                      <td>
+                        <div style={{ display: "flex", alignItems: "center" }}>
+                          <code>{row.model}</code>
+                          {isModified && (
+                            <span className="relay-row-modified-badge">
+                              {t("relayPricingBenchmarkModified")}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      {PRICE_FIELDS.map((field) => {
+                        const val = row[field.key];
+                        const officialFieldVal = officialRate ? officialRate[field.key] : null;
+                        const isFieldChanged =
+                          officialFieldVal !== null &&
+                          Math.abs(Number(val) - officialFieldVal) > 1e-4;
+
+                        return (
+                          <td key={field.key}>
+                            <div className="relay-modal-input-wrap">
+                              <span className="relay-affix-label">$</span>
+                              <input
+                                className={`relay-modal-input ${isFieldChanged ? "is-changed" : ""}`}
+                                type="number"
+                                min="0"
+                                step="0.0001"
+                                inputMode="decimal"
+                                value={val}
+                                placeholder={t("relayPricingModalInputPlaceholder")}
+                                onChange={(event) =>
+                                  updateField(row.model, field.key, event.target.value)
+                                }
+                              />
+                            </div>
+                          </td>
+                        );
+                      })}
+                      <td style={{ textAlign: "center" }}>
+                        {isModified ? (
+                          <button
+                            className="relay-row-reset-btn"
+                            type="button"
+                            onClick={() => resetRowToOfficial(row.model)}
+                            title={t("relayPricingResetRow")}
+                          >
+                            <RotateCcw size={12} />
+                            <span>{t("relayPricingResetRow")}</span>
+                          </button>
+                        ) : (
+                          <span className="muted" style={{ fontSize: 12 }}>—</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="modal-footer">
+          <button
+            className="action secondary"
+            type="button"
+            onClick={resetAllToOfficial}
+            style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+          >
+            <RotateCcw size={14} />
+            <span>{t("relayPricingResetAllToOfficial")}</span>
+          </button>
+          <div className="modal-footer-actions">
+            <button className="action secondary" type="button" onClick={onClose}>
+              {t("relayPricingModalCancel")}
+            </button>
+            <button className="action primary" type="button" onClick={handleApply}>
+              {t("relayPricingModalApply")}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };
