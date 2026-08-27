@@ -21,6 +21,8 @@
     "allow-set-database-path",
     "allow-reset-database-path",
     "allow-set-pricing-providers",
+    "allow-get-plugin-config",
+    "allow-set-plugin-config",
     "process:default",
     "updater:default"
   ]

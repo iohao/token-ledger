@@ -62,3 +62,14 @@ commands.allow = ["reset_database_path"]
 identifier = "allow-set-pricing-providers"
 description = "Allows the frontend to update relay pricing providers."
 commands.allow = ["set_pricing_providers"]
+
+[[permission]]
+identifier = "allow-get-plugin-config"
+description = "Allows the frontend to load Codex terminal plugin configuration."
+commands.allow = ["get_plugin_config"]
+
+[[permission]]
+identifier = "allow-set-plugin-config"
+description = "Allows the frontend to update Codex terminal plugin configuration."
+commands.allow = ["set_plugin_config"]
+
