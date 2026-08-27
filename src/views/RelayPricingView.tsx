@@ -447,24 +447,18 @@ export const RelayPricingView: React.FC = () => {
         description={t("relayPricingDescription")}
         pageSourceId={RELAY_PRICING_PAGE_SOURCE_ID}
         actions={
-          <div className="relay-header-actions">
-            <label className="settings-switch-label">
-              <span className="settings-switch-text">{t("relayPricingShowOfficial")}</span>
-              <span className="settings-switch">
-                <input
-                  className="settings-switch-input"
-                  type="checkbox"
-                  checked={showOfficial}
-                  onChange={(event) => handleToggleOfficial(event.target.checked)}
-                />
-                <span className="settings-switch-track" aria-hidden="true" />
-              </span>
-            </label>
-            <button className="action primary" type="button" onClick={() => void saveProviders()} disabled={controlsDisabled || !isDirty}>
-              <Save className="action-icon" size={16} />
-              <span>{isSaving ? t("relayPricingSaving") : t("relayPricingSave")}</span>
-            </button>
-          </div>
+          <label className="settings-switch-label">
+            <span className="settings-switch-text">{t("relayPricingShowOfficial")}</span>
+            <span className="settings-switch">
+              <input
+                className="settings-switch-input"
+                type="checkbox"
+                checked={showOfficial}
+                onChange={(event) => handleToggleOfficial(event.target.checked)}
+              />
+              <span className="settings-switch-track" aria-hidden="true" />
+            </span>
+          </label>
         }
       />
 
