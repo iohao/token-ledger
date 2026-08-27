@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -B \"${PLUGIN_ROOT}/scripts/token_cost.py\"",
+            "timeout": 10,
+            "statusMessage": "Calculating token cost"
+          }
+        ]
+      }
+    ]
+  }
+}

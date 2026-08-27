@@ -1,0 +1,21 @@
+{
+  "name": "codex-token-cost",
+  "version": "0.1.0+codex.20260824030122",
+  "description": "Show per-turn and session model request counts and token costs from Codex rollout usage data.",
+  "author": {
+    "name": "Local developer"
+  },
+  "interface": {
+    "displayName": "Codex Token Cost",
+    "shortDescription": "Show model request counts and configured costs after each turn.",
+    "longDescription": "Reads the usage already recorded by Codex, counts model responses, calculates exact configured model costs, and displays turn and session totals without additional API requests.",
+    "developerName": "Local developer",
+    "category": "Productivity",
+    "capabilities": [
+      "Read"
+    ],
+    "defaultPrompt": [
+      "Show the token cost from my latest Codex turn."
+    ]
+  }
+}

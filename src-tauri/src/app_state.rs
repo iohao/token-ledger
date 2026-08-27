@@ -383,6 +383,7 @@ impl AppState {
         let _sync_guard = self.lock_available_operation()?;
         let relay_pricing_providers = validate_relay_pricing_providers(&relay_pricing_providers)?;
         let openai_usd_per_rmb = validate_openai_usd_per_rmb(openai_usd_per_rmb)?;
+        let _ = crate::pricing::sync_plugin_pricing_file(&relay_pricing_providers);
         self.update_settings(move |settings| {
             settings.relay_pricing_providers = Some(relay_pricing_providers);
             settings.openai_usd_per_rmb = openai_usd_per_rmb;

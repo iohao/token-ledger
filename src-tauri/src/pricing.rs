@@ -255,6 +255,71 @@ pub fn validate_openai_usd_per_rmb(value: f64) -> Result<f64> {
     Ok(value)
 }
 
+pub fn generate_plugin_pricing_toml(relays: &[RelayPricingProvider]) -> String {
+    let mut buffer = String::new();
+    buffer.push_str("# Prices are USD per one million tokens. Keep amounts quoted for Decimal parsing.\n");
+    buffer.push_str("# Managed by TokenLedger - Relay Pricing Configuration\n\n");
+
+    let active_relay = relays.iter().find(|p| p.enabled);
+    let (provider_name, multiplier) = if let Some(relay) = active_relay {
+        (relay.name.as_str(), relay.multiplier.unwrap_or(1.0))
+    } else {
+        ("OpenAI 官方", 1.0)
+    };
+
+    buffer.push_str("[provider]\n");
+    buffer.push_str(&format!("name = \"{provider_name}\"\n"));
+    buffer.push_str(&format!("multiplier = \"{multiplier:.4}\"\n\n"));
+
+    for model in OFFICIAL_MODELS {
+        if let Some(base) = official_pricing_for(model) {
+            let rates = if let Some(relay) = active_relay {
+                if let Some(custom) = relay
+                    .model_prices
+                    .iter()
+                    .find(|p| pricing_identity(&p.model) == pricing_identity(model))
+                {
+                    custom.rates.clone()
+                } else {
+                    ModelPricingRates {
+                        input_usd_per_million: base.input_usd_per_million * multiplier,
+                        output_usd_per_million: base.output_usd_per_million * multiplier,
+                        cache_read_usd_per_million: base.cache_read_usd_per_million * multiplier,
+                        cache_creation_usd_per_million: base.cache_creation_usd_per_million * multiplier,
+                    }
+                }
+            } else {
+                base
+            };
+
+            buffer.push_str(&format!(
+                "[models.\"{model}\"]\ninput_per_million = \"{:.4}\"\noutput_per_million = \"{:.4}\"\ncached_input_per_million = \"{:.4}\"\ncache_creation_per_million = \"{:.4}\"\n\n",
+                rates.input_usd_per_million,
+                rates.output_usd_per_million,
+                rates.cache_read_usd_per_million,
+                rates.cache_creation_usd_per_million,
+            ));
+        }
+    }
+
+    buffer
+}
+
+pub fn sync_plugin_pricing_file(relays: &[RelayPricingProvider]) -> Result<Option<std::path::PathBuf>> {
+    let toml_content = generate_plugin_pricing_toml(relays);
+    if let Ok(cwd) = std::env::current_dir() {
+        for dir in cwd.ancestors() {
+            let plugin_dir = dir.join("plugins").join("codex-token-cost");
+            if plugin_dir.is_dir() {
+                let target_file = plugin_dir.join("pricing.toml");
+                std::fs::write(&target_file, toml_content.as_bytes())?;
+                return Ok(Some(target_file));
+            }
+        }
+    }
+    Ok(None)
+}
+
 pub fn cost_for(totals: &UsageTotals, model: &str) -> f64 {
     official_pricing_for(model)
         .as_ref()
@@ -448,5 +513,22 @@ mod tests {
         };
 
         assert!(validate_relay_pricing_providers(&[provider]).is_err());
+    }
+
+    #[test]
+    fn test_generate_plugin_pricing_toml() {
+        let relay = RelayPricingProvider {
+            id: "relay-test".to_string(),
+            name: "Relay Test".to_string(),
+            enabled: true,
+            recharge_ratio_usd_per_rmb: Some(0.14),
+            multiplier: Some(0.15),
+            model_prices: vec![],
+        };
+
+        let toml = super::generate_plugin_pricing_toml(&[relay]);
+        assert!(toml.contains("[models.\"gpt-5.6-sol\"]"));
+        assert!(toml.contains("input_per_million = \"0.7500\""));
+        assert!(toml.contains("output_per_million = \"4.5000\""));
     }
 }

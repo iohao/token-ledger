@@ -1,0 +1,20 @@
+{
+  "name": "token-ledger-local",
+  "interface": {
+    "displayName": "Token Ledger Local Marketplace"
+  },
+  "plugins": [
+    {
+      "name": "codex-token-cost",
+      "source": {
+        "source": "local",
+        "path": "./plugins/codex-token-cost"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

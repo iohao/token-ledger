@@ -61,8 +61,17 @@ Desktop.ini
 .claude/CLAUDE.local.md
 .claude/skills/
 .codebase-memory/
+!.agents/
 .agents/*
 !.agents/skills/
+!.agents/skills/**
+!.agents/plugins/
+!.agents/plugins/**
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
 
 # Local scratch and release state
 local/
