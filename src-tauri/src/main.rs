@@ -59,6 +59,11 @@ fn build_app_menu<R: tauri::Runtime>(handle: &tauri::AppHandle<R>) -> tauri::Res
                 .accelerator("CmdOrCtrl+5")
                 .build(handle)?,
         )
+        .item(
+            &MenuItemBuilder::with_id("nav-codex-plugin", "Codex Plugin")
+                .accelerator("CmdOrCtrl+6")
+                .build(handle)?,
+        )
         .build()?;
 
     let window_menu = SubmenuBuilder::new(handle, "Window")
@@ -120,6 +125,11 @@ fn build_app_menu<R: tauri::Runtime>(handle: &tauri::AppHandle<R>) -> tauri::Res
                 .accelerator("CmdOrCtrl+5")
                 .build(handle)?,
         )
+        .item(
+            &MenuItemBuilder::with_id("nav-codex-plugin", "Codex Plugin")
+                .accelerator("CmdOrCtrl+6")
+                .build(handle)?,
+        )
         .build()?;
 
     let window_menu = SubmenuBuilder::new(handle, "Window")
@@ -164,6 +174,9 @@ fn main() {
             "nav-relay-pricing" => {
                 let _ = app.emit("navigate-tab", "relayPricing");
             }
+            "nav-codex-plugin" => {
+                let _ = app.emit("navigate-tab", "codexPlugin");
+            }
             _ => {}
         })
         .invoke_handler(tauri::generate_handler![
@@ -179,7 +192,9 @@ fn main() {
             commands::query_daily_usage,
             commands::set_database_path,
             commands::reset_database_path,
-            commands::set_pricing_providers
+            commands::set_pricing_providers,
+            commands::get_plugin_config,
+            commands::set_plugin_config
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -395,3 +395,25 @@ function costForRates(
 export function getDemoDailyUsage(): DailyUsageSummaryDTO[] {
   return structuredClone(DEMO_DAILY_HISTORY);
 }
+
+let demoPluginConfig = {
+  enabled: true,
+  selectedProviderId: "openai-official",
+  hookInstalled: true,
+  pluginPath: "/Users/demo/.codex/.tokenledger/plugins/codex-token-cost/scripts/token_cost.py",
+  pricingPath: "/Users/demo/.codex/.tokenledger/plugins/codex-token-cost/pricing.toml"
+};
+
+export function getDemoCodexPluginConfig() {
+  return structuredClone(demoPluginConfig);
+}
+
+export function updateDemoCodexPluginConfig(enabled: boolean, selectedProviderId: string) {
+  demoPluginConfig = {
+    ...demoPluginConfig,
+    enabled,
+    selectedProviderId,
+    hookInstalled: enabled
+  };
+  return structuredClone(demoPluginConfig);
+}

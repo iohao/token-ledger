@@ -146,7 +146,13 @@ function detectInitialTab(): AppTab {
   if (tab === "syncInfo") {
     return "settings";
   }
-  return tab === "overview" || tab === "monthlyHistory" || tab === "monthlyDetail" || tab === "settings" || tab === "dailyDetail" || tab === "relayPricing"
+  return tab === "overview" ||
+    tab === "monthlyHistory" ||
+    tab === "monthlyDetail" ||
+    tab === "settings" ||
+    tab === "dailyDetail" ||
+    tab === "relayPricing" ||
+    tab === "codexPlugin"
     ? tab
     : "overview";
 }
@@ -698,7 +704,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         normalizedTab !== "monthlyDetail" &&
         normalizedTab !== "settings" &&
         normalizedTab !== "dailyDetail" &&
-        normalizedTab !== "relayPricing"
+        normalizedTab !== "relayPricing" &&
+        normalizedTab !== "codexPlugin"
       ) {
         return;
       }
@@ -944,6 +951,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         targetTab = "monthlyDetail";
       } else if (event.key === "5" || event.code === "Digit5" || event.code === "Numpad5") {
         targetTab = "relayPricing";
+      } else if (event.key === "6" || event.code === "Digit6" || event.code === "Numpad6") {
+        targetTab = "codexPlugin";
       }
 
       if (targetTab) {

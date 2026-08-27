@@ -255,12 +255,22 @@ pub fn validate_openai_usd_per_rmb(value: f64) -> Result<f64> {
     Ok(value)
 }
 
-pub fn generate_plugin_pricing_toml(relays: &[RelayPricingProvider]) -> String {
+pub fn generate_plugin_pricing_toml_for_provider(
+    relays: &[RelayPricingProvider],
+    selected_provider_id: Option<&str>,
+) -> String {
     let mut buffer = String::new();
     buffer.push_str("# Prices are USD per one million tokens. Keep amounts quoted for Decimal parsing.\n");
     buffer.push_str("# Managed by TokenLedger - Relay Pricing Configuration\n\n");
 
-    let active_relay = relays.iter().find(|p| p.enabled);
+    let active_relay = selected_provider_id.and_then(|id| {
+        if id == OPENAI_OFFICIAL_PROVIDER_ID {
+            None
+        } else {
+            relays.iter().find(|p| p.id == id)
+        }
+    });
+
     let (provider_name, multiplier) = if let Some(relay) = active_relay {
         (relay.name.as_str(), relay.multiplier.unwrap_or(1.0))
     } else {
@@ -303,6 +313,11 @@ pub fn generate_plugin_pricing_toml(relays: &[RelayPricingProvider]) -> String {
     }
 
     buffer
+}
+
+pub fn generate_plugin_pricing_toml(relays: &[RelayPricingProvider]) -> String {
+    let first_enabled = relays.iter().find(|p| p.enabled).map(|p| p.id.as_str());
+    generate_plugin_pricing_toml_for_provider(relays, first_enabled)
 }
 
 pub fn sync_plugin_pricing_file(relays: &[RelayPricingProvider]) -> Result<Option<std::path::PathBuf>> {

@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import {
+  getDemoCodexPluginConfig,
   getDemoDailyUsage,
   getDemoDashboard,
   getDemoSyncPreview,
@@ -7,11 +8,13 @@ import {
   getDemoSyncRunning,
   isDemoMode,
   resetDemoDatabasePath,
+  updateDemoCodexPluginConfig,
   updateDemoDatabasePath,
   updateDemoPricingProviders
 } from "./demo";
 
 import type {
+  CodexPluginConfigDTO,
   DailyUsageSummaryDTO,
   DashboardMetaDTO,
   DashboardPayloadDTO,
@@ -126,5 +129,27 @@ export function queryDailyUsage(startDate: string, endDate: string): Promise<Dai
   return invoke<DailyUsageSummaryDTO[]>("query_daily_usage", {
     startDate,
     endDate
+  });
+}
+
+export function fetchCodexPluginConfig(): Promise<CodexPluginConfigDTO> {
+  if (isDemoMode()) {
+    return Promise.resolve(getDemoCodexPluginConfig());
+  }
+
+  return invoke<CodexPluginConfigDTO>("get_plugin_config");
+}
+
+export function updateCodexPluginConfig(
+  enabled: boolean,
+  selectedProviderId: string
+): Promise<CodexPluginConfigDTO> {
+  if (isDemoMode()) {
+    return Promise.resolve(updateDemoCodexPluginConfig(enabled, selectedProviderId));
+  }
+
+  return invoke<CodexPluginConfigDTO>("set_plugin_config", {
+    enabled,
+    selectedProviderId
   });
 }

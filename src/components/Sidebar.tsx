@@ -5,7 +5,8 @@ import {
   ChartNoAxesCombined,
   CircleDollarSign,
   LayoutDashboard,
-  Settings
+  Settings,
+  Terminal
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import appIconUrl from "../../src-tauri/icons/128x128.png";
@@ -84,6 +85,19 @@ export const Sidebar: React.FC = () => {
           </span>
           <span className="menu-item-label">{t("navRelayPricing")}</span>
           <kbd className="menu-item-shortcut">{modKey}5</kbd>
+        </button>
+        <button
+          className={`menu-item ${activeTab === "codexPlugin" ? "is-active" : ""}`}
+          type="button"
+          title={`${t("navCodexPlugin")} (${modKey}6)`}
+          aria-current={activeTab === "codexPlugin" ? "page" : "false"}
+          onClick={() => setActiveTab("codexPlugin")}
+        >
+          <span className="menu-item-icon">
+            <Terminal size={18} />
+          </span>
+          <span className="menu-item-label">{t("navCodexPlugin")}</span>
+          <kbd className="menu-item-shortcut">{modKey}6</kbd>
         </button>
         <button
           className={`menu-item ${activeTab === "settings" ? "is-active" : ""}`}

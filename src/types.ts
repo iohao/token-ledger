@@ -30,7 +30,7 @@ export const ENGLISH_MONTH_LABELS = [
 export const SOURCE_REPOSITORY_URL = "https://github.com/iohao/token-ledger";
 
 export type AutoSyncModeValue = (typeof AUTO_SYNC_OPTIONS)[number]["value"];
-export type AppTab = "overview" | "monthlyHistory" | "monthlyDetail" | "settings" | "dailyDetail" | "relayPricing";
+export type AppTab = "overview" | "monthlyHistory" | "monthlyDetail" | "settings" | "dailyDetail" | "relayPricing" | "codexPlugin";
 export type InlineNoticeTone = "good" | "bad";
 export type UpdateStatus = "idle" | "checking" | "available" | "upToDate" | "installing" | "error";
 export type PageSourceId =
@@ -38,6 +38,7 @@ export type PageSourceId =
   | "src/views/MonthlyHistoryView.tsx"
   | "src/views/MonthlyDetailView.tsx"
   | "src/views/RelayPricingView.tsx"
+  | "src/views/CodexPluginView.tsx"
   | "src/views/SettingsView.tsx"
   | "src/views/DailyDetailView.tsx"
   | "src/views/overview.ts"

@@ -3,6 +3,7 @@ pub mod commands;
 pub mod date_keys;
 pub mod models;
 pub mod parser;
+pub mod plugin_manager;
 pub mod pricing;
 pub mod repository;
 pub mod store;

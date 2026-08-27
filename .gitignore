@@ -55,16 +55,7 @@ Desktop.ini
 .fseventsd
 
 # Local tools and agent caches
-.antigravitycli/
-.qoder/
-.claude/settings.local.json
-.claude/CLAUDE.local.md
-.claude/skills/
 .codebase-memory/
-!.agents/
-.agents/*
-!.agents/skills/
-!.agents/skills/**
 !.agents/plugins/
 !.agents/plugins/**
 

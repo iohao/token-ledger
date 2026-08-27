@@ -142,3 +142,11 @@ export interface DashboardPayloadDTO {
   monthlyHistory: MonthlyUsageSummaryDTO[];
   now: string;
 }
+
+export interface CodexPluginConfigDTO {
+  enabled: boolean;
+  selectedProviderId: string;
+  hookInstalled: boolean;
+  pluginPath: string;
+  pricingPath: string;
+}

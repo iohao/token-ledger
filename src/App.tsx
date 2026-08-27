@@ -9,6 +9,7 @@ import { MonthlyDetailView } from "./views/MonthlyDetailView";
 import { DailyDetailView } from "./views/DailyDetailView";
 import { SettingsView } from "./views/SettingsView";
 import { RelayPricingView } from "./views/RelayPricingView";
+import { CodexPluginView } from "./views/CodexPluginView";
 import { statusLabel } from "./utils/format";
 
 export const AppContent: React.FC = () => {
@@ -59,6 +60,7 @@ export const AppContent: React.FC = () => {
             {activeTab === "monthlyDetail" && <MonthlyDetailView />}
             {activeTab === "dailyDetail" && <DailyDetailView />}
             {activeTab === "relayPricing" && <RelayPricingView />}
+            {activeTab === "codexPlugin" && <CodexPluginView />}
             {activeTab === "settings" && <SettingsView />}
           </div>
         </section>

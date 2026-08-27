@@ -188,3 +188,21 @@ pub fn query_daily_usage(
         .and_then(|repository| repository.daily_history_between(&start_date, &end_date))
         .map_err(|error| error.to_string())
 }
+
+#[tauri::command]
+pub fn get_plugin_config(
+    state: State<'_, AppState>,
+) -> Result<crate::plugin_manager::CodexPluginConfig, String> {
+    state.get_plugin_config().map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn set_plugin_config(
+    enabled: bool,
+    selected_provider_id: String,
+    state: State<'_, AppState>,
+) -> Result<crate::plugin_manager::CodexPluginConfig, String> {
+    state
+        .set_plugin_config(enabled, selected_provider_id)
+        .map_err(|error| error.to_string())
+}

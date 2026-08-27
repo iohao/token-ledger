@@ -27,6 +27,10 @@ fn default_openai_usd_per_rmb() -> f64 {
     DEFAULT_OPENAI_USD_PER_RMB
 }
 
+fn default_plugin_provider_id() -> String {
+    crate::pricing::OPENAI_OFFICIAL_PROVIDER_ID.to_string()
+}
+
 pub struct AppState {
     codex_home_path: PathBuf,
     settings_path: PathBuf,
@@ -66,22 +70,26 @@ struct CachedSessionFileScan {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
-struct AppSettings {
-    database_path: Option<String>,
+pub struct AppSettings {
+    pub database_path: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    relay_pricing_providers: Option<Vec<RelayPricingProvider>>,
+    pub relay_pricing_providers: Option<Vec<RelayPricingProvider>>,
     #[serde(default = "default_openai_usd_per_rmb")]
-    openai_usd_per_rmb: f64,
+    pub openai_usd_per_rmb: f64,
     #[serde(default, skip_serializing)]
-    model_pricing_overrides: Vec<LegacyModelPricingOverride>,
+    pub model_pricing_overrides: Vec<LegacyModelPricingOverride>,
+    #[serde(default)]
+    pub plugin_enabled: bool,
+    #[serde(default = "default_plugin_provider_id")]
+    pub plugin_selected_provider_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
-struct LegacyModelPricingOverride {
-    model: String,
-    enabled: bool,
-    rates: ModelPricingRates,
+pub struct LegacyModelPricingOverride {
+    pub model: String,
+    pub enabled: bool,
+    pub rates: ModelPricingRates,
 }
 
 impl Default for AppSettings {
@@ -91,6 +99,8 @@ impl Default for AppSettings {
             relay_pricing_providers: Some(Vec::new()),
             openai_usd_per_rmb: default_openai_usd_per_rmb(),
             model_pricing_overrides: Vec::new(),
+            plugin_enabled: false,
+            plugin_selected_provider_id: default_plugin_provider_id(),
         }
     }
 }
@@ -383,13 +393,72 @@ impl AppState {
         let _sync_guard = self.lock_available_operation()?;
         let relay_pricing_providers = validate_relay_pricing_providers(&relay_pricing_providers)?;
         let openai_usd_per_rmb = validate_openai_usd_per_rmb(openai_usd_per_rmb)?;
-        let _ = crate::pricing::sync_plugin_pricing_file(&relay_pricing_providers);
+
+        let selected_provider_id = {
+            let settings = self
+                .settings
+                .lock()
+                .map_err(|_| anyhow::anyhow!("app settings lock poisoned"))?;
+            settings.plugin_selected_provider_id.clone()
+        };
+
+        let _ = crate::plugin_manager::deploy_plugin_files(
+            &self.codex_home_path,
+            &relay_pricing_providers,
+            Some(&selected_provider_id),
+        );
+
         self.update_settings(move |settings| {
             settings.relay_pricing_providers = Some(relay_pricing_providers);
             settings.openai_usd_per_rmb = openai_usd_per_rmb;
             settings.model_pricing_overrides.clear();
         })?;
         Ok(())
+    }
+
+    pub fn get_plugin_config(&self) -> Result<crate::plugin_manager::CodexPluginConfig> {
+        let settings = self
+            .settings
+            .lock()
+            .map_err(|_| anyhow::anyhow!("app settings lock poisoned"))?;
+        let hook_installed = crate::plugin_manager::is_hook_installed(&self.codex_home_path);
+        let plugin_path = crate::plugin_manager::plugin_script_path(&self.codex_home_path)
+            .display()
+            .to_string();
+        let pricing_path = crate::plugin_manager::plugin_pricing_path(&self.codex_home_path)
+            .display()
+            .to_string();
+
+        Ok(crate::plugin_manager::CodexPluginConfig {
+            enabled: settings.plugin_enabled,
+            selected_provider_id: settings.plugin_selected_provider_id.clone(),
+            hook_installed,
+            plugin_path,
+            pricing_path,
+        })
+    }
+
+    pub fn set_plugin_config(
+        &self,
+        enabled: bool,
+        selected_provider_id: String,
+    ) -> Result<crate::plugin_manager::CodexPluginConfig> {
+        let (relays, _) = self.current_pricing_configuration()?;
+
+        crate::plugin_manager::deploy_plugin_files(
+            &self.codex_home_path,
+            &relays,
+            Some(&selected_provider_id),
+        )?;
+
+        crate::plugin_manager::update_hooks_json(&self.codex_home_path, enabled)?;
+
+        self.update_settings(|settings| {
+            settings.plugin_enabled = enabled;
+            settings.plugin_selected_provider_id = selected_provider_id;
+        })?;
+
+        self.get_plugin_config()
     }
 
     fn current_pricing_configuration(&self) -> Result<(Vec<RelayPricingProvider>, f64)> {
@@ -818,6 +887,8 @@ mod tests {
             relay_pricing_providers: Some(Vec::new()),
             openai_usd_per_rmb: crate::pricing::DEFAULT_OPENAI_USD_PER_RMB,
             model_pricing_overrides: Vec::new(),
+            plugin_enabled: true,
+            plugin_selected_provider_id: "test-provider".to_string(),
         };
 
         save_app_settings(&settings_path, &expected).expect("save settings");
