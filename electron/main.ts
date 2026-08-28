@@ -1,4 +1,5 @@
-import { app, BrowserWindow, Menu, MenuItemConstructorOptions, ipcMain, shell } from "electron";
+import { app, BrowserWindow, Menu, MenuItemConstructorOptions, ipcMain, shell, nativeImage } from "electron";
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { autoUpdater } from "electron-updater";
@@ -11,6 +12,25 @@ const SOURCE_REPOSITORY_URL = "https://github.com/iohao/token-ledger";
 
 let mainWindow: BrowserWindow | null = null;
 let appState: AppState | null = null;
+
+function getAppIcon(): Electron.NativeImage | undefined {
+  const candidates = [
+    path.join(__dirname, "../icons/icon.png"),
+    path.join(__dirname, "../../icons/icon.png"),
+    path.join(process.resourcesPath, "icons/icon.png")
+  ];
+
+  for (const iconPath of candidates) {
+    if (fs.existsSync(iconPath)) {
+      const image = nativeImage.createFromPath(iconPath);
+      if (!image.isEmpty()) {
+        return image;
+      }
+    }
+  }
+
+  return undefined;
+}
 
 function getAppState(): AppState {
   if (!appState) {
@@ -153,7 +173,9 @@ function createWindow(): BrowserWindow {
     minWidth: 960,
     minHeight: 640,
     title: "TokenLedger",
+    icon: getAppIcon(),
     titleBarStyle: isMac ? "hiddenInset" : "default",
+    trafficLightPosition: isMac ? { x: 18, y: 16 } : undefined,
     show: false,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
@@ -374,6 +396,13 @@ function setupAutoUpdater(): void {
 }
 
 app.whenReady().then(() => {
+  if (process.platform === "darwin" && app.dock) {
+    const appIcon = getAppIcon();
+    if (appIcon) {
+      app.dock.setIcon(appIcon);
+    }
+  }
+
   registerIpcHandlers();
   setupAutoUpdater();
   mainWindow = createWindow();

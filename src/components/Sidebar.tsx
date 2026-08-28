@@ -29,7 +29,7 @@ export const Sidebar: React.FC = () => {
   ];
 
   return (
-    <aside className="sidebar">
+    <aside className={`sidebar ${isMac ? "sidebar-mac" : ""}`}>
       <div className="sidebar-brand">
         <img className="sidebar-brand-icon" src={appIconUrl} alt="" width="36" height="36" />
         <div className="sidebar-brand-copy">

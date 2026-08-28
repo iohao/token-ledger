@@ -11,6 +11,14 @@ if (!rootElement) {
   throw new Error("Missing #root element");
 }
 
+const isMac =
+  typeof navigator !== "undefined" &&
+  (/Mac|iPod|iPhone|iPad/.test(navigator.userAgent) || /Mac/i.test(navigator.platform || ""));
+
+if (isMac && typeof document !== "undefined") {
+  document.documentElement.dataset.platform = "mac";
+}
+
 ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
     <AppProvider>
