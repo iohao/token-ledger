@@ -19,15 +19,7 @@
     "package:win": "electron-builder --win"
   },
   "dependencies": {
-    "better-sqlite3": "^13.0.3",
-    "clsx": "^2.1.1",
-    "electron-updater": "^6.8.9",
-    "i18next": "^26.3.6",
-    "lucide-react": "^1.31.0",
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8",
-    "react-i18next": "^17.0.11",
-    "tailwind-merge": "^3.6.0"
+    "better-sqlite3": "^13.0.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3",
@@ -36,9 +28,17 @@
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
     "@vitejs/plugin-react": "^4.3.4",
+    "clsx": "^2.1.1",
     "electron": "^44.0.0",
     "electron-builder": "^26.15.3",
+    "electron-updater": "^6.8.9",
+    "i18next": "^26.3.6",
+    "lucide-react": "^1.31.0",
     "postcss": "^8.5.26",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "react-i18next": "^17.0.11",
+    "tailwind-merge": "^3.6.0",
     "tailwindcss": "^4.3.3",
     "typescript": "^5.9.3",
     "vite": "^8.2.1",
@@ -54,12 +54,23 @@
     "files": [
       "dist/**/*",
       "dist-electron/**/*",
-      "plugins/**/*"
+      "plugins/**/*",
+      "!node_modules/better-sqlite3/deps/**",
+      "!node_modules/better-sqlite3/src/**",
+      "!node_modules/better-sqlite3/docs/**",
+      "!node_modules/better-sqlite3/test/**",
+      "!node_modules/better-sqlite3/benchmark/**"
     ],
     "mac": {
       "target": [
         "dmg",
         "zip"
+      ],
+      "files": [
+        "!node_modules/better-sqlite3/prebuilds/linux*/**",
+        "!node_modules/better-sqlite3/prebuilds/win32*/**",
+        "!node_modules/better-sqlite3/prebuilds/linux*",
+        "!node_modules/better-sqlite3/prebuilds/win32*"
       ],
       "icon": "icons/icon.icns",
       "category": "public.app-category.developer-tools"
@@ -68,6 +79,12 @@
       "target": [
         "nsis",
         "zip"
+      ],
+      "files": [
+        "!node_modules/better-sqlite3/prebuilds/darwin*/**",
+        "!node_modules/better-sqlite3/prebuilds/linux*/**",
+        "!node_modules/better-sqlite3/prebuilds/darwin*",
+        "!node_modules/better-sqlite3/prebuilds/linux*"
       ],
       "icon": "icons/icon.ico"
     }

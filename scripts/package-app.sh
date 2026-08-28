@@ -193,6 +193,11 @@ if [[ "${ENABLE_SIGN}" == false && -z "${CSC_IDENTITY_AUTO_DISCOVERY:-}" && -z "
   export CSC_IDENTITY_AUTO_DISCOVERY=false
 fi
 
+# Set default ELECTRON_MIRROR if not already specified to ensure reliable downloads
+if [[ -z "${ELECTRON_MIRROR:-}" ]]; then
+  export ELECTRON_MIRROR="https://npmmirror.com/mirrors/electron/"
+fi
+
 echo -e "${BOLD}======================================================${NC}"
 echo -e "${BOLD}         TokenLedger Desktop App Packager             ${NC}"
 echo -e "${BOLD}======================================================${NC}"
