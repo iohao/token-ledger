@@ -1,8 +1,9 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
-import type { DailyUsageSummaryDTO, DashboardPayloadDTO } from "../dto/dashboard";
+import type { DailyUsageSummaryDTO, DashboardPayloadDTO, PricingProviderDTO } from "../dto/dashboard";
 import { useApp } from "../context/AppContext";
 import {
+  formatCny,
   formatCurrency,
   formatDateLabel,
   formatInteger,
@@ -12,19 +13,33 @@ import {
   nonCachedInputTokens,
   sumTotals
 } from "../utils/format";
+import { relayCostsForModels } from "./DailyDetailTable";
 
 export interface UsageTableProps {
   title: string;
   rows: DashboardPayloadDTO["dailyHistory"] | DashboardPayloadDTO["monthlyHistory"] | DailyUsageSummaryDTO[];
   timeZone: string;
   mode: "daily" | "monthly";
+  relayProviders?: PricingProviderDTO[];
 }
 
-export const UsageTable: React.FC<UsageTableProps> = ({ title, rows, timeZone, mode }) => {
+export const UsageTable: React.FC<UsageTableProps> = ({
+  title,
+  rows,
+  timeZone,
+  mode,
+  relayProviders
+}) => {
   const { t } = useTranslation();
-  const { locale } = useApp();
+  const { locale, dashboard } = useApp();
+  const officialProvider = dashboard?.meta.pricingProviders?.find((p) => p.kind === "official");
   const totals = sumTotals(rows);
   const isDaily = mode === "daily";
+  const showRelayPrices = relayProviders !== undefined;
+  const displayedRelayProviders = relayProviders ?? [];
+  const relayTotals = displayedRelayProviders.map((provider) =>
+    relayCostsForModels(rows.flatMap((row) => row.models), provider, officialProvider)
+  );
 
   return (
     <section className="table-panel panel">
@@ -44,10 +59,17 @@ export const UsageTable: React.FC<UsageTableProps> = ({ title, rows, timeZone, m
               <th>{t("input")}</th>
               <th>{t("output")}</th>
               <th>{t("cachedInput")}</th>
-              <th>{t("cacheCreationInput")}</th>
               <th>{t("reasoning")}</th>
               <th>{t("total")}</th>
-              <th>{t("cost")}</th>
+              {showRelayPrices ? (
+                displayedRelayProviders.map((provider) => (
+                  <th key={provider.id} className="daily-detail-relay-cost-header" title={provider.name}>
+                    {provider.name}
+                  </th>
+                ))
+              ) : (
+                <th className="daily-detail-model-cost-header">{t("cost")}</th>
+              )}
             </tr>
           </thead>
           <tbody>
@@ -78,10 +100,20 @@ export const UsageTable: React.FC<UsageTableProps> = ({ title, rows, timeZone, m
                   <td>{formatTokenCount(nonCachedInputTokens(row.totals), locale)}</td>
                   <td>{formatTokenCount(row.totals.outputTokens, locale)}</td>
                   <td>{formatTokenCount(row.totals.cachedInputTokens, locale)}</td>
-                  <td>{formatTokenCount(row.totals.cacheCreationInputTokens, locale)}</td>
                   <td>{formatTokenCount(row.totals.reasoningOutputTokens, locale)}</td>
                   <td>{formatTokenCount(row.totals.totalTokens, locale)}</td>
-                  <td className="cost-cell daily-detail-model-cost-cell">{formatCurrency(row.totals.costUSD, locale)}</td>
+                  {showRelayPrices ? (
+                    displayedRelayProviders.map((provider) => {
+                      const cost = relayCostsForModels(row.models, provider, officialProvider);
+                      return (
+                        <td key={provider.id} className="cost-cell daily-detail-relay-cost-cell">
+                          {cost === null ? <span className="muted">—</span> : formatCny(cost, locale)}
+                        </td>
+                      );
+                    })
+                  ) : (
+                    <td className="cost-cell daily-detail-model-cost-cell">{formatCurrency(row.totals.costUSD, locale)}</td>
+                  )}
                 </tr>
               );
             })}
@@ -92,10 +124,17 @@ export const UsageTable: React.FC<UsageTableProps> = ({ title, rows, timeZone, m
               <td>{formatTokenCount(nonCachedInputTokens(totals), locale)}</td>
               <td>{formatTokenCount(totals.outputTokens, locale)}</td>
               <td>{formatTokenCount(totals.cachedInputTokens, locale)}</td>
-              <td>{formatTokenCount(totals.cacheCreationInputTokens, locale)}</td>
               <td>{formatTokenCount(totals.reasoningOutputTokens, locale)}</td>
               <td>{formatTokenCount(totals.totalTokens, locale)}</td>
-              <td className="cost-cell daily-detail-model-cost-cell">{formatCurrency(totals.costUSD, locale)}</td>
+              {showRelayPrices ? (
+                displayedRelayProviders.map((provider, index) => (
+                  <td key={provider.id} className="cost-cell daily-detail-relay-cost-cell">
+                    {relayTotals[index] === null ? <span className="muted">—</span> : formatCny(relayTotals[index], locale)}
+                  </td>
+                ))
+              ) : (
+                <td className="cost-cell daily-detail-model-cost-cell">{formatCurrency(totals.costUSD, locale)}</td>
+              )}
             </tr>
           </tbody>
         </table>

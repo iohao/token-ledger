@@ -44,6 +44,9 @@ export const MonthlyDetailView: React.FC = () => {
   } = useApp();
 
   const timeZone = dashboard?.meta.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const relayProviders = dashboard?.meta.pricingProviders?.filter(
+    (provider) => provider.kind === "relay" && provider.enabled
+  ) ?? [];
   const queryDisabled = isLoadingMonthlyDetails || isLoading;
   const monthlyDetailRowsWithData = monthlyDetailRows.filter((row) => row.models.length > 0);
 
@@ -85,6 +88,7 @@ export const MonthlyDetailView: React.FC = () => {
           rows={monthlyDetailRowsWithData}
           timeZone={timeZone}
           eyebrow={t("monthlyDetailTitle")}
+          relayProviders={relayProviders}
         />
       ) : (
         <EmptyState

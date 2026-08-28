@@ -166,7 +166,7 @@ export function relayCostCny(
   return costUsd / ratio;
 }
 
-function relayCostsForModels(
+export function relayCostsForModels(
   models: ModelUsageBreakdownDTO[],
   provider: PricingProviderDTO,
   officialProvider?: PricingProviderDTO
@@ -276,7 +276,6 @@ export const DailyDetailTable: React.FC<DailyDetailTableProps> = ({
             <col className="daily-detail-col-metric" />
             <col className="daily-detail-col-metric" />
             <col className="daily-detail-col-metric" />
-            <col className="daily-detail-col-metric" />
             {showRelayPrices ? (
               displayedRelayProviders.map((provider) => (
                 <col key={provider.id} className="daily-detail-col-relay-cost" />
@@ -293,7 +292,6 @@ export const DailyDetailTable: React.FC<DailyDetailTableProps> = ({
               <th>{t("input")}</th>
               <th>{t("output")}</th>
               <th>{t("cachedInput")}</th>
-              <th>{t("cacheCreationInput")}</th>
               <th>{t("total")}</th>
               {showRelayPrices ? (
                 displayedRelayProviders.map((provider) => (
@@ -337,9 +335,6 @@ export const DailyDetailTable: React.FC<DailyDetailTableProps> = ({
                 <td>
                   <AlignedTokenCount value={row.totals.cachedInputTokens} />
                 </td>
-                <td>
-                  <AlignedTokenCount value={row.totals.cacheCreationInputTokens} />
-                </td>
                 <td className="daily-detail-total-metric">
                   <AlignedTokenCount value={row.totals.totalTokens} />
                 </td>
@@ -372,9 +367,6 @@ export const DailyDetailTable: React.FC<DailyDetailTableProps> = ({
               </td>
               <td>
                 <AlignedTokenCount value={totals.cachedInputTokens} />
-              </td>
-              <td>
-                <AlignedTokenCount value={totals.cacheCreationInputTokens} />
               </td>
               <td className="daily-detail-total-metric">
                 <AlignedTokenCount value={totals.totalTokens} />

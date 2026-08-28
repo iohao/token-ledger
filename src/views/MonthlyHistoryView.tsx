@@ -12,6 +12,9 @@ export const MonthlyHistoryView: React.FC = () => {
   const { t } = useTranslation();
   const { dashboard } = useApp();
   const timeZone = dashboard?.meta.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const relayProviders = dashboard?.meta.pricingProviders?.filter(
+    (provider) => provider.kind === "relay" && provider.enabled
+  ) ?? [];
 
   return (
     <div className="page-stack">
@@ -27,6 +30,7 @@ export const MonthlyHistoryView: React.FC = () => {
         rows={dashboard?.monthlyHistory ?? []}
         timeZone={timeZone}
         mode="monthly"
+        relayProviders={relayProviders}
       />
     </div>
   );
