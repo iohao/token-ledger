@@ -2,7 +2,8 @@
 # ==============================================================================
 # TokenLedger - Desktop App Packaging Script
 #
-# Builds frontend & Electron assets and packages the app for distribution.
+# Packages the desktop application specifically for the current host machine
+# as an unpacked app (e.g. TokenLedger.app on macOS) into the "release-app/" directory.
 # ==============================================================================
 
 set -euo pipefail
@@ -45,40 +46,23 @@ error() {
 # Display help information
 show_help() {
   echo -e "${BOLD}TokenLedger Desktop App Packaging Tool${NC}
+Packages the application (TokenLedger.app) directly into '${BOLD}release-app/${NC}'.
 
 ${BOLD}USAGE:${NC}
   bash scripts/package-app.sh [OPTIONS] [-- <electron-builder-args>]
 
 ${BOLD}OPTIONS:${NC}
-  -m, --mac, --macos       Package for macOS (.dmg, .zip)
-  -w, --win, --windows     Package for Windows (.exe NSIS, .zip)
-  -l, --linux              Package for Linux
-  -a, --all                Package for all supported platforms (macOS, Windows)
-  -d, --dir                Build unpacked directory (fast local preview)
-  --x64                    Build for x64 architecture
-  --arm64                  Build for arm64 architecture
-  --universal              Build universal binary (macOS)
   -c, --clean              Clean dist/, dist-electron/, and release-app/ before building
-  -s, --skip-build         Skip frontend/electron compile (tsc && vite build)
+  -s, --skip-build         Skip frontend/electron compilation (tsc && vite build)
   --skip-test              Skip running unit tests
   --skip-typecheck         Skip TypeScript typecheck
-  --no-sign                Disable code signing discovery (faster local macOS builds)
-  --publish <mode>         Set publish mode (default: never)
+  --sign                   Enable code signing discovery (disabled by default for fast local builds)
   -h, --help               Display this help text
 
 ${BOLD}EXAMPLES:${NC}
-  # Default: auto-detect current platform, run checks, build, and package
+  # Default: package TokenLedger.app into release-app/
   bun run package:app
   bash scripts/package-app.sh
-
-  # Package for macOS (DMG & ZIP)
-  bash scripts/package-app.sh --mac
-
-  # Package for Windows (NSIS & ZIP)
-  bash scripts/package-app.sh --win
-
-  # Fast local unpacked build (no installer compression)
-  bash scripts/package-app.sh --dir
 
   # Clean build skipping tests
   bash scripts/package-app.sh --clean --skip-test"
@@ -89,10 +73,8 @@ CLEAN=false
 SKIP_BUILD=false
 SKIP_TEST=false
 SKIP_TYPECHECK=false
-NO_SIGN=false
-PUBLISH_MODE="never"
+ENABLE_SIGN=false
 
-TARGET_FLAGS=()
 EXTRA_BUILDER_ARGS=()
 
 # Parse command-line arguments
@@ -118,42 +100,9 @@ while [[ $# -gt 0 ]]; do
       SKIP_TYPECHECK=true
       shift
       ;;
-    --no-sign)
-      NO_SIGN=true
+    --sign)
+      ENABLE_SIGN=true
       shift
-      ;;
-    -m|--mac|--macos)
-      TARGET_FLAGS+=("--mac")
-      shift
-      ;;
-    -w|--win|--windows)
-      TARGET_FLAGS+=("--win")
-      shift
-      ;;
-    -l|--linux)
-      TARGET_FLAGS+=("--linux")
-      shift
-      ;;
-    -a|--all)
-      TARGET_FLAGS+=("--mac" "--win")
-      shift
-      ;;
-    -d|--dir)
-      TARGET_FLAGS+=("--dir")
-      shift
-      ;;
-    --x64|--arm64|--universal)
-      TARGET_FLAGS+=("$1")
-      shift
-      ;;
-    --publish)
-      if [[ -n "${2:-}" ]]; then
-        PUBLISH_MODE="$2"
-        shift 2
-      else
-        error "Option --publish requires an argument (onTag|onTagOrDraft|always|never)"
-        exit 1
-      fi
       ;;
     --)
       shift
@@ -164,7 +113,7 @@ while [[ $# -gt 0 ]]; do
       break
       ;;
     *)
-      # Pass unknown arguments directly to electron-builder
+      # Pass any extra builder arguments directly
       EXTRA_BUILDER_ARGS+=("$1")
       shift
       ;;
@@ -173,28 +122,46 @@ done
 
 START_TIME=$(date +%s)
 
-# Auto-detect default target platform if none specified
-if [[ ${#TARGET_FLAGS[@]} -eq 0 ]]; then
-  OS_TYPE="$(uname -s)"
-  case "${OS_TYPE}" in
-    Darwin)
-      info "Host platform detected: macOS (Darwin)"
-      TARGET_FLAGS+=("--mac")
-      ;;
-    Linux)
-      info "Host platform detected: Linux"
-      TARGET_FLAGS+=("--linux")
-      ;;
-    CYGWIN*|MINGW*|MSYS*|Windows_NT)
-      info "Host platform detected: Windows"
-      TARGET_FLAGS+=("--win")
-      ;;
-    *)
-      warn "Unknown host platform '${OS_TYPE}', defaulting to --dir"
-      TARGET_FLAGS+=("--dir")
-      ;;
-  esac
-fi
+# Step 0: Detect host platform & CPU architecture
+OS_TYPE="$(uname -s)"
+case "${OS_TYPE}" in
+  Darwin)
+    HOST_OS="macOS"
+    PLATFORM_FLAG="--mac"
+    ;;
+  Linux)
+    HOST_OS="Linux"
+    PLATFORM_FLAG="--linux"
+    ;;
+  CYGWIN*|MINGW*|MSYS*|Windows_NT)
+    HOST_OS="Windows"
+    PLATFORM_FLAG="--win"
+    ;;
+  *)
+    HOST_OS="Unknown (${OS_TYPE})"
+    PLATFORM_FLAG="--dir"
+    ;;
+esac
+
+ARCH_TYPE="$(uname -m)"
+case "${ARCH_TYPE}" in
+  arm64|aarch64)
+    HOST_ARCH="arm64"
+    ARCH_FLAG="--arm64"
+    ;;
+  x86_64|amd64|x64)
+    HOST_ARCH="x64"
+    ARCH_FLAG="--x64"
+    ;;
+  armv7l|armhf)
+    HOST_ARCH="armv7l"
+    ARCH_FLAG="--armv7l"
+    ;;
+  *)
+    HOST_ARCH="${ARCH_TYPE}"
+    ARCH_FLAG=""
+    ;;
+esac
 
 # Detect package manager (bun preferred)
 if command -v bun >/dev/null 2>&1; then
@@ -221,27 +188,25 @@ else
   ELECTRON_BUILDER="electron-builder"
 fi
 
-# Handle code signing override if requested
-if [[ "${NO_SIGN}" == true ]]; then
+# Disable signing auto-discovery for fast local builds unless explicitly enabled
+if [[ "${ENABLE_SIGN}" == false && -z "${CSC_IDENTITY_AUTO_DISCOVERY:-}" && -z "${CSC_LINK:-}" && -z "${CSC_NAME:-}" ]]; then
   export CSC_IDENTITY_AUTO_DISCOVERY=false
-  info "Code signing identity discovery disabled (--no-sign)"
 fi
 
 echo -e "${BOLD}======================================================${NC}"
 echo -e "${BOLD}         TokenLedger Desktop App Packager             ${NC}"
 echo -e "${BOLD}======================================================${NC}"
+info "Host Platform   : ${HOST_OS} (${OS_TYPE})"
+info "Host Arch       : ${HOST_ARCH} (${ARCH_TYPE})"
+info "Target Flag     : ${PLATFORM_FLAG} ${ARCH_FLAG} --dir"
 info "Package Manager : ${PM}"
-info "Target Flags    : ${TARGET_FLAGS[*]}"
-info "Publish Mode    : ${PUBLISH_MODE}"
 info "Output Directory: ${PROJECT_ROOT}/release-app"
 
 # Step 1: Clean build directories if requested
 if [[ "${CLEAN}" == true ]]; then
-  step "Step 1/5: Cleaning build outputs..."
+  step "Step 1/5: Cleaning previous build outputs..."
   rm -rf "${PROJECT_ROOT}/dist" "${PROJECT_ROOT}/dist-electron" "${PROJECT_ROOT}/release-app"
   success "Clean completed."
-else
-  info "Skipping clean (use --clean or -c to clean previous builds)"
 fi
 
 # Step 2: Ensure node_modules dependencies are installed
@@ -283,14 +248,23 @@ else
   info "Skipping build steps (--skip-build)"
 fi
 
-# Step 5: Package the desktop app with electron-builder
-step "Step 5/5: Packaging desktop app with electron-builder..."
+# Step 5: Package the desktop app for the current host machine (unpacked app only)
+step "Step 5/5: Packaging desktop app for current machine..."
 mkdir -p "${PROJECT_ROOT}/release-app"
 
 BUILD_CMD=(
   ${ELECTRON_BUILDER}
-  "${TARGET_FLAGS[@]}"
-  --publish "${PUBLISH_MODE}"
+  "${PLATFORM_FLAG}"
+)
+
+if [[ -n "${ARCH_FLAG}" ]]; then
+  BUILD_CMD+=("${ARCH_FLAG}")
+fi
+
+BUILD_CMD+=(
+  --dir
+  --publish never
+  -c.directories.output=release-app
 )
 
 if [[ ${#EXTRA_BUILDER_ARGS[@]} -gt 0 ]]; then
@@ -300,6 +274,26 @@ fi
 info "Executing: ${BUILD_CMD[*]}"
 "${BUILD_CMD[@]}"
 
+# Organize artifacts: Move TokenLedger.app to release-app/ directly and clean temp folders
+step "Organizing release artifacts into release-app/..."
+for mac_dir in "${PROJECT_ROOT}/release-app/mac" "${PROJECT_ROOT}/release-app/mac-arm64" "${PROJECT_ROOT}/release-app/mac-universal"; do
+  if [[ -d "${mac_dir}/TokenLedger.app" ]]; then
+    rm -rf "${PROJECT_ROOT}/release-app/TokenLedger.app"
+    mv "${mac_dir}/TokenLedger.app" "${PROJECT_ROOT}/release-app/TokenLedger.app"
+    rm -rf "${mac_dir}"
+    break
+  fi
+done
+
+# Clean up builder metadata / config files
+rm -f "${PROJECT_ROOT}/release-app/builder-debug.yml" \
+      "${PROJECT_ROOT}/release-app/builder-effective-config.yaml" \
+      "${PROJECT_ROOT}/release-app/"*.blockmap \
+      "${PROJECT_ROOT}/release-app/"*.yml \
+      "${PROJECT_ROOT}/release-app/"*.yaml \
+      "${PROJECT_ROOT}/release-app/"*.zip \
+      "${PROJECT_ROOT}/release-app/"*.dmg
+
 END_TIME=$(date +%s)
 DURATION=$((END_TIME - START_TIME))
 
@@ -307,11 +301,11 @@ echo -e "\n${GREEN}${BOLD}======================================================
 echo -e "${GREEN}${BOLD}             Packaging Completed Successfully!         ${NC}"
 echo -e "${GREEN}${BOLD}======================================================${NC}"
 info "Total time elapsed: ${DURATION}s"
-info "Artifacts generated in: ${PROJECT_ROOT}/release-app/"
+info "Artifact location : ${PROJECT_ROOT}/release-app/TokenLedger.app"
 
 if [[ -d "${PROJECT_ROOT}/release-app" ]]; then
-  echo -e "\n${BOLD}Generated Packages:${NC}"
-  ls -lh "${PROJECT_ROOT}/release-app" | awk 'NR>1 {printf "  %-10s %s\n", $5, $9}'
+  echo -e "\n${BOLD}Generated in release-app/:${NC}"
+  ls -ld "${PROJECT_ROOT}/release-app/TokenLedger.app" | awk '{printf "  %s\n", $9}'
 fi
 
 echo -e "\n${GREEN}Done!${NC}\n"
