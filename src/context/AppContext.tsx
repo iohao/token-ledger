@@ -1020,12 +1020,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Initial mount setup
   useEffect(() => {
     applyTheme(themeMode, false);
-    try {
-      if (window.electronAPI) {
-        void window.electronAPI.maximizeWindow();
-        void window.electronAPI.showWindow();
-      }
-    } catch {}
 
     void fetchCurrentAppVersion().then(setCurrentAppVersion).catch(() => {});
     void loadDashboard();

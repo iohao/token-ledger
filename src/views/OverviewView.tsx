@@ -45,7 +45,7 @@ export const OverviewView: React.FC = () => {
   const pendingSessions = syncPreview
     ? syncPreview.newSessions + syncPreview.changedSessions + syncPreview.removedSessions
     : null;
-  const relayProviders = dashboard?.meta.pricingProviders.filter(
+  const relayProviders = dashboard?.meta.pricingProviders?.filter(
     (provider) => provider.kind === "relay" && provider.enabled
   ) ?? [];
 

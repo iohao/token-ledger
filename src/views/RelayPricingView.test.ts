@@ -3,6 +3,8 @@ import {
   compareRelayProvidersByPrice,
   computeLowestModelsByProvider,
   countCustomizedModels,
+  formatDisplayRate,
+  formatPrice,
   getProviderEffectiveCost,
   isRateEqual,
   mergeWithOfficialModelPrices
@@ -365,7 +367,31 @@ describe("countCustomizedModels & mergeWithOfficialModelPrices", () => {
 
     expect(isRateEqual(a, b)).toBe(true);
     expect(isRateEqual(a, c)).toBe(false);
+    expect(isRateEqual(null, null)).toBe(true);
+    expect(isRateEqual(a, null)).toBe(false);
   });
 });
+
+describe("formatPrice & formatDisplayRate robustness", () => {
+  it("safely formats prices with numbers, undefined, null, and NaN", () => {
+    expect(formatPrice(5.6)).toBe("5.6000");
+    expect(formatPrice(0)).toBe("0.0000");
+    expect(formatPrice(undefined)).toBe("0.0000");
+    expect(formatPrice(null)).toBe("0.0000");
+    expect(formatPrice(Number.NaN)).toBe("0.0000");
+    expect(formatPrice(undefined, "")).toBe("");
+    expect(formatPrice(null, "1.0000")).toBe("1.0000");
+  });
+
+  it("safely formats display rates with numbers, undefined, null, and NaN", () => {
+    expect(formatDisplayRate(5.6)).toBe("5.600");
+    expect(formatDisplayRate(5.6789)).toBe("5.6789");
+    expect(formatDisplayRate(0)).toBe("0.000");
+    expect(formatDisplayRate(undefined)).toBe("0.0000");
+    expect(formatDisplayRate(null)).toBe("0.0000");
+    expect(formatDisplayRate(Number.NaN)).toBe("0.0000");
+  });
+});
+
 
 

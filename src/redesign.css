@@ -182,6 +182,8 @@ select {
   gap: 12px;
   padding: 16px 18px;
   border-bottom: 1px solid var(--border);
+  -webkit-app-region: drag;
+  user-select: none;
 }
 
 .sidebar-brand-icon {
@@ -378,6 +380,19 @@ select {
 .page-header {
   display: grid;
   gap: 12px;
+  -webkit-app-region: drag;
+  user-select: none;
+}
+
+.page-header button,
+.page-header a,
+.page-header input,
+.page-header select,
+.page-header textarea,
+.page-source-badge,
+.page-header-actions {
+  -webkit-app-region: no-drag;
+  user-select: auto;
 }
 
 .page-header-source {

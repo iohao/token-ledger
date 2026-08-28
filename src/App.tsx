@@ -10,6 +10,7 @@ import { DailyDetailView } from "./views/DailyDetailView";
 import { SettingsView } from "./views/SettingsView";
 import { RelayPricingView } from "./views/RelayPricingView";
 import { CodexPluginView } from "./views/CodexPluginView";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { statusLabel } from "./utils/format";
 
 export const AppContent: React.FC = () => {
@@ -55,13 +56,15 @@ export const AppContent: React.FC = () => {
             {errorMessage && <section className="banner bad">{errorMessage}</section>}
             {isLoading && !dashboard && <section className="banner">{t("loadingPage")}</section>}
 
-            {activeTab === "overview" && <OverviewView />}
-            {activeTab === "monthlyHistory" && <MonthlyHistoryView />}
-            {activeTab === "monthlyDetail" && <MonthlyDetailView />}
-            {activeTab === "dailyDetail" && <DailyDetailView />}
-            {activeTab === "relayPricing" && <RelayPricingView />}
-            {activeTab === "codexPlugin" && <CodexPluginView />}
-            {activeTab === "settings" && <SettingsView />}
+            <ErrorBoundary key={activeTab}>
+              {activeTab === "overview" && <OverviewView />}
+              {activeTab === "monthlyHistory" && <MonthlyHistoryView />}
+              {activeTab === "monthlyDetail" && <MonthlyDetailView />}
+              {activeTab === "dailyDetail" && <DailyDetailView />}
+              {activeTab === "relayPricing" && <RelayPricingView />}
+              {activeTab === "codexPlugin" && <CodexPluginView />}
+              {activeTab === "settings" && <SettingsView />}
+            </ErrorBoundary>
           </div>
         </section>
       </main>

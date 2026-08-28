@@ -193,7 +193,7 @@ export const DailyDetailTable: React.FC<DailyDetailTableProps> = ({
 }) => {
   const { t } = useTranslation();
   const { locale, dashboard } = useApp();
-  const officialProvider = dashboard?.meta.pricingProviders.find((p) => p.kind === "official");
+  const officialProvider = dashboard?.meta.pricingProviders?.find((p) => p.kind === "official");
   const totals = sumTotals(rows);
   const showRelayPrices = relayProviders !== undefined;
   const displayedRelayProviders = relayProviders ?? [];

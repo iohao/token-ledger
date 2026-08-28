@@ -57,22 +57,34 @@ type DraftRelayProvider = {
   modelPrices: ProviderModelPricingDTO[];
 };
 
-function formatPrice(value: number): string {
+export function formatPrice(value: number | null | undefined, fallback = "0.0000"): string {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return fallback;
+  }
   return value.toFixed(4);
 }
 
-function formatDisplayRate(value: number): string {
+export function formatDisplayRate(value: number | null | undefined, fallback = "0.0000"): string {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return fallback;
+  }
   return Number.isInteger(Math.round(value * 10000) / 10)
     ? value.toFixed(3)
     : value.toFixed(4);
 }
 
-export function isRateEqual(a: ModelPricingRatesDTO, b: ModelPricingRatesDTO): boolean {
+export function isRateEqual(
+  a: ModelPricingRatesDTO | null | undefined,
+  b: ModelPricingRatesDTO | null | undefined
+): boolean {
+  if (!a || !b) {
+    return a === b;
+  }
   return (
-    Math.abs(a.inputUsdPerMillion - b.inputUsdPerMillion) < 1e-6 &&
-    Math.abs(a.outputUsdPerMillion - b.outputUsdPerMillion) < 1e-6 &&
-    Math.abs(a.cacheReadUsdPerMillion - b.cacheReadUsdPerMillion) < 1e-6 &&
-    Math.abs(a.cacheCreationUsdPerMillion - b.cacheCreationUsdPerMillion) < 1e-6
+    Math.abs((a.inputUsdPerMillion ?? 0) - (b.inputUsdPerMillion ?? 0)) < 1e-6 &&
+    Math.abs((a.outputUsdPerMillion ?? 0) - (b.outputUsdPerMillion ?? 0)) < 1e-6 &&
+    Math.abs((a.cacheReadUsdPerMillion ?? 0) - (b.cacheReadUsdPerMillion ?? 0)) < 1e-6 &&
+    Math.abs((a.cacheCreationUsdPerMillion ?? 0) - (b.cacheCreationUsdPerMillion ?? 0)) < 1e-6
   );
 }
 
@@ -83,11 +95,14 @@ export function countCustomizedModels(
   if (!providerPrices || providerPrices.length === 0) {
     return 0;
   }
-  const officialMap = new Map(officialPrices.map((p) => [p.model, p.rates]));
+  const officialMap = new Map((officialPrices ?? []).map((p) => [p.model, p.rates]));
   let count = 0;
   for (const price of providerPrices) {
+    if (!price || !price.model) {
+      continue;
+    }
     const officialRate = officialMap.get(price.model);
-    if (!officialRate || !isRateEqual(price.rates, officialRate)) {
+    if (!officialRate || !price.rates || !isRateEqual(price.rates, officialRate)) {
       count++;
     }
   }
@@ -99,12 +114,19 @@ export function mergeWithOfficialModelPrices(
   officialPrices: ProviderModelPricingDTO[]
 ): ProviderModelPricingDTO[] {
   const customMap = new Map((customPrices ?? []).map((p) => [p.model, p.rates]));
-  return officialPrices.map((official) => ({
-    model: official.model,
-    rates: customMap.has(official.model)
-      ? { ...customMap.get(official.model)! }
-      : { ...official.rates }
-  }));
+  return (officialPrices ?? []).map((official) => {
+    const customRate = customMap.get(official.model);
+    return {
+      model: official.model,
+      rates: {
+        inputUsdPerMillion: customRate?.inputUsdPerMillion ?? official.rates?.inputUsdPerMillion ?? 0,
+        outputUsdPerMillion: customRate?.outputUsdPerMillion ?? official.rates?.outputUsdPerMillion ?? 0,
+        cacheReadUsdPerMillion: customRate?.cacheReadUsdPerMillion ?? official.rates?.cacheReadUsdPerMillion ?? 0,
+        cacheCreationUsdPerMillion:
+          customRate?.cacheCreationUsdPerMillion ?? official.rates?.cacheCreationUsdPerMillion ?? 0
+      }
+    };
+  });
 }
 
 function toDraftProvider(
@@ -113,16 +135,16 @@ function toDraftProvider(
 ): DraftRelayProvider {
   return {
     id: provider.id,
-    name: provider.name,
-    enabled: provider.enabled,
+    name: provider.name ?? "",
+    enabled: Boolean(provider.enabled),
     rechargeRatioUsdPerRmb:
-      provider.rechargeRatioUsdPerRmb === null
+      provider.rechargeRatioUsdPerRmb === null || provider.rechargeRatioUsdPerRmb === undefined
         ? ""
-        : formatPrice(provider.rechargeRatioUsdPerRmb),
+        : formatPrice(provider.rechargeRatioUsdPerRmb, ""),
     multiplier:
       provider.multiplier === null || provider.multiplier === undefined
         ? "1.0000"
-        : formatPrice(provider.multiplier),
+        : formatPrice(provider.multiplier, "1.0000"),
     modelPrices: mergeWithOfficialModelPrices(provider.modelPrices, defaultOfficialPrices)
   };
 }
@@ -209,6 +231,11 @@ export function computeLowestModelsByProvider(
   providers: ComparableProviderInput[],
   modelPrices: Array<{ model: string; rates: ModelPricingRatesDTO }>
 ): Map<string, Map<string, ProviderModelPriceComparison>> {
+  const result = new Map<string, Map<string, ProviderModelPriceComparison>>();
+  for (const p of providers ?? []) {
+    result.set(p.id, new Map());
+  }
+
   const comparable: Array<{
     id: string;
     multiplier: number;
@@ -216,7 +243,7 @@ export function computeLowestModelsByProvider(
     modelPricesMap: Map<string, ModelPricingRatesDTO>;
   }> = [];
 
-  for (const p of providers) {
+  for (const p of providers ?? []) {
     const multiplier =
       typeof p.multiplier === "number"
         ? p.multiplier > 0 && Number.isFinite(p.multiplier)
@@ -240,24 +267,22 @@ export function computeLowestModelsByProvider(
     }
   }
 
-  const result = new Map<string, Map<string, ProviderModelPriceComparison>>();
-  for (const p of providers) {
-    result.set(p.id, new Map());
-  }
-
   if (comparable.length < 2) {
     return result;
   }
 
-  for (const price of modelPrices) {
-    const defaultBaseRate = price.rates.inputUsdPerMillion;
+  for (const price of modelPrices ?? []) {
+    if (!price || !price.rates) {
+      continue;
+    }
+    const defaultBaseRate = price.rates.inputUsdPerMillion ?? 0;
 
     let minCostRmb = Number.POSITIVE_INFINITY;
     const providerCosts: Array<{ id: string; costRmb: number }> = [];
 
     for (const p of comparable) {
       const providerRates = p.modelPricesMap.get(price.model);
-      const baseRate = providerRates ? providerRates.inputUsdPerMillion : defaultBaseRate;
+      const baseRate = providerRates?.inputUsdPerMillion ?? defaultBaseRate;
       const rateToCompare = baseRate > 0 ? baseRate : (defaultBaseRate > 0 ? defaultBaseRate : 1);
 
       const costRmb = (rateToCompare * p.multiplier) / p.rechargeRatio;
@@ -409,9 +434,9 @@ export const RelayPricingView: React.FC = () => {
       return;
     }
     setOpenaiRatio(
-      officialProvider.rechargeRatioUsdPerRmb === null
+      officialProvider.rechargeRatioUsdPerRmb === null || officialProvider.rechargeRatioUsdPerRmb === undefined
         ? DEFAULT_OPENAI_RATIO
-        : formatPrice(officialProvider.rechargeRatioUsdPerRmb)
+        : formatPrice(officialProvider.rechargeRatioUsdPerRmb, DEFAULT_OPENAI_RATIO)
     );
     const relayList = providers
       .filter((provider) => provider.kind === "relay")
@@ -897,7 +922,7 @@ const OfficialModelTable: React.FC<{
                 {PRICE_FIELDS.map((field) => (
                   <td key={field.key}>
                     <div className="relay-readonly-rate">
-                      <strong>${formatPrice(price.rates[field.key])} / 1M</strong>
+                      <strong>${formatPrice(price.rates?.[field.key])} / 1M</strong>
                     </div>
                   </td>
                 ))}
@@ -973,16 +998,16 @@ const RelayRatePreviewTable: React.FC<{
                   </div>
                 </td>
                 {PRICE_FIELDS.map((field) => {
-                  const baseRate = providerRates[field.key];
+                  const baseRate = providerRates?.[field.key] ?? officialPrice.rates?.[field.key] ?? 0;
                   const hasMultiplier =
                     numericMultiplier !== null && Math.abs(numericMultiplier - 1) > 0.00001;
                   const effectivePrice =
-                    numericMultiplier !== null ? baseRate * numericMultiplier : null;
+                    numericMultiplier !== null && typeof baseRate === "number" ? baseRate * numericMultiplier : null;
 
                   return (
                     <td key={field.key}>
                       <div className="relay-readonly-rate">
-                        {effectivePrice !== null ? (
+                        {effectivePrice !== null && Number.isFinite(effectivePrice) ? (
                           <>
                             <strong>${formatDisplayRate(effectivePrice)} / 1M</strong>
                             {hasMultiplier && (
@@ -1042,14 +1067,14 @@ const RelayBenchmarkModal: React.FC<RelayBenchmarkModalProps> = ({
 
   const [draftRows, setDraftRows] = useState<DraftModelPriceRow[]>(() => {
     const providerMap = new Map((provider.modelPrices ?? []).map((p) => [p.model, p.rates]));
-    return officialPrices.map((official) => {
+    return (officialPrices ?? []).map((official) => {
       const currentRates = providerMap.get(official.model) ?? official.rates;
       return {
         model: official.model,
-        inputUsdPerMillion: formatPrice(currentRates.inputUsdPerMillion),
-        outputUsdPerMillion: formatPrice(currentRates.outputUsdPerMillion),
-        cacheReadUsdPerMillion: formatPrice(currentRates.cacheReadUsdPerMillion),
-        cacheCreationUsdPerMillion: formatPrice(currentRates.cacheCreationUsdPerMillion)
+        inputUsdPerMillion: formatPrice(currentRates?.inputUsdPerMillion ?? official.rates?.inputUsdPerMillion),
+        outputUsdPerMillion: formatPrice(currentRates?.outputUsdPerMillion ?? official.rates?.outputUsdPerMillion),
+        cacheReadUsdPerMillion: formatPrice(currentRates?.cacheReadUsdPerMillion ?? official.rates?.cacheReadUsdPerMillion),
+        cacheCreationUsdPerMillion: formatPrice(currentRates?.cacheCreationUsdPerMillion ?? official.rates?.cacheCreationUsdPerMillion)
       };
     });
   });
@@ -1094,12 +1119,12 @@ const RelayBenchmarkModal: React.FC<RelayBenchmarkModalProps> = ({
 
   const resetAllToOfficial = () => {
     setDraftRows(
-      officialPrices.map((official) => ({
+      (officialPrices ?? []).map((official) => ({
         model: official.model,
-        inputUsdPerMillion: formatPrice(official.rates.inputUsdPerMillion),
-        outputUsdPerMillion: formatPrice(official.rates.outputUsdPerMillion),
-        cacheReadUsdPerMillion: formatPrice(official.rates.cacheReadUsdPerMillion),
-        cacheCreationUsdPerMillion: formatPrice(official.rates.cacheCreationUsdPerMillion)
+        inputUsdPerMillion: formatPrice(official.rates?.inputUsdPerMillion),
+        outputUsdPerMillion: formatPrice(official.rates?.outputUsdPerMillion),
+        cacheReadUsdPerMillion: formatPrice(official.rates?.cacheReadUsdPerMillion),
+        cacheCreationUsdPerMillion: formatPrice(official.rates?.cacheCreationUsdPerMillion)
       }))
     );
     setErrorMessage(null);
@@ -1178,10 +1203,10 @@ const RelayBenchmarkModal: React.FC<RelayBenchmarkModalProps> = ({
                   const officialRate = officialPriceMap.get(row.model);
                   const isModified =
                     officialRate !== undefined &&
-                    (Math.abs(Number(row.inputUsdPerMillion) - officialRate.inputUsdPerMillion) > 1e-4 ||
-                      Math.abs(Number(row.outputUsdPerMillion) - officialRate.outputUsdPerMillion) > 1e-4 ||
-                      Math.abs(Number(row.cacheReadUsdPerMillion) - officialRate.cacheReadUsdPerMillion) > 1e-4 ||
-                      Math.abs(Number(row.cacheCreationUsdPerMillion) - officialRate.cacheCreationUsdPerMillion) > 1e-4);
+                    (Math.abs(Number(row.inputUsdPerMillion) - (officialRate.inputUsdPerMillion ?? 0)) > 1e-4 ||
+                      Math.abs(Number(row.outputUsdPerMillion) - (officialRate.outputUsdPerMillion ?? 0)) > 1e-4 ||
+                      Math.abs(Number(row.cacheReadUsdPerMillion) - (officialRate.cacheReadUsdPerMillion ?? 0)) > 1e-4 ||
+                      Math.abs(Number(row.cacheCreationUsdPerMillion) - (officialRate.cacheCreationUsdPerMillion ?? 0)) > 1e-4);
 
                   return (
                     <tr key={row.model} className={isModified ? "is-modified" : ""}>
