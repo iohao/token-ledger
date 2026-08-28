@@ -4,7 +4,6 @@ set -euo pipefail
 
 ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 OUT_DIR="${OUT_DIR:-$ROOT_DIR/release-app}"
-LOCAL_UPDATER_KEY_PATH="$ROOT_DIR/local/tauri-updater.key"
 SKIP_INSTALL=0
 SKIP_TYPECHECK=0
 OPEN_RESULT=0
@@ -13,8 +12,7 @@ usage() {
   cat <<'EOF'
 Usage: scripts/package-app.sh [options]
 
-Package the current project for the current platform and copy the runnable app
-artifact into a stable output directory.
+Package the current project for the current platform and produce the runnable app artifact.
 
 Options:
   --out-dir <path>      Override the output directory. Default: ./release-app
@@ -41,57 +39,11 @@ require_command() {
   command -v "$1" >/dev/null 2>&1 || fail "Missing required command: $1"
 }
 
-copy_artifact() {
-  local source_path="$1"
-  local target_path="$2"
-
-  rm -rf "$target_path"
-
-  if [[ -d "$source_path" ]]; then
-    cp -R "$source_path" "$target_path"
-  else
-    cp "$source_path" "$target_path"
-  fi
-}
-
-resolve_product_name() {
-  (
-    cd "$ROOT_DIR"
-    bun -e "console.log(require('./src-tauri/tauri.conf.json').productName)"
-  )
-}
-
-find_built_artifact() {
-  local platform="$1"
-  local product_name="$2"
-  local bundle_root="$ROOT_DIR/src-tauri/target/release/bundle"
-
-  case "$platform" in
-    darwin)
-      local app_path="$bundle_root/macos/$product_name.app"
-      [[ -d "$app_path" ]] || fail "Expected macOS app not found at $app_path"
-      printf '%s\n' "$app_path"
-      ;;
-    *)
-      fail "Unsupported platform: $platform"
-      ;;
-  esac
-}
-
 platform_name() {
   case "$(uname -s)" in
     Darwin) printf 'darwin\n' ;;
     *)
       fail "This packaging script currently supports macOS only"
-      ;;
-  esac
-}
-
-bundle_target() {
-  case "$1" in
-    darwin) printf 'app\n' ;;
-    *)
-      fail "Unsupported platform: $1"
       ;;
   esac
 }
@@ -126,12 +78,6 @@ while [[ $# -gt 0 ]]; do
 done
 
 require_command bun
-require_command cargo
-require_command rustc
-
-if [[ "$(platform_name)" == "darwin" ]]; then
-  require_command xcodebuild
-fi
 
 if [[ ! -d "$ROOT_DIR/node_modules" ]]; then
   if [[ "$SKIP_INSTALL" -eq 1 ]]; then
@@ -147,43 +93,15 @@ if [[ "$SKIP_TYPECHECK" -eq 0 ]]; then
   (cd "$ROOT_DIR" && bun run typecheck)
 fi
 
-if [[ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" && -z "${TAURI_SIGNING_PRIVATE_KEY_PATH:-}" && -f "$LOCAL_UPDATER_KEY_PATH" ]]; then
-  log "Using local updater signing key from $LOCAL_UPDATER_KEY_PATH"
-  export TAURI_SIGNING_PRIVATE_KEY="$(cat "$LOCAL_UPDATER_KEY_PATH")"
-fi
+log "Building frontend bundle and electron main/preload"
+(cd "$ROOT_DIR" && bun run build)
 
-if [[ -n "${CODEX_HOME:-}" || -n "${CODEX_USAGE_DATABASE:-}" ]]; then
-  log "Detected CODEX_HOME/CODEX_USAGE_DATABASE in the current shell."
-  log "If the packaged app is launched from Finder, those environment variables may not be inherited."
-fi
-
-log "Packaging desktop app with Tauri"
-PLATFORM="$(platform_name)"
-BUNDLE_TARGET="$(bundle_target "$PLATFORM")"
-TAURI_CLI="$ROOT_DIR/node_modules/.bin/tauri"
-[[ -x "$TAURI_CLI" ]] || fail "Missing local Tauri CLI at $TAURI_CLI"
-
-(
-  cd "$ROOT_DIR"
-  "$TAURI_CLI" build --bundles "$BUNDLE_TARGET"
-)
-
-PRODUCT_NAME="$(resolve_product_name)"
-ARTIFACT_SOURCE="$(find_built_artifact "$PLATFORM" "$PRODUCT_NAME")"
-
+log "Packaging desktop app with electron-builder"
 mkdir -p "$OUT_DIR"
+(cd "$ROOT_DIR" && ./node_modules/.bin/electron-builder --mac --dir -c.directories.output="$OUT_DIR")
 
-case "$PLATFORM" in
-  darwin)
-    ARTIFACT_TARGET="$OUT_DIR/$PRODUCT_NAME.app"
-    ;;
-esac
+log "Packaging completed successfully."
 
-copy_artifact "$ARTIFACT_SOURCE" "$ARTIFACT_TARGET"
-
-log "Packaged artifact copied to:"
-printf '%s\n' "$ARTIFACT_TARGET"
-
-if [[ "$OPEN_RESULT" -eq 1 ]]; then
-  open -R "$ARTIFACT_TARGET"
+if [[ "$OPEN_RESULT" -eq 1 && "$(platform_name)" == "darwin" ]]; then
+  open -R "$OUT_DIR/mac-arm64/TokenLedger.app" 2>/dev/null || open -R "$OUT_DIR/mac/TokenLedger.app" 2>/dev/null || open "$OUT_DIR"
 fi

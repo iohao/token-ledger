@@ -1,6 +1,4 @@
 import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from "react";
-import { listen } from "@tauri-apps/api/event";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   fetchCurrentSyncProgress,
   fetchDashboard,
@@ -11,7 +9,7 @@ import {
   resetDatabasePath,
   startSync,
   updateDatabasePath
-} from "../api/tauri";
+} from "../api/electron";
 import {
   checkForPendingAppUpdate,
   fetchCurrentAppVersion,
@@ -967,30 +965,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Native menu listener (open-settings & navigate-tab)
   useEffect(() => {
-    let unlistenSettings: (() => void) | null = null;
-    let unlistenNavigate: (() => void) | null = null;
+    if (typeof window === "undefined" || !window.electronAPI) {
+      return;
+    }
 
-    void listen("open-settings", () => {
+    const unlistenSettings = window.electronAPI.onOpenSettings(() => {
       setActiveTab("settings");
-    }).then((fn) => {
-      unlistenSettings = fn;
     });
 
-    void listen<AppTab>("navigate-tab", (event) => {
-      if (event.payload) {
-        setActiveTab(event.payload);
+    const unlistenNavigate = window.electronAPI.onNavigateTab((tab) => {
+      if (tab) {
+        setActiveTab(tab as AppTab);
       }
-    }).then((fn) => {
-      unlistenNavigate = fn;
     });
 
     return () => {
-      if (unlistenSettings) {
-        unlistenSettings();
-      }
-      if (unlistenNavigate) {
-        unlistenNavigate();
-      }
+      unlistenSettings();
+      unlistenNavigate();
     };
   }, [setActiveTab]);
 
@@ -1005,25 +996,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return () => systemThemeQuery?.removeEventListener("change", handleSystemThemeChange);
   }, []);
 
-  // Sync Progress listener from Tauri
+  // Sync Progress listener from Electron
   useEffect(() => {
-    let unlisten: (() => void) | null = null;
-    void listen<SyncProgressDTO>(SYNC_PROGRESS_EVENT_NAME, (event) => {
-      setSyncProgress(event.payload);
-      if (event.payload.phase === "failed" && event.payload.errorMessage) {
-        setErrorMessage(translateErrorMessage(stateRef.current.locale, event.payload.errorMessage));
+    if (typeof window === "undefined" || !window.electronAPI) {
+      return;
+    }
+
+    const unlisten = window.electronAPI.onSyncProgress((progress) => {
+      setSyncProgress(progress);
+      if (progress.phase === "failed" && progress.errorMessage) {
+        setErrorMessage(translateErrorMessage(stateRef.current.locale, progress.errorMessage));
       }
-      if (event.payload.phase === "complete" || event.payload.phase === "failed") {
+      if (progress.phase === "complete" || progress.phase === "failed") {
         scheduleSyncStatusPoll(120);
       }
-    }).then((fn) => {
-      unlisten = fn;
     });
 
     return () => {
-      if (unlisten) {
-        unlisten();
-      }
+      unlisten();
     };
   }, [scheduleSyncStatusPoll]);
 
@@ -1031,9 +1021,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     applyTheme(themeMode, false);
     try {
-      const appWindow = getCurrentWindow();
-      void appWindow.maximize();
-      void appWindow.show();
+      if (window.electronAPI) {
+        void window.electronAPI.maximizeWindow();
+        void window.electronAPI.showWindow();
+      }
     } catch {}
 
     void fetchCurrentAppVersion().then(setCurrentAppVersion).catch(() => {});

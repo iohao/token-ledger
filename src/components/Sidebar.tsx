@@ -9,7 +9,7 @@ import {
   Terminal
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import appIconUrl from "../../src-tauri/icons/128x128.png";
+import appIconUrl from "../../icons/128x128.png";
 import { useApp } from "../context/AppContext";
 import type { AppTab } from "../types";
 

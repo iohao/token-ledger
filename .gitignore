@@ -9,6 +9,7 @@ yarn.lock.bak
 
 # Frontend build and tooling output
 dist/
+dist-electron/
 dist-ssr/
 .vite/
 .cache/

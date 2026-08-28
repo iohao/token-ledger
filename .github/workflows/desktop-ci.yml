@@ -28,9 +28,11 @@ jobs:
           - os: macos-latest
             label: macOS
             artifact_name: desktop-bundle-macos
+            package_cmd: bun run package:mac
           - os: windows-latest
             label: Windows
             artifact_name: desktop-bundle-windows
+            package_cmd: bun run package:win
 
     steps:
       - name: Checkout repository
@@ -39,31 +41,25 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
 
-      - name: Setup Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+      - name: Install dependencies
+        run: bun install
 
-      - name: Cache Rust artifacts
-        uses: swatinem/rust-cache@v2
-        with:
-          workspaces: src-tauri -> target
-
-      - name: Install frontend dependencies
-        run: bun install --frozen-lockfile
-
-      - name: Check frontend types
+      - name: Check TypeScript types
         run: bun run typecheck
 
-      - name: Run Rust tests
-        working-directory: src-tauri
-        run: cargo test
+      - name: Run unit tests
+        run: bun test
 
-      - name: Build desktop bundles
-        run: bun run desktop -- build --ci --no-sign
+      - name: Build frontend and Electron bundle
+        run: bun run build
+
+      - name: Build desktop packages
+        run: ${{ matrix.package_cmd }}
 
       - name: Upload desktop bundles
         uses: actions/upload-artifact@v6
         with:
           name: ${{ matrix.artifact_name }}
-          path: src-tauri/target/release/bundle/
+          path: release-app/
           if-no-files-found: error
           retention-days: 14

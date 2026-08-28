@@ -1,10 +1,7 @@
-import { getVersion } from "@tauri-apps/api/app";
-import { relaunch } from "@tauri-apps/plugin-process";
-import { check, type Update } from "@tauri-apps/plugin-updater";
-
 import { isDemoMode } from "./demo";
+import type { ElectronUpdateInfo } from "../types/electron";
 
-export type PendingAppUpdate = Update;
+export type PendingAppUpdate = ElectronUpdateInfo;
 
 export type AppUpdateProgressEvent =
   | { kind: "started"; contentLength: number | null }
@@ -16,44 +13,43 @@ export async function fetchCurrentAppVersion(): Promise<string> {
     return "demo";
   }
 
-  return getVersion();
+  if (typeof window !== "undefined" && window.electronAPI) {
+    return window.electronAPI.getAppVersion();
+  }
+
+  return "1.0.0";
 }
 
 export async function checkForPendingAppUpdate(): Promise<PendingAppUpdate | null> {
-  if (isDemoMode()) {
+  if (isDemoMode() || typeof window === "undefined" || !window.electronAPI) {
     return null;
   }
 
-  return check();
+  return window.electronAPI.checkForUpdates();
 }
 
 export async function installPendingAppUpdate(
-  update: PendingAppUpdate,
+  _update: PendingAppUpdate,
   onProgress?: (event: AppUpdateProgressEvent) => void
 ): Promise<void> {
-  if (isDemoMode()) {
+  if (isDemoMode() || typeof window === "undefined" || !window.electronAPI) {
     return;
   }
 
-  await update.downloadAndInstall((event) => {
-    switch (event.event) {
-      case "Started":
-        onProgress?.({
-          kind: "started",
-          contentLength: event.data.contentLength ?? null
-        });
-        break;
-      case "Progress":
-        onProgress?.({
-          kind: "progress",
-          chunkLength: event.data.chunkLength
-        });
-        break;
-      case "Finished":
-        onProgress?.({ kind: "finished" });
-        break;
-    }
-  });
+  let cleanup: (() => void) | undefined;
+  if (onProgress) {
+    cleanup = window.electronAPI.onUpdateProgress((event) => {
+      onProgress({
+        kind: event.kind,
+        contentLength: event.contentLength ?? null,
+        chunkLength: event.chunkLength ?? 0
+      });
+    });
+  }
 
-  await relaunch();
+  try {
+    await window.electronAPI.installUpdate();
+  } finally {
+    if (cleanup) cleanup();
+  }
 }

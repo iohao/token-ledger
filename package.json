@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
+  "main": "dist-electron/main.js",
   "packageManager": "bun@1.3.6",
   "engines": {
     "bun": ">=1.0.0"
@@ -12,18 +13,15 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "desktop": "tauri",
-    "compare:ts-rust": "bun scripts/compare-ts-rust.mjs",
+    "test": "bun test",
     "package:app": "bash scripts/package-app.sh",
-    "package:desktop": "tauri build",
-    "package:mac": "tauri build",
-    "package:win": "tauri build"
+    "package:mac": "electron-builder --mac",
+    "package:win": "electron-builder --win"
   },
   "dependencies": {
-    "@tauri-apps/api": "^2.9.1",
-    "@tauri-apps/plugin-process": "^2.3.1",
-    "@tauri-apps/plugin-updater": "^2.10.1",
+    "better-sqlite3": "^13.0.3",
     "clsx": "^2.1.1",
+    "electron-updater": "^6.8.9",
     "i18next": "^26.3.6",
     "lucide-react": "^1.31.0",
     "react": "^19.2.8",
@@ -33,14 +31,45 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3",
-    "@tauri-apps/cli": "^2.9.1",
+    "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^24.6.0",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
     "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^44.0.0",
+    "electron-builder": "^26.15.3",
     "postcss": "^8.5.26",
     "tailwindcss": "^4.3.3",
     "typescript": "^5.9.3",
-    "vite": "^8.2.1"
+    "vite": "^8.2.1",
+    "vite-plugin-electron": "^1.1.1",
+    "vite-plugin-electron-renderer": "^1.0.0"
+  },
+  "build": {
+    "appId": "com.tokenledger.app",
+    "productName": "TokenLedger",
+    "directories": {
+      "output": "release-app"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "plugins/**/*"
+    ],
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "icon": "icons/icon.icns",
+      "category": "public.app-category.developer-tools"
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "zip"
+      ],
+      "icon": "icons/icon.ico"
+    }
   }
 }
