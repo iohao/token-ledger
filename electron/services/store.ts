@@ -214,7 +214,7 @@ export class UsageStore {
       .prepare(
         `
       INSERT INTO sync_state (key, value)
-      VALUES ('sync_status', ?1)
+      VALUES ('sync_status', ?)
       ON CONFLICT(key) DO UPDATE SET value = excluded.value
     `
       )
@@ -242,7 +242,7 @@ export class UsageStore {
       .prepare(
         `
       INSERT INTO sync_state (key, value)
-      VALUES ('sync_context', ?1)
+      VALUES ('sync_context', ?)
       ON CONFLICT(key) DO UPDATE SET value = excluded.value
     `
       )
@@ -315,7 +315,7 @@ export class UsageStore {
     if (parsedFiles.length === 0) return;
 
     const deleteUsage = this.db.prepare(
-      "DELETE FROM session_daily_usage WHERE session_id = ?1"
+      "DELETE FROM session_daily_usage WHERE session_id = ?"
     );
     const insertUsage = this.db.prepare(
       `
@@ -333,7 +333,7 @@ export class UsageStore {
         total_tokens,
         request_count,
         cost_usd
-      ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `
     );
     const insertSource = this.db.prepare(
@@ -346,7 +346,7 @@ export class UsageStore {
         parse_version,
         last_synced_at,
         latest_usage_at
-      ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(session_id) DO UPDATE SET
         relative_path = excluded.relative_path,
         file_size = excluded.file_size,
@@ -398,10 +398,10 @@ export class UsageStore {
     if (sessionIds.length === 0) return;
 
     const deleteUsage = this.db.prepare(
-      "DELETE FROM session_daily_usage WHERE session_id = ?1"
+      "DELETE FROM session_daily_usage WHERE session_id = ?"
     );
     const deleteSource = this.db.prepare(
-      "DELETE FROM source_sessions WHERE session_id = ?1"
+      "DELETE FROM source_sessions WHERE session_id = ?"
     );
 
     const transaction = this.db.transaction(() => {
@@ -423,7 +423,7 @@ export class UsageStore {
     ).sort();
 
     const deleteDaily = this.db.prepare(
-      "DELETE FROM daily_usage WHERE usage_date = ?1"
+      "DELETE FROM daily_usage WHERE usage_date = ?"
     );
     const insertDaily = this.db.prepare(
       `
@@ -453,13 +453,13 @@ export class UsageStore {
         SUM(request_count),
         SUM(cost_usd)
       FROM session_daily_usage
-      WHERE usage_date = ?1
+      WHERE usage_date = ?
       GROUP BY usage_date, model, is_fallback
     `
     );
 
     const deleteMonthly = this.db.prepare(
-      "DELETE FROM monthly_usage WHERE month_key = ?1"
+      "DELETE FROM monthly_usage WHERE month_key = ?"
     );
     const insertMonthly = this.db.prepare(
       `
@@ -489,7 +489,7 @@ export class UsageStore {
         SUM(request_count),
         SUM(cost_usd)
       FROM daily_usage
-      WHERE substr(usage_date, 1, 7) = ?1
+      WHERE substr(usage_date, 1, 7) = ?
       GROUP BY month_key, model, is_fallback
     `
     );
@@ -528,7 +528,7 @@ export class UsageStore {
         request_count,
         cost_usd
       FROM daily_usage
-      WHERE usage_date >= ?1 AND usage_date <= ?2
+      WHERE usage_date >= ? AND usage_date <= ?
       ORDER BY usage_date DESC, total_tokens DESC, model ASC
     `
       )

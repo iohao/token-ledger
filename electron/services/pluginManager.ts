@@ -1,7 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { generatePluginPricingTomlForProvider } from "./pricing";
 import type { CodexPluginConfigDTO, RelayPricingProviderDTO } from "../../src/dto/dashboard";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export function pluginBaseDir(codexHome: string): string {
   return path.join(codexHome, ".tokenledger", "plugins", "codex-token-cost");
@@ -20,16 +23,17 @@ export function codexHooksPath(codexHome: string): string {
 }
 
 function resolveTokenCostScript(): string {
-  // Check if we are running in dev mode or in repository
-  const devScriptPath = path.resolve(__dirname, "../../plugins/codex-token-cost/scripts/token_cost.py");
-  if (fs.existsSync(devScriptPath)) {
-    return fs.readFileSync(devScriptPath, "utf8");
-  }
+  const candidates = [
+    path.resolve(__dirname, "../../plugins/codex-token-cost/scripts/token_cost.py"),
+    path.resolve(__dirname, "../plugins/codex-token-cost/scripts/token_cost.py"),
+    path.join(process.cwd(), "plugins/codex-token-cost/scripts/token_cost.py"),
+    process.resourcesPath ? path.join(process.resourcesPath, "plugins/codex-token-cost/scripts/token_cost.py") : ""
+  ];
 
-  // Check extraResources or current working directory
-  const cwdScriptPath = path.join(process.cwd(), "plugins/codex-token-cost/scripts/token_cost.py");
-  if (fs.existsSync(cwdScriptPath)) {
-    return fs.readFileSync(cwdScriptPath, "utf8");
+  for (const candidate of candidates) {
+    if (candidate && fs.existsSync(candidate)) {
+      return fs.readFileSync(candidate, "utf8");
+    }
   }
 
   throw new Error("Could not find token_cost.py script source");

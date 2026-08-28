@@ -1,8 +1,11 @@
 import { app, BrowserWindow, Menu, MenuItemConstructorOptions, ipcMain, shell } from "electron";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { autoUpdater } from "electron-updater";
 import { AppState } from "./services/appState";
 import type { RelayPricingProviderDTO, SyncProgressDTO } from "../src/dto/dashboard";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const SOURCE_REPOSITORY_URL = "https://github.com/iohao/token-ledger";
 
