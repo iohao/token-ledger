@@ -11,7 +11,7 @@ import {
   X
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { updatePricingProviders } from "../api/tauri";
+import { updatePricingProviders } from "../api/electron";
 import { PageHeader } from "../components/PageHeader";
 import { useApp } from "../context/AppContext";
 import type {
@@ -955,15 +955,16 @@ const RelayRatePreviewTable: React.FC<{
   modelComparisons?: Map<string, ProviderModelPriceComparison>;
 }> = ({ officialPrices, providerPrices, multiplier, modelComparisons }) => {
   const { t } = useTranslation();
+  const providerPriceMap = useMemo(
+    () => new Map((providerPrices ?? []).map((p) => [p.model, p.rates])),
+    [providerPrices]
+  );
+
   if (officialPrices.length === 0) {
     return <p className="relay-no-models">{t("relayPricingNoVisibleModels")}</p>;
   }
 
   const numericMultiplier = parsePositive(multiplier);
-  const providerPriceMap = useMemo(
-    () => new Map((providerPrices ?? []).map((p) => [p.model, p.rates])),
-    [providerPrices]
-  );
 
   return (
     <div className="relay-model-table-wrap">

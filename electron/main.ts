@@ -166,6 +166,7 @@ function createWindow(): BrowserWindow {
   Menu.setApplicationMenu(menu);
 
   win.once("ready-to-show", () => {
+    win.maximize();
     win.show();
   });
 

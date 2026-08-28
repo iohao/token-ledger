@@ -13,7 +13,7 @@ import {
   Undo2,
   Zap
 } from "lucide-react";
-import { fetchCodexPluginConfig, updateCodexPluginConfig } from "../api/tauri";
+import { fetchCodexPluginConfig, updateCodexPluginConfig } from "../api/electron";
 import { PageHeader } from "../components/PageHeader";
 import { useApp } from "../context/AppContext";
 import type { CodexPluginConfigDTO, PricingProviderDTO } from "../dto/dashboard";
