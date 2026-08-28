@@ -3,23 +3,14 @@ import { useTranslation } from "react-i18next";
 import {
   ArrowRight,
   Check,
-  CheckCircle2,
   CircleAlert,
-  Coins,
+  CircleHelp,
   Copy,
-  Cpu,
-  FileCode,
-  FileText,
-  LayoutGrid,
-  RotateCcw,
   Save,
-  ShieldCheck,
   Sliders,
   Sparkles,
-  Table as TableIcon,
   Terminal,
   Undo2,
-  XCircle,
   Zap
 } from "lucide-react";
 import { fetchCodexPluginConfig, updateCodexPluginConfig } from "../api/tauri";
@@ -30,9 +21,7 @@ import type { PageSourceId } from "../types";
 
 export const CODEX_PLUGIN_PAGE_SOURCE_ID: PageSourceId = "src/views/CodexPluginView.tsx";
 
-type TerminalTab = "turn" | "multi" | "detail";
-type ViewMode = "grid" | "table";
-type CopiedTarget = "plugin" | "pricing" | "terminal" | null;
+type CopiedTarget = "terminal" | null;
 
 export const CodexPluginView: React.FC = () => {
   const { t } = useTranslation();
@@ -45,12 +34,7 @@ export const CodexPluginView: React.FC = () => {
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveNotice, setSaveNotice] = useState<string | null>(null);
-
-  // Interactive UI state
-  const [terminalTab, setTerminalTab] = useState<TerminalTab>("turn");
-  const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [copiedTarget, setCopiedTarget] = useState<CopiedTarget>(null);
-  const [isSimulating, setIsSimulating] = useState<boolean>(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -181,13 +165,6 @@ export const CodexPluginView: React.FC = () => {
       });
   }, []);
 
-  const handleSimulateRun = useCallback(() => {
-    setIsSimulating(true);
-    setTimeout(() => {
-      setIsSimulating(false);
-    }, 450);
-  }, []);
-
   // Dynamic cost estimates based on active provider
   const multiplier = Number(selectedProvider?.multiplier ?? 1.0);
   const ratio = Number(selectedProvider?.rechargeRatioUsdPerRmb ?? 0.14) || 0.14;
@@ -198,7 +175,6 @@ export const CodexPluginView: React.FC = () => {
   const sampleTotalCostCny = (Number(sampleTotalCostUsd) / ratio).toFixed(4);
 
   const controlsDisabled = isLoading || isSyncing || isSaving;
-  const isHookActive = enabled && Boolean(pluginConfig?.hookInstalled);
 
   return (
     <div className="page-stack codex-plugin-page">
@@ -209,34 +185,28 @@ export const CodexPluginView: React.FC = () => {
         description={t("codexPluginDescription")}
         pageSourceId={CODEX_PLUGIN_PAGE_SOURCE_ID}
         actions={
-          <div className="header-actions-group">
-            <label className="plugin-master-toggle-label">
-              <span className="plugin-master-toggle-text">
-                {enabled ? t("codexPluginTableCompareEnabled") : t("codexPluginTableCompareDisabled")}
-              </span>
-              <span className="settings-switch">
-                <input
-                  className="settings-switch-input"
-                  type="checkbox"
-                  checked={enabled}
-                  disabled={controlsDisabled}
-                  onChange={(e) => handleToggleEnabled(e.target.checked)}
-                />
-                <span className="settings-switch-track" aria-hidden="true" />
-              </span>
-            </label>
-            {isDirty && (
+          isDirty ? (
+            <div className="header-actions-group">
               <button
-                className="action primary"
                 type="button"
+                className="action secondary"
+                disabled={controlsDisabled}
+                onClick={handleDiscard}
+              >
+                <Undo2 size={15} />
+                <span>{t("codexPluginDiscard")}</span>
+              </button>
+              <button
+                type="button"
+                className="action primary"
                 disabled={controlsDisabled}
                 onClick={() => void handleSave()}
               >
-                <Save size={16} />
+                <Save size={15} />
                 <span>{isSaving ? t("codexPluginSaving") : t("codexPluginSave")}</span>
               </button>
-            )}
-          </div>
+            </div>
+          ) : null
         }
       />
 
@@ -251,547 +221,224 @@ export const CodexPluginView: React.FC = () => {
         </p>
       )}
 
-      {/* Overview Status Grid */}
-      <section className="plugin-status-banner-grid" aria-label={t("codexPluginStatusCardTitle")}>
-        {/* Card 1: Runtime Status */}
-        <div className="plugin-status-card">
-          <div className="plugin-status-card-header">
-            <span className="plugin-status-card-title">{t("codexPluginStatusCardTitle")}</span>
-            <div className={`plugin-status-icon-wrap ${isHookActive ? "active" : ""}`}>
-              {isHookActive ? <Zap size={16} /> : <Terminal size={16} />}
-            </div>
-          </div>
-          <div className="plugin-status-value-group">
-            <span className={`pulse-dot ${isHookActive ? "active" : "inactive"}`} />
-            <span className="plugin-status-card-value">
-              {isHookActive ? t("codexPluginStatusActive") : t("codexPluginStatusInactive")}
-            </span>
-          </div>
-          <p className="plugin-status-card-sub">{t("codexPluginStatusSubtitle")}</p>
-        </div>
-
-        {/* Card 2: Active Pricing Engine */}
-        <div className="plugin-status-card">
-          <div className="plugin-status-card-header">
-            <span className="plugin-status-card-title">{t("codexPluginPricingRuleCardTitle")}</span>
-            <div className="plugin-status-icon-wrap cost">
-              <Coins size={16} />
-            </div>
-          </div>
-          <div className="plugin-status-value-group">
-            <span className="plugin-status-card-value">{selectedProvider?.name ?? "OpenAI 官方"}</span>
-            <span className={`provider-kind-tag ${selectedProvider?.kind ?? "official"}`}>
-              {selectedProvider?.kind === "official"
-                ? t("codexPluginOfficial")
-                : t("codexPluginRelay")}
-            </span>
-          </div>
-          <p className="plugin-status-card-sub">
-            {multiplier !== 1.0
-              ? `${t("codexPluginTableMultiplier")}: ${multiplier.toFixed(4)}x`
-              : t("codexPluginOfficialBenchmark")}
-            {" · "}
-            {t("codexPluginTableRatio")}: {ratio.toFixed(4)}
-          </p>
-        </div>
-
-        {/* Card 3: Metrics Monitored */}
-        <div className="plugin-status-card">
-          <div className="plugin-status-card-header">
-            <span className="plugin-status-card-title">{t("codexPluginMetricsCardTitle")}</span>
-            <div className="plugin-status-icon-wrap info">
-              <ShieldCheck size={16} />
-            </div>
-          </div>
-          <div className="plugin-status-value-group">
-            <span className="plugin-status-card-value">Token / Cost / Turn</span>
-          </div>
-          <p className="plugin-status-card-sub">
-            {t("codexPluginMetricTokens")} · {t("codexPluginMetricCost")} · {t("codexPluginMetricRequests")}
-          </p>
-        </div>
-      </section>
-
-      {/* Terminal Output Preview & Sandbox Card */}
-      <section className="codex-terminal-preview-panel">
+      {/* Active Pricing Provider Selector */}
+      <section className="plugin-providers-panel">
         <div className="panel-header">
           <div>
-            <h2 className="panel-title">{t("codexPluginPreviewTitle")}</h2>
-            <p className="panel-description">{t("codexPluginPreviewDesc")}</p>
-          </div>
-          <div className="terminal-status-badge">
-            {isHookActive ? (
-              <span className="status-pill active">
-                <CheckCircle2 size={14} />
-                {t("codexPluginStatusActive")}
-              </span>
-            ) : (
-              <span className="status-pill inactive">
-                <XCircle size={14} />
-                {t("codexPluginStatusInactive")}
-              </span>
-            )}
-          </div>
-        </div>
-
-        <div className="terminal-window" role="region" aria-label="Terminal Preview">
-          <div className="terminal-window-header">
-            <div className="terminal-header-left">
-              <div className="terminal-traffic-lights" aria-hidden="true">
-                <span className="dot red" />
-                <span className="dot yellow" />
-                <span className="dot green" />
-              </div>
-              <span className="terminal-window-title">codex-cli ~ token-ledger hook</span>
-            </div>
-
-            <div className="terminal-tabs">
-              <button
-                type="button"
-                className={`terminal-tab-btn ${terminalTab === "turn" ? "is-active" : ""}`}
-                onClick={() => setTerminalTab("turn")}
-              >
-                {t("codexPluginTabSingleTurn")}
-              </button>
-              <button
-                type="button"
-                className={`terminal-tab-btn ${terminalTab === "multi" ? "is-active" : ""}`}
-                onClick={() => setTerminalTab("multi")}
-              >
-                {t("codexPluginTabMultiTurn")}
-              </button>
-              <button
-                type="button"
-                className={`terminal-tab-btn ${terminalTab === "detail" ? "is-active" : ""}`}
-                onClick={() => setTerminalTab("detail")}
-              >
-                {t("codexPluginTabDetail")}
-              </button>
-            </div>
-
-            <div className="terminal-header-actions">
-              <button
-                type="button"
-                className={`terminal-action-btn ${isSimulating ? "active" : ""}`}
-                onClick={handleSimulateRun}
-                title={t("codexPluginSimulate")}
-              >
-                <RotateCcw size={12} className={isSimulating ? "animate-spin" : ""} />
-                <span>{t("codexPluginSimulate")}</span>
-              </button>
-              <button
-                type="button"
-                className={`terminal-action-btn ${copiedTarget === "terminal" ? "active" : ""}`}
-                onClick={() => {
-                  const sampleText = `[${selectedProvider?.name ?? "OpenAI 官方"}] 本轮 [花费：$${sampleTurnCostUsd} (约¥${sampleTurnCostCny})，请求 2 次] | 总计 [花费：$${sampleTotalCostUsd} (约¥${sampleTotalCostCny})，请求 5 次]`;
-                  handleCopyText(sampleText, "terminal");
-                }}
-                title={t("codexPluginCopyTerminal")}
-              >
-                {copiedTarget === "terminal" ? <Check size={12} /> : <Copy size={12} />}
-                <span>
-                  {copiedTarget === "terminal" ? t("codexPluginCopied") : t("codexPluginCopyTerminal")}
-                </span>
-              </button>
-            </div>
-          </div>
-
-          <div className="terminal-window-body">
-            {terminalTab === "turn" && (
-              <>
-                <div className="terminal-line prompt-line">
-                  <span className="terminal-prompt">$</span>
-                  <span className="terminal-cmd">codex "Implement token caching optimization"</span>
-                </div>
-                <div className="terminal-line response-line">
-                  <span className="terminal-agent">Codex:</span>
-                  <span>
-                    Optimization applied. 3 files modified, 12 test assertions passing.
-                  </span>
-                </div>
-                <div className={`terminal-line cost-highlight-line ${isSimulating ? "animate-pulse" : ""}`}>
-                  <span className="terminal-provider-tag">
-                    <Coins size={12} />
-                    {selectedProvider?.name ?? "OpenAI 官方"}
-                  </span>
-                  <span>
-                    本轮 [花费：${sampleTurnCostUsd} (约¥{sampleTurnCostCny})，请求 2 次] | 总计 [花费：${sampleTotalCostUsd} (约¥{sampleTotalCostCny})，请求 5 次]
-                  </span>
-                </div>
-                <div className="terminal-line" style={{ marginTop: 8 }}>
-                  <span className="terminal-prompt">$</span>
-                  <span className="terminal-cursor" aria-hidden="true" />
-                </div>
-              </>
-            )}
-
-            {terminalTab === "multi" && (
-              <>
-                <div className="terminal-line prompt-line">
-                  <span className="terminal-prompt">$</span>
-                  <span className="terminal-cmd">codex "Review diff against main branch"</span>
-                </div>
-                <div className="terminal-line response-line">
-                  <span className="terminal-agent">Codex:</span>
-                  <span>Summary: 4 changes verified, no regressions found.</span>
-                </div>
-                <div className="terminal-line cost-highlight-line">
-                  <span className="terminal-provider-tag">{selectedProvider?.name ?? "OpenAI 官方"}</span>
-                  <span>
-                    本轮 [花费：${(Number(sampleTurnCostUsd) * 0.6).toFixed(6)}，请求 1 次] | 总计 [花费：${(Number(sampleTotalCostUsd) - Number(sampleTurnCostUsd)).toFixed(6)}，请求 3 次]
-                  </span>
-                </div>
-                <div className="terminal-line prompt-line" style={{ marginTop: 10 }}>
-                  <span className="terminal-prompt">$</span>
-                  <span className="terminal-cmd">codex "Run full benchmark suite"</span>
-                </div>
-                <div className="terminal-line response-line">
-                  <span className="terminal-agent">Codex:</span>
-                  <span>All benchmarks finished in 1.4s.</span>
-                </div>
-                <div className="terminal-line cost-highlight-line">
-                  <span className="terminal-provider-tag">{selectedProvider?.name ?? "OpenAI 官方"}</span>
-                  <span>
-                    本轮 [花费：${sampleTurnCostUsd}，请求 2 次] | 总计 [花费：${sampleTotalCostUsd}，请求 5 次]
-                  </span>
-                </div>
-              </>
-            )}
-
-            {terminalTab === "detail" && (
-              <>
-                <div className="terminal-line prompt-line">
-                  <span className="terminal-prompt">$</span>
-                  <span className="terminal-cmd">codex --verbose "Analyze database query performance"</span>
-                </div>
-                <div className="terminal-line response-line">
-                  <span className="terminal-agent">Codex:</span>
-                  <span>Query planner verified with indexes on 3 tables.</span>
-                </div>
-                <div className="terminal-token-detail-box">
-                  <div>• Prompt Tokens: <strong>1,450</strong> (Cached: 896)</div>
-                  <div>• Completion Tokens: <strong>520</strong></div>
-                  <div>• Active Model: <strong>gpt-4o</strong> (or configured relay)</div>
-                  <div>• Multiplier Applied: <strong>{multiplier.toFixed(4)}x</strong></div>
-                </div>
-                <div className="terminal-line cost-highlight-line" style={{ marginTop: 8 }}>
-                  <span className="terminal-provider-tag">{selectedProvider?.name ?? "OpenAI 官方"}</span>
-                  <span>
-                    本轮 [花费：${sampleTurnCostUsd} · ¥{sampleTurnCostCny}] | 总计 [花费：${sampleTotalCostUsd} · ¥{sampleTotalCostCny}]
-                  </span>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* System Integration File Paths Bar */}
-        {pluginConfig && (
-          <div className="terminal-paths-bar">
-            <div className="plugin-path-chip">
-              <div className="plugin-path-chip-left">
-                <FileCode size={14} className="text-muted" />
-                <span className="plugin-path-chip-label">{t("codexPluginPathLabel")}:</span>
-                <code className="plugin-path-chip-code" title={pluginConfig.pluginPath}>
-                  {pluginConfig.pluginPath}
-                </code>
-              </div>
-              <button
-                type="button"
-                className={`plugin-copy-btn ${copiedTarget === "plugin" ? "copied" : ""}`}
-                onClick={() => handleCopyText(pluginConfig.pluginPath, "plugin")}
-                title={t("codexPluginCopyPath")}
-                aria-label={t("codexPluginCopyPath")}
-              >
-                {copiedTarget === "plugin" ? <Check size={14} /> : <Copy size={14} />}
-              </button>
-            </div>
-
-            <div className="plugin-path-chip">
-              <div className="plugin-path-chip-left">
-                <FileText size={14} className="text-muted" />
-                <span className="plugin-path-chip-label">{t("codexPluginPricingPathLabel")}:</span>
-                <code className="plugin-path-chip-code" title={pluginConfig.pricingPath}>
-                  {pluginConfig.pricingPath}
-                </code>
-              </div>
-              <button
-                type="button"
-                className={`plugin-copy-btn ${copiedTarget === "pricing" ? "copied" : ""}`}
-                onClick={() => handleCopyText(pluginConfig.pricingPath, "pricing")}
-                title={t("codexPluginCopyPath")}
-                aria-label={t("codexPluginCopyPath")}
-              >
-                {copiedTarget === "pricing" ? <Check size={14} /> : <Copy size={14} />}
-              </button>
-            </div>
-          </div>
-        )}
-      </section>
-
-      {/* Provider Selection Section */}
-      <section className="codex-providers-section">
-        <div className="panel-header">
-          <div>
-            <h2 className="panel-title">{t("codexPluginSelectProviderTitle")}</h2>
+            <h3 className="panel-title">{t("codexPluginSelectProviderTitle")}</h3>
             <p className="panel-description">{t("codexPluginSelectProviderDesc")}</p>
           </div>
-
-          <div className="providers-header-actions">
-            {/* View Mode Switcher */}
-            <div className="view-mode-toggle" role="group" aria-label="View Mode">
-              <button
-                type="button"
-                className={`view-mode-btn ${viewMode === "grid" ? "is-active" : ""}`}
-                onClick={() => setViewMode("grid")}
-                title={t("codexPluginViewModeGrid")}
-              >
-                <LayoutGrid size={15} />
-              </button>
-              <button
-                type="button"
-                className={`view-mode-btn ${viewMode === "table" ? "is-active" : ""}`}
-                onClick={() => setViewMode("table")}
-                title={t("codexPluginViewModeTable")}
-              >
-                <TableIcon size={15} />
-              </button>
-            </div>
-
-            <button
-              type="button"
-              className="action secondary"
-              onClick={() => setActiveTab("relayPricing")}
-            >
-              <Sliders size={14} />
-              <span>{t("codexPluginManageRelays")}</span>
-              <ArrowRight size={14} />
-            </button>
-          </div>
+          <button
+            type="button"
+            className="action secondary btn-sm plugin-manage-relays-btn"
+            onClick={() => setActiveTab("relayPricing")}
+          >
+            <Sliders size={13} />
+            <span>{t("codexPluginManageRelays")}</span>
+            <ArrowRight size={13} />
+          </button>
         </div>
 
-        {/* Card Grid View */}
-        {viewMode === "grid" && (
-          <div className="provider-cards-grid" role="radiogroup" aria-label={t("codexPluginSelectProviderTitle")}>
-            {providers.map((provider) => {
-              const isSelected = selectedProviderId === provider.id;
-              const isOfficial = provider.kind === "official";
-              const pMultiplier =
-                provider.multiplier !== undefined && provider.multiplier !== null
-                  ? `${Number(provider.multiplier).toFixed(4)}x`
-                  : "1.0000x";
-              const pRatio =
-                provider.rechargeRatioUsdPerRmb !== null &&
-                provider.rechargeRatioUsdPerRmb !== undefined
-                  ? `${Number(provider.rechargeRatioUsdPerRmb).toFixed(4)}`
-                  : "0.1400";
+        <div className="plugin-provider-list" role="radiogroup" aria-label={t("codexPluginSelectProviderTitle")}>
+          {providers.map((provider) => {
+            const isSelected = selectedProviderId === provider.id;
+            const isOfficial = provider.kind === "official";
+            const pMultiplier =
+              provider.multiplier !== undefined && provider.multiplier !== null
+                ? Number(provider.multiplier).toFixed(4)
+                : "1.0000";
+            const pRatio =
+              provider.rechargeRatioUsdPerRmb !== null && provider.rechargeRatioUsdPerRmb !== undefined
+                ? Number(provider.rechargeRatioUsdPerRmb).toFixed(4)
+                : "0.1400";
+            const effectiveRate =
+              provider.multiplier && provider.rechargeRatioUsdPerRmb
+                ? (Number(provider.multiplier) / (Number(provider.rechargeRatioUsdPerRmb) / 0.14)).toFixed(2)
+                : "1.00";
 
-              const effectiveRate =
-                provider.multiplier && provider.rechargeRatioUsdPerRmb
-                  ? (Number(provider.multiplier) / (Number(provider.rechargeRatioUsdPerRmb) / 0.14)).toFixed(2)
-                  : "1.00";
+            return (
+              <div
+                key={provider.id}
+                className={`plugin-provider-row ${isSelected ? "is-selected" : ""}`}
+                onClick={() => handleSelectProvider(provider.id)}
+                role="radio"
+                aria-checked={isSelected}
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    handleSelectProvider(provider.id);
+                  }
+                }}
+              >
+                <div className="plugin-provider-radio-col" aria-hidden="true">
+                  <div className="plugin-provider-radio-circle">
+                    <div className="plugin-provider-radio-inner" />
+                  </div>
+                </div>
 
-              return (
-                <div
-                  key={provider.id}
-                  className={`plugin-provider-card ${isSelected ? "is-selected" : ""}`}
-                  onClick={() => handleSelectProvider(provider.id)}
-                  role="radio"
-                  aria-checked={isSelected}
-                  tabIndex={0}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      handleSelectProvider(provider.id);
-                    }
-                  }}
-                >
-                  <div className="provider-card-top">
-                    <div className="provider-card-name-group">
-                      <div className="provider-radio-custom" aria-hidden="true">
-                        <div className="provider-radio-dot" />
-                      </div>
-                      <div className="provider-card-title-wrap">
-                        <strong className="provider-card-name">{provider.name}</strong>
-                        <div className="provider-card-badges">
-                          <span className={`provider-kind-tag ${provider.kind}`}>
-                            {isOfficial ? t("codexPluginOfficial") : t("codexPluginRelay")}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                    {isSelected && <span className="active-badge">Active</span>}
+                <div className="plugin-provider-info-col">
+                  <div className="plugin-provider-name-row">
+                    <strong className="plugin-provider-name">{provider.name}</strong>
+                    <span className={`provider-kind-tag ${provider.kind}`}>
+                      {isOfficial ? t("codexPluginOfficial") : t("codexPluginRelay")}
+                    </span>
+                    {isSelected && <span className="plugin-selected-chip">{t("codexPluginActiveTag")}</span>}
                   </div>
 
-                  <div className="provider-card-stats">
-                    <div className="provider-stat-item">
-                      <span className="provider-stat-label">{t("codexPluginTableMultiplier")}</span>
-                      <span className="provider-stat-value">{pMultiplier}</span>
-                    </div>
-                    <div className="provider-stat-item">
-                      <span className="provider-stat-label">{t("codexPluginTableRatio")}</span>
-                      <span className="provider-stat-value">{pRatio}</span>
-                    </div>
-                  </div>
-
-                  <div className="provider-card-footer">
-                    <span
-                      className={`provider-effective-rate-pill ${
-                        !isOfficial && Number(effectiveRate) < 1.0 ? "highlight" : ""
-                      }`}
-                    >
+                  <div className="plugin-provider-metrics-row">
+                    <span className="plugin-provider-metric-tag">
+                      {t("codexPluginTableMultiplier")}: <strong>{pMultiplier}x</strong>
+                    </span>
+                    <span className="plugin-provider-metric-dot">·</span>
+                    <span className="plugin-provider-metric-tag">
+                      {t("codexPluginTableRatio")}: <strong>{pRatio}</strong>
+                    </span>
+                    <span className="plugin-provider-metric-dot">·</span>
+                    <span className={`plugin-provider-metric-tag ${!isOfficial && Number(effectiveRate) < 1.0 ? "text-moss" : ""}`}>
                       {isOfficial
                         ? t("codexPluginBaseline")
                         : `${effectiveRate}x ${t("codexPluginEffectiveRateDesc")}`}
                     </span>
-                    <span
-                      className={`compare-status-badge ${
-                        provider.enabled ? "enabled" : "disabled"
-                      }`}
-                    >
-                      {provider.enabled
-                        ? t("codexPluginTableCompareEnabled")
-                        : t("codexPluginTableCompareDisabled")}
-                    </span>
                   </div>
                 </div>
-              );
-            })}
-          </div>
-        )}
 
-        {/* Table View */}
-        {viewMode === "table" && (
-          <div className="table-shell">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th style={{ width: 48, textAlign: "center" }}>{t("codexPluginTableSelect")}</th>
-                  <th>{t("codexPluginTableName")}</th>
-                  <th>{t("codexPluginTableType")}</th>
-                  <th>{t("codexPluginTableMultiplier")}</th>
-                  <th>{t("codexPluginTableRatio")}</th>
-                  <th>{t("codexPluginTableCompareStatus")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {providers.map((provider) => {
-                  const isSelected = selectedProviderId === provider.id;
-                  const isOfficial = provider.kind === "official";
-                  const pMultiplier =
-                    provider.multiplier !== undefined && provider.multiplier !== null
-                      ? `${Number(provider.multiplier).toFixed(4)}x`
-                      : "1.0000x";
-                  const pRatio =
-                    provider.rechargeRatioUsdPerRmb !== null &&
-                    provider.rechargeRatioUsdPerRmb !== undefined
-                      ? `${Number(provider.rechargeRatioUsdPerRmb).toFixed(4)}`
-                      : "-";
-
-                  return (
-                    <tr
-                      key={provider.id}
-                      className={`selectable-row ${isSelected ? "is-selected" : ""}`}
-                      onClick={() => handleSelectProvider(provider.id)}
-                    >
-                      <td style={{ textAlign: "center" }}>
-                        <input
-                          type="radio"
-                          name="active-pricing-provider"
-                          checked={isSelected}
-                          onChange={() => handleSelectProvider(provider.id)}
-                          disabled={controlsDisabled}
-                          aria-label={provider.name}
-                        />
-                      </td>
-                      <td>
-                        <div className="provider-name-cell">
-                          <strong>{provider.name}</strong>
-                          {isSelected && <span className="active-badge">Active</span>}
-                        </div>
-                      </td>
-                      <td>
-                        <span className={`provider-kind-tag ${provider.kind}`}>
-                          {isOfficial ? t("codexPluginOfficial") : t("codexPluginRelay")}
-                        </span>
-                      </td>
-                      <td>
-                        <code>{pMultiplier}</code>
-                      </td>
-                      <td>
-                        <code>{pRatio}</code>
-                      </td>
-                      <td>
-                        <span
-                          className={`compare-status-badge ${
-                            provider.enabled ? "enabled" : "disabled"
-                          }`}
-                        >
-                          {provider.enabled
-                            ? t("codexPluginTableCompareEnabled")
-                            : t("codexPluginTableCompareDisabled")}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+                <div className="plugin-provider-check-col" aria-hidden="true">
+                  {isSelected && <Check size={16} className="text-moss" />}
+                </div>
+              </div>
+            );
+          })}
+        </div>
 
         {providers.length <= 1 && (
-          <div className="plugin-no-relays-card">
-            <span className="plugin-no-relays-text">{t("codexPluginNoRelaysNotice")}</span>
-            <button
-              type="button"
-              className="action secondary"
-              onClick={() => setActiveTab("relayPricing")}
-            >
-              <span>{t("codexPluginManageRelays")}</span>
-              <ArrowRight size={14} />
-            </button>
+          <div className="plugin-empty-relays-hint">
+            <p>{t("codexPluginNoRelaysNotice")}</p>
           </div>
         )}
       </section>
 
-      {/* How it Works / Architecture Lifecycle Panel */}
-      <section className="plugin-lifecycle-panel">
-        <h3 className="panel-title">{t("codexPluginHowItWorks")}</h3>
-        <div className="plugin-lifecycle-grid">
-          <div className="plugin-lifecycle-step">
-            <div className="plugin-lifecycle-step-icon">
-              <Terminal size={16} />
+      {/* 终端输出效果预览 Panel */}
+      <section className="plugin-preview-panel">
+        <div className="panel-header">
+          <div>
+            <h3 className="panel-title">{t("codexPluginPreviewTitle")}</h3>
+            <p className="panel-description">{t("codexPluginPreviewDesc")}</p>
+          </div>
+          <div className="plugin-preview-header-actions">
+            <div className="plugin-preview-switch-group">
+              <label
+                className="settings-switch-label"
+                title={enabled ? t("relayPricingEnabled") : t("relayPricingDisabled")}
+              >
+                <span className="settings-switch-text">
+                  {enabled ? t("relayPricingEnabled") : t("relayPricingDisabled")}
+                </span>
+                <span className="settings-switch">
+                  <input
+                    className="settings-switch-input"
+                    type="checkbox"
+                    checked={enabled}
+                    disabled={controlsDisabled}
+                    onChange={(e) => handleToggleEnabled(e.target.checked)}
+                  />
+                  <span className="settings-switch-track" aria-hidden="true" />
+                </span>
+              </label>
+              <div className="plugin-help-tooltip-wrap">
+                <button
+                  type="button"
+                  className="plugin-help-tooltip-trigger"
+                  aria-label={t("codexPluginTooltipTitle")}
+                >
+                  <CircleHelp size={15} className="plugin-help-icon" />
+                </button>
+                <div className="plugin-help-tooltip-popover" role="tooltip">
+                  <div className="plugin-help-tooltip-title">
+                    <CircleHelp size={14} className="text-moss" />
+                    <span>{t("codexPluginTooltipTitle")}</span>
+                  </div>
+                  <div className="plugin-help-tooltip-content">
+                    <p>{t("codexPluginTooltipDesc")}</p>
+                    <p className="plugin-help-tooltip-secondary">{t("codexPluginTooltipRuleDesc")}</p>
+                  </div>
+                </div>
+              </div>
             </div>
-            <div className="plugin-lifecycle-step-body">
-              <strong className="plugin-lifecycle-step-title">{t("codexPluginStep1Title")}</strong>
-              <span className="plugin-lifecycle-step-desc">{t("codexPluginStep1Desc")}</span>
+
+            <button
+              type="button"
+              className={`plugin-mini-action-btn ${copiedTarget === "terminal" ? "copied" : ""}`}
+              onClick={() => {
+                const sampleText = `[${selectedProvider?.name ?? "OpenAI 官方"}] 本轮 [花费：$${sampleTurnCostUsd} (约¥${sampleTurnCostCny})，请求 2 次] | 总计 [花费：$${sampleTotalCostUsd} (约¥${sampleTotalCostCny})，请求 5 次]`;
+                handleCopyText(sampleText, "terminal");
+              }}
+              title={t("codexPluginCopyTerminal")}
+            >
+              {copiedTarget === "terminal" ? <Check size={13} /> : <Copy size={13} />}
+              <span>{copiedTarget === "terminal" ? t("codexPluginCopied") : t("codexPluginCopyTerminal")}</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="compact-terminal-window" role="region" aria-label={t("codexPluginPreviewTitle")}>
+          <div className="compact-terminal-header">
+            <div className="terminal-traffic-lights" aria-hidden="true">
+              <span className="dot red" />
+              <span className="dot yellow" />
+              <span className="dot green" />
             </div>
+            <span className="compact-terminal-title">codex-cli session</span>
+            <span className="compact-terminal-engine-tag">
+              {selectedProvider?.name ?? "OpenAI 官方"}
+            </span>
           </div>
 
-          <div className="plugin-lifecycle-step">
-            <div className="plugin-lifecycle-step-icon">
-              <Cpu size={16} />
+          <div className="compact-terminal-body">
+            <div className="terminal-line prompt-line">
+              <span className="terminal-prompt">$</span>
+              <span className="terminal-cmd">codex &quot;Optimize vector embeddings search&quot;</span>
             </div>
-            <div className="plugin-lifecycle-step-body">
-              <strong className="plugin-lifecycle-step-title">{t("codexPluginStep2Title")}</strong>
-              <span className="plugin-lifecycle-step-desc">{t("codexPluginStep2Desc")}</span>
+            <div className="terminal-line response-line">
+              <span className="terminal-agent">Codex:</span>
+              <span className="terminal-text-dim">Optimization applied. 3 files modified.</span>
+            </div>
+
+            <div className="compact-terminal-hook-box">
+              <div className="compact-hook-header">
+                <span className="compact-hook-tag">
+                  <Zap size={12} />
+                  {selectedProvider?.name ?? "OpenAI 官方"}
+                </span>
+                <span className="compact-hook-sub">{t("codexPluginHookOutput")}</span>
+              </div>
+              <div className="compact-hook-content">
+                本轮 [花费：${sampleTurnCostUsd} (约¥${sampleTurnCostCny})，请求 2 次] | 总计 [花费：${sampleTotalCostUsd} (约¥${sampleTotalCostCny})，请求 5 次]
+              </div>
             </div>
           </div>
+        </div>
 
-          <div className="plugin-lifecycle-step">
-            <div className="plugin-lifecycle-step-icon">
-              <Coins size={16} />
-            </div>
-            <div className="plugin-lifecycle-step-body">
-              <strong className="plugin-lifecycle-step-title">{t("codexPluginStep3Title")}</strong>
-              <span className="plugin-lifecycle-step-desc">{t("codexPluginStep3Desc")}</span>
-            </div>
+        {/* Minimalist Workflow Breadcrumb */}
+        <div className="plugin-workflow-compact">
+          <div className="plugin-workflow-step">
+            <span className="plugin-workflow-num">1</span>
+            <span>{t("codexPluginStep1")}</span>
+          </div>
+          <ArrowRight size={12} className="text-muted" />
+          <div className="plugin-workflow-step">
+            <span className="plugin-workflow-num">2</span>
+            <span>{t("codexPluginStep2")}</span>
+          </div>
+          <ArrowRight size={12} className="text-muted" />
+          <div className="plugin-workflow-step">
+            <span className="plugin-workflow-num">3</span>
+            <span>{t("codexPluginStep3")}</span>
           </div>
         </div>
       </section>
 
-      {/* Sticky Floating Save Bar on changes */}
+      {/* Sticky Floating Save Bar on unsaved changes */}
       {isDirty && (
         <div className="plugin-floating-save-bar" role="status" aria-live="polite">
           <div className="plugin-floating-save-left">
