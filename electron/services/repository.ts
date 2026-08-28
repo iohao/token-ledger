@@ -468,19 +468,19 @@ export class UsageRepository {
 
     for (let i = 0; i < dirtyEntries.length; i += batchSize) {
       const chunk = dirtyEntries.slice(i, i + batchSize);
-      const parsedChunk: ParsedSessionFile[] = [];
-
-      for (const entry of chunk) {
-        const parsedFile = await parseSessionFile(
-          entry.filePath,
-          sessionsRoot,
-          this.timeZone
-        );
-        for (const usage of parsedFile.usages) {
-          usage.totals.costUSD = costFor(usage.totals, usage.model);
-        }
-        parsedChunk.push(parsedFile);
-      }
+      const parsedChunk: ParsedSessionFile[] = await Promise.all(
+        chunk.map(async (entry) => {
+          const parsedFile = await parseSessionFile(
+            entry.filePath,
+            sessionsRoot,
+            this.timeZone
+          );
+          for (const usage of parsedFile.usages) {
+            usage.totals.costUSD = costFor(usage.totals, usage.model);
+          }
+          return parsedFile;
+        })
+      );
 
       for (const parsedFile of parsedChunk) {
         for (const usage of parsedFile.usages) {

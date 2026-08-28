@@ -102,6 +102,9 @@ export class UsageStore {
     this.db.exec(`
       PRAGMA journal_mode = WAL;
       PRAGMA synchronous = NORMAL;
+      PRAGMA cache_size = -64000;
+      PRAGMA temp_store = MEMORY;
+      PRAGMA mmap_size = 268435456;
 
       CREATE TABLE IF NOT EXISTS source_sessions (
         session_id TEXT PRIMARY KEY,
