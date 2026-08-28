@@ -1014,7 +1014,7 @@ const RelayRatePreviewTable: React.FC<{
                             {hasMultiplier && (
                               <small className="relay-rate-subtext">
                                 <span>
-                                  {t("relayPricingOfficialBase", {
+                                  {t("relayPricingRelayBase", {
                                     price: formatDisplayRate(baseRate)
                                   })}
                                 </span>
