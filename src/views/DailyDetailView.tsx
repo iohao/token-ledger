@@ -38,6 +38,9 @@ export const DailyDetailView: React.FC = () => {
   } = useApp();
 
   const timeZone = dashboard?.meta.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const relayProviders = dashboard?.meta.pricingProviders?.filter(
+    (provider) => provider.kind === "relay" && provider.enabled
+  ) ?? [];
   const queryDisabled = isLoadingDailyDetails || isLoading;
 
   const pageTitle =
@@ -78,6 +81,7 @@ export const DailyDetailView: React.FC = () => {
             rows={currentDailyDetailPageRows(dailyDetailRows, dailyDetailPage, DAILY_DETAIL_PAGE_SIZE)}
             timeZone={timeZone}
             eyebrow={t("dailyUsageTitle")}
+            relayProviders={relayProviders}
           />
         </>
       ) : (

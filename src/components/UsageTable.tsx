@@ -25,7 +25,6 @@ export const UsageTable: React.FC<UsageTableProps> = ({ title, rows, timeZone, m
   const { locale } = useApp();
   const totals = sumTotals(rows);
   const isDaily = mode === "daily";
-  const showCacheCreation = totals.cacheCreationInputTokens > 0;
 
   return (
     <section className="table-panel panel">
@@ -45,7 +44,7 @@ export const UsageTable: React.FC<UsageTableProps> = ({ title, rows, timeZone, m
               <th>{t("input")}</th>
               <th>{t("output")}</th>
               <th>{t("cachedInput")}</th>
-              {showCacheCreation && <th>{t("cacheCreationInput")}</th>}
+              <th>{t("cacheCreationInput")}</th>
               <th>{t("reasoning")}</th>
               <th>{t("total")}</th>
               <th>{t("cost")}</th>
@@ -79,9 +78,7 @@ export const UsageTable: React.FC<UsageTableProps> = ({ title, rows, timeZone, m
                   <td>{formatTokenCount(nonCachedInputTokens(row.totals), locale)}</td>
                   <td>{formatTokenCount(row.totals.outputTokens, locale)}</td>
                   <td>{formatTokenCount(row.totals.cachedInputTokens, locale)}</td>
-                  {showCacheCreation && (
-                    <td>{formatTokenCount(row.totals.cacheCreationInputTokens, locale)}</td>
-                  )}
+                  <td>{formatTokenCount(row.totals.cacheCreationInputTokens, locale)}</td>
                   <td>{formatTokenCount(row.totals.reasoningOutputTokens, locale)}</td>
                   <td>{formatTokenCount(row.totals.totalTokens, locale)}</td>
                   <td className="cost-cell daily-detail-model-cost-cell">{formatCurrency(row.totals.costUSD, locale)}</td>
@@ -95,9 +92,7 @@ export const UsageTable: React.FC<UsageTableProps> = ({ title, rows, timeZone, m
               <td>{formatTokenCount(nonCachedInputTokens(totals), locale)}</td>
               <td>{formatTokenCount(totals.outputTokens, locale)}</td>
               <td>{formatTokenCount(totals.cachedInputTokens, locale)}</td>
-              {showCacheCreation && (
-                <td>{formatTokenCount(totals.cacheCreationInputTokens, locale)}</td>
-              )}
+              <td>{formatTokenCount(totals.cacheCreationInputTokens, locale)}</td>
               <td>{formatTokenCount(totals.reasoningOutputTokens, locale)}</td>
               <td>{formatTokenCount(totals.totalTokens, locale)}</td>
               <td className="cost-cell daily-detail-model-cost-cell">{formatCurrency(totals.costUSD, locale)}</td>

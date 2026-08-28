@@ -201,8 +201,6 @@ export const DailyDetailTable: React.FC<DailyDetailTableProps> = ({
     relayCostsForModels(rows.flatMap((row) => row.models), provider, officialProvider)
   );
 
-  const showCacheCreation = totals.cacheCreationInputTokens > 0;
-
   const flatRows = rows.flatMap((row) => {
     const dateLabel = formatDateLabel(row.dateKey, timeZone, locale);
     const rowSpan = row.models.length + 1;
@@ -277,7 +275,7 @@ export const DailyDetailTable: React.FC<DailyDetailTableProps> = ({
             <col className="daily-detail-col-metric" />
             <col className="daily-detail-col-metric" />
             <col className="daily-detail-col-metric" />
-            {showCacheCreation && <col className="daily-detail-col-metric" />}
+            <col className="daily-detail-col-metric" />
             <col className="daily-detail-col-metric" />
             {showRelayPrices ? (
               displayedRelayProviders.map((provider) => (
@@ -295,7 +293,7 @@ export const DailyDetailTable: React.FC<DailyDetailTableProps> = ({
               <th>{t("input")}</th>
               <th>{t("output")}</th>
               <th>{t("cachedInput")}</th>
-              {showCacheCreation && <th>{t("cacheCreationInput")}</th>}
+              <th>{t("cacheCreationInput")}</th>
               <th>{t("total")}</th>
               {showRelayPrices ? (
                 displayedRelayProviders.map((provider) => (
@@ -339,11 +337,9 @@ export const DailyDetailTable: React.FC<DailyDetailTableProps> = ({
                 <td>
                   <AlignedTokenCount value={row.totals.cachedInputTokens} />
                 </td>
-                {showCacheCreation && (
-                  <td>
-                    <AlignedTokenCount value={row.totals.cacheCreationInputTokens} />
-                  </td>
-                )}
+                <td>
+                  <AlignedTokenCount value={row.totals.cacheCreationInputTokens} />
+                </td>
                 <td className="daily-detail-total-metric">
                   <AlignedTokenCount value={row.totals.totalTokens} />
                 </td>
@@ -377,11 +373,9 @@ export const DailyDetailTable: React.FC<DailyDetailTableProps> = ({
               <td>
                 <AlignedTokenCount value={totals.cachedInputTokens} />
               </td>
-              {showCacheCreation && (
-                <td>
-                  <AlignedTokenCount value={totals.cacheCreationInputTokens} />
-                </td>
-              )}
+              <td>
+                <AlignedTokenCount value={totals.cacheCreationInputTokens} />
+              </td>
               <td className="daily-detail-total-metric">
                 <AlignedTokenCount value={totals.totalTokens} />
               </td>
