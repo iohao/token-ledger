@@ -45,6 +45,15 @@ export interface ElectronAPI {
     enabled: boolean,
     selectedProviderId: string
   ) => Promise<CodexPluginConfigDTO>;
+  setUiPreferences: (preferences: {
+    locale?: string | null;
+    themeMode?: string | null;
+    showPageSourceIds?: boolean | null;
+  }) => Promise<{
+    locale: string | null;
+    themeMode: string | null;
+    showPageSourceIds: boolean | null;
+  }>;
 
   // Window control
   maximizeWindow: () => Promise<void>;

@@ -33,6 +33,11 @@ const api: ElectronAPI = {
   getPluginConfig: () => ipcRenderer.invoke("get_plugin_config"),
   setPluginConfig: (enabled: boolean, selectedProviderId: string) =>
     ipcRenderer.invoke("set_plugin_config", enabled, selectedProviderId),
+  setUiPreferences: (preferences: {
+    locale?: string | null;
+    themeMode?: string | null;
+    showPageSourceIds?: boolean | null;
+  }) => ipcRenderer.invoke("set_ui_preferences", preferences),
 
   maximizeWindow: () => ipcRenderer.invoke("maximize_window"),
   showWindow: () => ipcRenderer.invoke("show_window"),

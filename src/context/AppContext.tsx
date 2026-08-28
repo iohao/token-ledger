@@ -8,7 +8,8 @@ import {
   queryDailyUsage,
   resetDatabasePath,
   startSync,
-  updateDatabasePath
+  updateDatabasePath,
+  updateUiPreferences
 } from "../api/electron";
 import {
   checkForPendingAppUpdate,
@@ -19,6 +20,7 @@ import {
 import { useDeferredTasks } from "../hooks/useDeferredTasks";
 import type {
   DailyUsageSummaryDTO,
+  DashboardMetaDTO,
   DashboardPayloadDTO,
   SyncProgressDTO,
   SyncPreviewDTO,
@@ -251,6 +253,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const stateRef = useRef({
     locale,
     themeMode,
+    showPageSourceIds,
     autoSyncMode,
     nextAutoSyncAt,
     activeTab,
@@ -282,6 +285,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     stateRef.current = {
       locale,
       themeMode,
+      showPageSourceIds,
       autoSyncMode,
       nextAutoSyncAt,
       activeTab,
@@ -313,12 +317,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const setThemeMode = useCallback((mode: ThemeMode) => {
     setThemeModeState(mode);
     applyTheme(mode);
+    void updateUiPreferences({ themeMode: mode }).catch(() => {});
   }, []);
 
   const setLocale = useCallback((nextLocale: Locale) => {
     setLocaleState(nextLocale);
     persistLocale(nextLocale);
     void i18n.changeLanguage(nextLocale);
+    void updateUiPreferences({ locale: nextLocale }).catch(() => {});
   }, []);
 
   const setShowPageSourceIds = useCallback((visible: boolean) => {
@@ -329,6 +335,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       window.localStorage.setItem(PAGE_SOURCE_VISIBILITY_STORAGE_KEY, String(visible));
     } catch {}
+    void updateUiPreferences({ showPageSourceIds: visible }).catch(() => {});
   }, []);
 
   const setDatabasePathDraft = useCallback((val: string) => {
@@ -390,6 +397,41 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setDatabasePathDraftDirty(false);
   }, []);
 
+  const syncUiPreferences = useCallback((meta: DashboardMetaDTO) => {
+    // 1. Locale sync
+    if (meta.locale === "zh-CN" || meta.locale === "en-US") {
+      if (meta.locale !== stateRef.current.locale) {
+        setLocaleState(meta.locale);
+        persistLocale(meta.locale);
+        void i18n.changeLanguage(meta.locale);
+      }
+    } else {
+      void updateUiPreferences({ locale: stateRef.current.locale }).catch(() => {});
+    }
+
+    // 2. Theme mode sync
+    if (meta.themeMode === "dark" || meta.themeMode === "light" || meta.themeMode === "system") {
+      if (meta.themeMode !== stateRef.current.themeMode) {
+        setThemeModeState(meta.themeMode);
+        applyTheme(meta.themeMode);
+      }
+    } else {
+      void updateUiPreferences({ themeMode: stateRef.current.themeMode }).catch(() => {});
+    }
+
+    // 3. Show page source IDs sync
+    if (typeof meta.showPageSourceIds === "boolean") {
+      if (meta.showPageSourceIds !== stateRef.current.showPageSourceIds) {
+        setShowPageSourceIdsState(meta.showPageSourceIds);
+        try {
+          window.localStorage.setItem(PAGE_SOURCE_VISIBILITY_STORAGE_KEY, String(meta.showPageSourceIds));
+        } catch {}
+      }
+    } else {
+      void updateUiPreferences({ showPageSourceIds: stateRef.current.showPageSourceIds }).catch(() => {});
+    }
+  }, []);
+
   const applyDashboardPayload = useCallback(
     (payload: DashboardPayloadDTO, forceDatabasePathDraft = false, resetSyncPreview = false) => {
       setDashboard(payload);
@@ -404,8 +446,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       initializeDailyDetailRange(payload.meta.timeZone, payload.now);
       initializeMonthlyDetailSelection(payload.meta.timeZone, payload.now);
       syncDatabasePathDraft(payload.meta.databasePath, forceDatabasePathDraft);
+      syncUiPreferences(payload.meta);
     },
-    [initializeDailyDetailRange, initializeMonthlyDetailSelection, syncDatabasePathDraft]
+    [initializeDailyDetailRange, initializeMonthlyDetailSelection, syncDatabasePathDraft, syncUiPreferences]
   );
 
   const loadSyncPreview = useCallback(async (expectedSyncGeneration = syncGenerationRef.current) => {

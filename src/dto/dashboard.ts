@@ -129,6 +129,9 @@ export interface DashboardMetaDTO {
   timeZone: string;
   parseVersion: number;
   pricingProviders: PricingProviderDTO[];
+  locale?: string | null;
+  themeMode?: string | null;
+  showPageSourceIds?: boolean | null;
 }
 
 export interface DashboardPayloadDTO {

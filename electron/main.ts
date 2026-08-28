@@ -10,6 +10,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const SOURCE_REPOSITORY_URL = "https://github.com/iohao/token-ledger";
 
+app.name = "TokenLedger";
+
 let mainWindow: BrowserWindow | null = null;
 let appState: AppState | null = null;
 
@@ -321,6 +323,21 @@ function registerIpcHandlers(): void {
     (_event, enabled: boolean, selectedProviderId: string) => {
       const state = getAppState();
       return state.setPluginConfig(enabled, selectedProviderId);
+    }
+  );
+
+  ipcMain.handle(
+    "set_ui_preferences",
+    (
+      _event,
+      preferences: {
+        locale?: "zh-CN" | "en-US" | null;
+        themeMode?: "dark" | "light" | "system" | null;
+        showPageSourceIds?: boolean | null;
+      }
+    ) => {
+      const state = getAppState();
+      return state.setUiPreferences(preferences);
     }
   );
 

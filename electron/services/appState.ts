@@ -33,6 +33,12 @@ const SESSION_FILE_SCAN_CACHE_TTL_MS = 15_000;
 const APP_SETTINGS_DIR = ".tokenledger";
 const LEGACY_APP_SETTINGS_DIRS = [".tokenaccount", ".codex-usage-tauri"];
 
+export interface UiPreferencesState {
+  locale: "zh-CN" | "en-US" | null;
+  themeMode: "dark" | "light" | "system" | null;
+  showPageSourceIds: boolean | null;
+}
+
 export interface AppSettings {
   databasePath?: string | null;
   relayPricingProviders?: RelayPricingProviderDTO[];
@@ -40,6 +46,9 @@ export interface AppSettings {
   modelPricingOverrides?: any[];
   pluginEnabled?: boolean;
   pluginSelectedProviderId?: string;
+  locale?: "zh-CN" | "en-US" | null;
+  themeMode?: "dark" | "light" | "system" | null;
+  showPageSourceIds?: boolean | null;
 }
 
 export interface DatabaseConfigState {
@@ -107,6 +116,12 @@ export class AppState {
     meta.databasePath = this.databaseConfig.path;
     meta.databasePathSource = this.databaseConfig.source;
     meta.databasePathEditable = !this.databasePathLocked;
+    meta.locale = this.settings.locale ?? null;
+    meta.themeMode = this.settings.themeMode ?? null;
+    meta.showPageSourceIds =
+      typeof this.settings.showPageSourceIds === "boolean"
+        ? this.settings.showPageSourceIds
+        : null;
   }
 
   public isSyncing(): boolean {
@@ -282,6 +297,63 @@ export class AppState {
     return this.getPluginConfig();
   }
 
+  public getUiPreferences(): UiPreferencesState {
+    return {
+      locale: this.settings.locale ?? null,
+      themeMode: this.settings.themeMode ?? null,
+      showPageSourceIds:
+        typeof this.settings.showPageSourceIds === "boolean"
+          ? this.settings.showPageSourceIds
+          : null
+    };
+  }
+
+  public setUiPreferences(preferences: {
+    locale?: "zh-CN" | "en-US" | null;
+    themeMode?: "dark" | "light" | "system" | null;
+    showPageSourceIds?: boolean | null;
+  }): UiPreferencesState {
+    let changed = false;
+
+    if (preferences.locale !== undefined) {
+      if (preferences.locale === "zh-CN" || preferences.locale === "en-US" || preferences.locale === null) {
+        if (this.settings.locale !== preferences.locale) {
+          this.settings.locale = preferences.locale;
+          changed = true;
+        }
+      }
+    }
+
+    if (preferences.themeMode !== undefined) {
+      if (
+        preferences.themeMode === "dark" ||
+        preferences.themeMode === "light" ||
+        preferences.themeMode === "system" ||
+        preferences.themeMode === null
+      ) {
+        if (this.settings.themeMode !== preferences.themeMode) {
+          this.settings.themeMode = preferences.themeMode;
+          changed = true;
+        }
+      }
+    }
+
+    if (preferences.showPageSourceIds !== undefined) {
+      if (typeof preferences.showPageSourceIds === "boolean" || preferences.showPageSourceIds === null) {
+        if (this.settings.showPageSourceIds !== preferences.showPageSourceIds) {
+          this.settings.showPageSourceIds = preferences.showPageSourceIds;
+          changed = true;
+        }
+      }
+    }
+
+    if (changed) {
+      this.saveSettings();
+    }
+
+    return this.getUiPreferences();
+  }
+
   private pricingConfiguration(): {
     relayPricingProviders: RelayPricingProviderDTO[];
     openaiUsdPerRmb: number;
@@ -344,7 +416,10 @@ export class AppState {
       openaiUsdPerRmb: DEFAULT_OPENAI_USD_PER_RMB,
       modelPricingOverrides: [],
       pluginEnabled: false,
-      pluginSelectedProviderId: OPENAI_OFFICIAL_PROVIDER_ID
+      pluginSelectedProviderId: OPENAI_OFFICIAL_PROVIDER_ID,
+      locale: null,
+      themeMode: null,
+      showPageSourceIds: null
     };
   }
 

@@ -150,3 +150,23 @@ export function updateCodexPluginConfig(
 
   return getElectronAPI().setPluginConfig(enabled, selectedProviderId);
 }
+
+export function updateUiPreferences(preferences: {
+  locale?: string | null;
+  themeMode?: string | null;
+  showPageSourceIds?: boolean | null;
+}): Promise<{
+  locale: string | null;
+  themeMode: string | null;
+  showPageSourceIds: boolean | null;
+}> {
+  if (isDemoMode()) {
+    return Promise.resolve({
+      locale: preferences.locale ?? null,
+      themeMode: preferences.themeMode ?? null,
+      showPageSourceIds: preferences.showPageSourceIds ?? null
+    });
+  }
+
+  return getElectronAPI().setUiPreferences(preferences);
+}

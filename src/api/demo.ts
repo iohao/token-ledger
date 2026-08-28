@@ -40,6 +40,9 @@ const DEMO_META: DashboardMetaDTO = {
   databasePathEditable: true,
   timeZone: "Asia/Shanghai",
   parseVersion: 8,
+  locale: null,
+  themeMode: null,
+  showPageSourceIds: null,
   pricingProviders: [
     {
       id: "openai-official",
