@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Coins, TrendingUp } from "lucide-react";
+import { Calendar, CalendarDays, CalendarRange, Coins, TrendingUp } from "lucide-react";
 import type {
   PricingComparisonDTO,
   PricingProviderDTO,
@@ -22,6 +22,17 @@ export interface SummaryCardProps {
   pricingProviders?: PricingProviderDTO[];
   comparison?: PricingComparisonDTO;
 }
+
+const renderPeriodIcon = (period: UsageSummaryDTO["period"]) => {
+  switch (period) {
+    case "today":
+      return <Calendar size={13} className="summary-kicker-icon" aria-hidden="true" />;
+    case "last7Days":
+      return <CalendarDays size={13} className="summary-kicker-icon" aria-hidden="true" />;
+    case "monthToDate":
+      return <CalendarRange size={13} className="summary-kicker-icon" aria-hidden="true" />;
+  }
+};
 
 export const SummaryCard: React.FC<SummaryCardProps> = ({
   summary,
@@ -77,52 +88,72 @@ export const SummaryCard: React.FC<SummaryCardProps> = ({
 
   return (
     <article className={`summary-card panel${isHighlighting ? " is-updated" : ""}`}>
-      <p className="summary-kicker">{periodLabel(summary.period, locale)}</p>
-      <div className="summary-total">
-        <span>{t("summaryTotal")}</span>
-        <strong>
-          <AnimatedNumber
-            value={summary.totals.totalTokens}
-            formatter={(val) => formatTokenCount(Math.round(val), locale)}
-          />
-        </strong>
-      </div>
-      <div className="summary-inline">
-        <span>
-          {t("requests")}:{" "}
-          <AnimatedNumber
-            value={summary.totals.requestCount}
-            formatter={(val) => formatInteger(Math.round(val), locale)}
-          />
-        </span>
-        <span>
-          {t("input")}:{" "}
-          <AnimatedNumber
-            value={nonCachedInputTokens(summary.totals)}
-            formatter={(val) => formatTokenCount(Math.round(val), locale)}
-          />
-        </span>
-        <span>
-          {t("output")}:{" "}
-          <AnimatedNumber
-            value={summary.totals.outputTokens}
-            formatter={(val) => formatTokenCount(Math.round(val), locale)}
-          />
-        </span>
-        <span>
-          {t("cachedInput")}:{" "}
-          <AnimatedNumber
-            value={summary.totals.cachedInputTokens}
-            formatter={(val) => formatTokenCount(Math.round(val), locale)}
-          />
-        </span>
-        {summary.totals.cacheCreationInputTokens > 0 && (
-          <span>
-            {t("cacheCreationInput")}:{" "}
+      <div className="summary-header">
+        <div className="summary-kicker">
+          {renderPeriodIcon(summary.period)}
+          <span>{periodLabel(summary.period, locale)}</span>
+        </div>
+        <div className="summary-total">
+          <span className="summary-total-label">{t("summaryTotal")}</span>
+          <strong className="summary-total-value">
             <AnimatedNumber
-              value={summary.totals.cacheCreationInputTokens}
+              value={summary.totals.totalTokens}
               formatter={(val) => formatTokenCount(Math.round(val), locale)}
             />
+          </strong>
+        </div>
+      </div>
+      <div className="summary-inline">
+        {/* Row 1: 左(2字) 输入 / 右(4字) 请求次数 */}
+        <span className="summary-inline-item">
+          <span className="summary-inline-label">{t("input")}:</span>{" "}
+          <span className="summary-inline-value">
+            <AnimatedNumber
+              value={nonCachedInputTokens(summary.totals)}
+              formatter={(val) => formatTokenCount(Math.round(val), locale)}
+            />
+          </span>
+        </span>
+        <span className="summary-inline-item">
+          <span className="summary-inline-label">{t("requests")}:</span>{" "}
+          <span className="summary-inline-value">
+            <AnimatedNumber
+              value={summary.totals.requestCount}
+              formatter={(val) => formatInteger(Math.round(val), locale)}
+            />
+          </span>
+        </span>
+
+        {/* Row 2: 左(2字) 输出 / 右(4字) 缓存读取 */}
+        <span className="summary-inline-item">
+          <span className="summary-inline-label">{t("output")}:</span>{" "}
+          <span className="summary-inline-value">
+            <AnimatedNumber
+              value={summary.totals.outputTokens}
+              formatter={(val) => formatTokenCount(Math.round(val), locale)}
+            />
+          </span>
+        </span>
+        <span className="summary-inline-item">
+          <span className="summary-inline-label">{t("cachedInput")}:</span>{" "}
+          <span className="summary-inline-value">
+            <AnimatedNumber
+              value={summary.totals.cachedInputTokens}
+              formatter={(val) => formatTokenCount(Math.round(val), locale)}
+            />
+          </span>
+        </span>
+
+        {/* Row 3 (optional): 缓存创建 (4字) */}
+        {summary.totals.cacheCreationInputTokens > 0 && (
+          <span className="summary-inline-item summary-inline-extra">
+            <span className="summary-inline-label">{t("cacheCreationInput")}:</span>{" "}
+            <span className="summary-inline-value">
+              <AnimatedNumber
+                value={summary.totals.cacheCreationInputTokens}
+                formatter={(val) => formatTokenCount(Math.round(val), locale)}
+              />
+            </span>
           </span>
         )}
       </div>

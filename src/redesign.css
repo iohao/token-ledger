@@ -831,7 +831,30 @@ select {
   animation: summary-card-updated-pulse 1.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.summary-kicker,
+.summary-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 9px;
+}
+
+.summary-kicker {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 0;
+  color: var(--text-muted);
+  font-size: 0.71rem;
+  font-weight: 650;
+  text-transform: none;
+}
+
+.summary-kicker-icon {
+  opacity: 0.75;
+  flex-shrink: 0;
+}
+
 .eyebrow {
   margin-bottom: 6px;
   color: var(--text-muted);
@@ -841,20 +864,74 @@ select {
 }
 
 .summary-total {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
   margin: 0;
+  padding: 0;
+  border-bottom: none;
 }
 
-.summary-total strong {
+.summary-total-label {
+  color: var(--text-muted);
+  font-size: 0.71rem;
+  font-weight: 500;
+}
+
+.summary-total strong,
+.summary-total-value {
   color: var(--text);
   font-family: var(--mono-font);
-  font-size: 1.45rem;
+  font-size: 1.12rem;
+  font-weight: 650;
   font-variant-numeric: tabular-nums;
+  line-height: 1;
 }
 
 .summary-inline {
-  gap: 5px 10px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px 12px;
+  margin: 8px 0 11px;
+  padding: 7px 10px;
+  background: var(--surface-muted);
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.03));
+  border-radius: var(--radius-sm, 6px);
   color: var(--text-secondary);
   font-size: 0.72rem;
+}
+
+[data-theme="light"] .summary-inline {
+  background: #f4f6f5;
+  border-color: rgba(0, 0, 0, 0.04);
+}
+
+.summary-inline-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.summary-inline-label {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  flex-shrink: 0;
+}
+
+.summary-inline-value {
+  color: var(--text);
+  font-family: var(--mono-font);
+  font-weight: 550;
+  font-size: 0.76rem;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.summary-inline-extra {
+  grid-column: span 2;
 }
 
 .summary-cost-inline,
