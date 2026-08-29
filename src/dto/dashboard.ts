@@ -132,6 +132,8 @@ export interface DashboardMetaDTO {
   locale?: string | null;
   themeMode?: string | null;
   showPageSourceIds?: boolean | null;
+  relayPricingShowOfficial?: boolean | null;
+  relayPricingVisibleModels?: string[] | null;
 }
 
 export interface DashboardPayloadDTO {

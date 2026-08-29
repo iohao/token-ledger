@@ -33,20 +33,26 @@ describe("appState service", () => {
       expect(appState.getUiPreferences()).toEqual({
         locale: null,
         themeMode: null,
-        showPageSourceIds: null
+        showPageSourceIds: null,
+        relayPricingShowOfficial: null,
+        relayPricingVisibleModels: null
       });
 
       // Update UI preferences
       appState.setUiPreferences({
         locale: "zh-CN",
         themeMode: "dark",
-        showPageSourceIds: true
+        showPageSourceIds: true,
+        relayPricingShowOfficial: true,
+        relayPricingVisibleModels: ["gpt-5.4", "gpt-5.5"]
       });
 
       expect(appState.getUiPreferences()).toEqual({
         locale: "zh-CN",
         themeMode: "dark",
-        showPageSourceIds: true
+        showPageSourceIds: true,
+        relayPricingShowOfficial: true,
+        relayPricingVisibleModels: ["gpt-5.4", "gpt-5.5"]
       });
 
       // Check populateDashboardMeta
@@ -55,6 +61,8 @@ describe("appState service", () => {
       expect(meta.locale).toBe("zh-CN");
       expect(meta.themeMode).toBe("dark");
       expect(meta.showPageSourceIds).toBe(true);
+      expect(meta.relayPricingShowOfficial).toBe(true);
+      expect(meta.relayPricingVisibleModels).toEqual(["gpt-5.4", "gpt-5.5"]);
 
       // Verify file written to disk
       const settingsPath = path.join(tempDir, ".tokenledger", "settings.json");
@@ -63,13 +71,17 @@ describe("appState service", () => {
       expect(fileData.locale).toBe("zh-CN");
       expect(fileData.themeMode).toBe("dark");
       expect(fileData.showPageSourceIds).toBe(true);
+      expect(fileData.relayPricingShowOfficial).toBe(true);
+      expect(fileData.relayPricingVisibleModels).toEqual(["gpt-5.4", "gpt-5.5"]);
 
       // Re-instantiate AppState from same directory to verify persistence
       const reloadedAppState = AppState.detect();
       expect(reloadedAppState.getUiPreferences()).toEqual({
         locale: "zh-CN",
         themeMode: "dark",
-        showPageSourceIds: true
+        showPageSourceIds: true,
+        relayPricingShowOfficial: true,
+        relayPricingVisibleModels: ["gpt-5.4", "gpt-5.5"]
       });
     } finally {
       if (prevCodexHome !== undefined) {

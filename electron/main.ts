@@ -334,6 +334,8 @@ function registerIpcHandlers(): void {
         locale?: "zh-CN" | "en-US" | null;
         themeMode?: "dark" | "light" | "system" | null;
         showPageSourceIds?: boolean | null;
+        relayPricingShowOfficial?: boolean | null;
+        relayPricingVisibleModels?: string[] | null;
       }
     ) => {
       const state = getAppState();

@@ -37,6 +37,8 @@ const api: ElectronAPI = {
     locale?: string | null;
     themeMode?: string | null;
     showPageSourceIds?: boolean | null;
+    relayPricingShowOfficial?: boolean | null;
+    relayPricingVisibleModels?: string[] | null;
   }) => ipcRenderer.invoke("set_ui_preferences", preferences),
 
   maximizeWindow: () => ipcRenderer.invoke("maximize_window"),

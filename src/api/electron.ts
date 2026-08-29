@@ -155,16 +155,22 @@ export function updateUiPreferences(preferences: {
   locale?: string | null;
   themeMode?: string | null;
   showPageSourceIds?: boolean | null;
+  relayPricingShowOfficial?: boolean | null;
+  relayPricingVisibleModels?: string[] | null;
 }): Promise<{
   locale: string | null;
   themeMode: string | null;
   showPageSourceIds: boolean | null;
+  relayPricingShowOfficial?: boolean | null;
+  relayPricingVisibleModels?: string[] | null;
 }> {
   if (isDemoMode()) {
     return Promise.resolve({
       locale: preferences.locale ?? null,
       themeMode: preferences.themeMode ?? null,
-      showPageSourceIds: preferences.showPageSourceIds ?? null
+      showPageSourceIds: preferences.showPageSourceIds ?? null,
+      relayPricingShowOfficial: preferences.relayPricingShowOfficial ?? null,
+      relayPricingVisibleModels: preferences.relayPricingVisibleModels ?? null
     });
   }
 

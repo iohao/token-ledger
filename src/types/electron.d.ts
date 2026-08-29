@@ -49,10 +49,14 @@ export interface ElectronAPI {
     locale?: string | null;
     themeMode?: string | null;
     showPageSourceIds?: boolean | null;
+    relayPricingShowOfficial?: boolean | null;
+    relayPricingVisibleModels?: string[] | null;
   }) => Promise<{
     locale: string | null;
     themeMode: string | null;
     showPageSourceIds: boolean | null;
+    relayPricingShowOfficial?: boolean | null;
+    relayPricingVisibleModels?: string[] | null;
   }>;
 
   // Window control

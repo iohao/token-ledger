@@ -37,6 +37,8 @@ export interface UiPreferencesState {
   locale: "zh-CN" | "en-US" | null;
   themeMode: "dark" | "light" | "system" | null;
   showPageSourceIds: boolean | null;
+  relayPricingShowOfficial: boolean | null;
+  relayPricingVisibleModels: string[] | null;
 }
 
 export interface AppSettings {
@@ -49,6 +51,8 @@ export interface AppSettings {
   locale?: "zh-CN" | "en-US" | null;
   themeMode?: "dark" | "light" | "system" | null;
   showPageSourceIds?: boolean | null;
+  relayPricingShowOfficial?: boolean | null;
+  relayPricingVisibleModels?: string[] | null;
 }
 
 export interface DatabaseConfigState {
@@ -121,6 +125,14 @@ export class AppState {
     meta.showPageSourceIds =
       typeof this.settings.showPageSourceIds === "boolean"
         ? this.settings.showPageSourceIds
+        : null;
+    meta.relayPricingShowOfficial =
+      typeof this.settings.relayPricingShowOfficial === "boolean"
+        ? this.settings.relayPricingShowOfficial
+        : null;
+    meta.relayPricingVisibleModels =
+      Array.isArray(this.settings.relayPricingVisibleModels)
+        ? this.settings.relayPricingVisibleModels
         : null;
   }
 
@@ -304,6 +316,14 @@ export class AppState {
       showPageSourceIds:
         typeof this.settings.showPageSourceIds === "boolean"
           ? this.settings.showPageSourceIds
+          : null,
+      relayPricingShowOfficial:
+        typeof this.settings.relayPricingShowOfficial === "boolean"
+          ? this.settings.relayPricingShowOfficial
+          : null,
+      relayPricingVisibleModels:
+        Array.isArray(this.settings.relayPricingVisibleModels)
+          ? this.settings.relayPricingVisibleModels
           : null
     };
   }
@@ -312,6 +332,8 @@ export class AppState {
     locale?: "zh-CN" | "en-US" | null;
     themeMode?: "dark" | "light" | "system" | null;
     showPageSourceIds?: boolean | null;
+    relayPricingShowOfficial?: boolean | null;
+    relayPricingVisibleModels?: string[] | null;
   }): UiPreferencesState {
     let changed = false;
 
@@ -342,6 +364,35 @@ export class AppState {
       if (typeof preferences.showPageSourceIds === "boolean" || preferences.showPageSourceIds === null) {
         if (this.settings.showPageSourceIds !== preferences.showPageSourceIds) {
           this.settings.showPageSourceIds = preferences.showPageSourceIds;
+          changed = true;
+        }
+      }
+    }
+
+    if (preferences.relayPricingShowOfficial !== undefined) {
+      if (typeof preferences.relayPricingShowOfficial === "boolean" || preferences.relayPricingShowOfficial === null) {
+        if (this.settings.relayPricingShowOfficial !== preferences.relayPricingShowOfficial) {
+          this.settings.relayPricingShowOfficial = preferences.relayPricingShowOfficial;
+          changed = true;
+        }
+      }
+    }
+
+    if (preferences.relayPricingVisibleModels !== undefined) {
+      if (Array.isArray(preferences.relayPricingVisibleModels) || preferences.relayPricingVisibleModels === null) {
+        const next =
+          preferences.relayPricingVisibleModels === null
+            ? null
+            : preferences.relayPricingVisibleModels.map(String);
+        const curr = this.settings.relayPricingVisibleModels ?? null;
+        const isDifferent =
+          next === null
+            ? curr !== null
+            : curr === null ||
+              next.length !== curr.length ||
+              next.some((val, i) => val !== curr[i]);
+        if (isDifferent) {
+          this.settings.relayPricingVisibleModels = next;
           changed = true;
         }
       }
@@ -419,7 +470,9 @@ export class AppState {
       pluginSelectedProviderId: OPENAI_OFFICIAL_PROVIDER_ID,
       locale: null,
       themeMode: null,
-      showPageSourceIds: null
+      showPageSourceIds: null,
+      relayPricingShowOfficial: null,
+      relayPricingVisibleModels: null
     };
   }
 

@@ -11,7 +11,7 @@ import {
   X
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { updatePricingProviders } from "../api/electron";
+import { updatePricingProviders, updateUiPreferences } from "../api/electron";
 import { PageHeader } from "../components/PageHeader";
 import { useApp } from "../context/AppContext";
 import type {
@@ -327,6 +327,9 @@ export const RelayPricingView: React.FC = () => {
   });
   const [openaiRatio, setOpenaiRatio] = useState(DEFAULT_OPENAI_RATIO);
   const [showOfficial, setShowOfficial] = useState<boolean>(() => {
+    if (typeof dashboard?.meta.relayPricingShowOfficial === "boolean") {
+      return dashboard.meta.relayPricingShowOfficial;
+    }
     try {
       return localStorage.getItem(RELAY_PRICING_SHOW_OFFICIAL_STORAGE_KEY) === "true";
     } catch {
@@ -334,6 +337,9 @@ export const RelayPricingView: React.FC = () => {
     }
   });
   const [visibleModels, setVisibleModels] = useState<Set<string>>(() => {
+    if (Array.isArray(dashboard?.meta.relayPricingVisibleModels)) {
+      return new Set(dashboard.meta.relayPricingVisibleModels.map(String));
+    }
     try {
       const raw = localStorage.getItem(RELAY_PRICING_VISIBLE_MODELS_STORAGE_KEY);
       if (raw) {
@@ -347,7 +353,9 @@ export const RelayPricingView: React.FC = () => {
     }
     return new Set<string>();
   });
-  const [hasInitializedVisibleModels, setHasInitializedVisibleModels] = useState(false);
+  const [hasInitializedVisibleModels, setHasInitializedVisibleModels] = useState(() => {
+    return Array.isArray(dashboard?.meta.relayPricingVisibleModels);
+  });
   const [isDirty, setIsDirty] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -362,10 +370,25 @@ export const RelayPricingView: React.FC = () => {
     } catch {
       // ignore
     }
+    void updateUiPreferences({ relayPricingShowOfficial: enabled }).catch(() => {});
   };
 
   useEffect(() => {
-    if (officialModels.length > 0 && !hasInitializedVisibleModels) {
+    if (typeof dashboard?.meta.relayPricingShowOfficial === "boolean") {
+      setShowOfficial(dashboard.meta.relayPricingShowOfficial);
+    }
+  }, [dashboard?.meta.relayPricingShowOfficial]);
+
+  useEffect(() => {
+    if (hasInitializedVisibleModels) {
+      return;
+    }
+    if (Array.isArray(dashboard?.meta.relayPricingVisibleModels)) {
+      setVisibleModels(new Set(dashboard.meta.relayPricingVisibleModels.map(String)));
+      setHasInitializedVisibleModels(true);
+      return;
+    }
+    if (officialModels.length > 0) {
       try {
         const raw = localStorage.getItem(RELAY_PRICING_VISIBLE_MODELS_STORAGE_KEY);
         if (raw) {
@@ -382,7 +405,7 @@ export const RelayPricingView: React.FC = () => {
       setVisibleModels(new Set(officialModels));
       setHasInitializedVisibleModels(true);
     }
-  }, [officialModels, hasInitializedVisibleModels]);
+  }, [dashboard?.meta.relayPricingVisibleModels, officialModels, hasInitializedVisibleModels]);
 
   const handleToggleModelVisibility = (model: string, visible: boolean) => {
     setVisibleModels((current) => {
@@ -392,14 +415,16 @@ export const RelayPricingView: React.FC = () => {
       } else {
         next.delete(model);
       }
+      const modelArray = Array.from(next);
       try {
         localStorage.setItem(
           RELAY_PRICING_VISIBLE_MODELS_STORAGE_KEY,
-          JSON.stringify(Array.from(next))
+          JSON.stringify(modelArray)
         );
       } catch {
         // ignore
       }
+      void updateUiPreferences({ relayPricingVisibleModels: modelArray }).catch(() => {});
       return next;
     });
   };

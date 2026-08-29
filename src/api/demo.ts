@@ -43,6 +43,8 @@ const DEMO_META: DashboardMetaDTO = {
   locale: null,
   themeMode: null,
   showPageSourceIds: null,
+  relayPricingShowOfficial: null,
+  relayPricingVisibleModels: null,
   pricingProviders: [
     {
       id: "openai-official",
