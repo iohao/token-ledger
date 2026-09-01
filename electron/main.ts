@@ -367,7 +367,7 @@ function registerIpcHandlers(): void {
     try {
       if (app.isPackaged) {
         const result = await autoUpdater.checkForUpdates();
-        if (result && result.updateInfo) {
+        if (result && result.isUpdateAvailable && result.updateInfo) {
           return {
             version: result.updateInfo.version,
             releaseDate: result.updateInfo.releaseDate,
