@@ -95,6 +95,9 @@
         "!node_modules/better-sqlite3/prebuilds/linux*"
       ],
       "icon": "icons/icon.ico"
+    },
+    "nsis": {
+      "artifactName": "${productName}-Setup-${version}.${ext}"
     }
   }
 }

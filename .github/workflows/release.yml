@@ -129,6 +129,15 @@ jobs:
             exit 1
           fi
 
+          for metadata_file in release-app/latest*.yml; do
+            while IFS= read -r package_name; do
+              if [ ! -f "release-app/$package_name" ]; then
+                echo "::error::Update metadata $metadata_file references missing package $package_name."
+                exit 1
+              fi
+            done < <(sed -nE 's/^[[:space:]]*-[[:space:]]+url:[[:space:]]*//p; s/^path:[[:space:]]*//p' "$metadata_file")
+          done
+
           assets=("${packages[@]}" release-app/*.blockmap release-app/latest*.yml)
           gh release upload "$TAG_NAME" "${assets[@]}" --clobber
 
