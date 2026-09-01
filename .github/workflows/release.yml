@@ -141,5 +141,6 @@ jobs:
       - name: Undraft release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
           TAG_NAME: ${{ github.ref_name }}
         run: gh release edit "$TAG_NAME" --draft=false
