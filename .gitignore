@@ -57,6 +57,7 @@ Desktop.ini
 
 # Local tools and agent caches
 .codebase-memory/
+.agents/skills/
 !.agents/plugins/
 !.agents/plugins/**
 

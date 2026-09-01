@@ -15,8 +15,8 @@
     "typecheck": "tsc --noEmit",
     "test": "bun test",
     "package:app": "bash scripts/package-app.sh",
-    "package:mac": "electron-builder --mac",
-    "package:win": "electron-builder --win"
+    "package:mac": "electron-builder --mac --publish never",
+    "package:win": "electron-builder --win --publish never"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3"
