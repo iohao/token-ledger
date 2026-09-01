@@ -4,9 +4,17 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: Existing release tag to rebuild after a failed or missing push workflow
+        required: true
+        type: string
+
+run-name: Release ${{ inputs.tag_name || github.ref_name }}
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ inputs.tag_name || github.ref }}
   cancel-in-progress: false
 
 permissions:
@@ -15,6 +23,7 @@ permissions:
 env:
   BUN_VERSION: "1.3.6"
   CI: true
+  TAG_NAME: ${{ inputs.tag_name || github.ref_name }}
 
 jobs:
   validate-release:
@@ -24,6 +33,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.tag_name || github.ref_name }}
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -31,8 +42,6 @@ jobs:
           bun-version: ${{ env.BUN_VERSION }}
 
       - name: Verify tag matches app version
-        env:
-          TAG_NAME: ${{ github.ref_name }}
         run: |
           app_version="$(bun -e 'console.log((await Bun.file("package.json").json()).version)')"
           expected_tag="v${app_version}"
@@ -47,24 +56,34 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.tag_name || github.ref_name }}
+
       - name: Create or update release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
-          TAG_NAME: ${{ github.ref_name }}
         run: |
           if gh release view "$TAG_NAME" >/dev/null 2>&1; then
             echo "Release $TAG_NAME already exists."
           else
-            notes=()
-            if [ "$TAG_NAME" = "v2.0.0" ]; then
-              notes=(--notes "Major upgrade: TokenLedger 2.0.0 moves from Tauri to Electron. Existing Tauri installations cannot update in-app to this release; download and install the new desktop package manually. Later Electron releases will support in-app updates.")
+            notes_file="$RUNNER_TEMP/release-notes.md"
+            git for-each-ref --format='%(contents)' "refs/tags/$TAG_NAME" > "$notes_file"
+            if [ "$(head -n 1 "$notes_file")" != "# TokenLedger $TAG_NAME" ]; then
+              recovered_notes="$RUNNER_TEMP/release-notes-with-heading.md"
+              {
+                printf '# TokenLedger %s\n\n' "$TAG_NAME"
+                cat "$notes_file"
+              } > "$recovered_notes"
+              notes_file="$recovered_notes"
             fi
             gh release create "$TAG_NAME" \
               --title "$TAG_NAME" \
               --draft \
-              --generate-notes \
-              "${notes[@]}"
+              --verify-tag \
+              --notes-file "$notes_file"
           fi
 
   build-and-upload:
@@ -85,6 +104,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.tag_name || github.ref_name }}
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -112,7 +133,6 @@ jobs:
         shell: bash
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG_NAME: ${{ github.ref_name }}
         run: |
           shopt -s nullglob
           case "${{ matrix.label }}" in
@@ -147,5 +167,4 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
-          TAG_NAME: ${{ github.ref_name }}
         run: gh release edit "$TAG_NAME" --draft=false
