@@ -4,6 +4,16 @@ import os from "node:os";
 import path from "node:path";
 import { AppState } from "../electron/services/appState";
 
+function removeTempDir(tempDir: string): void {
+  try {
+    fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+  } catch (error) {
+    if (process.platform !== "win32" || (error as NodeJS.ErrnoException).code !== "EBUSY") {
+      throw error;
+    }
+  }
+}
+
 describe("appState service", () => {
   it("initializes and handles sync lifecycle", () => {
     const appState = AppState.detect();
@@ -56,8 +66,10 @@ describe("appState service", () => {
       });
 
       // Check populateDashboardMeta
-      const meta = appState.repository().buildDashboardMeta();
+      const repository = appState.repository();
+      const meta = repository.buildDashboardMeta();
       appState.populateDashboardMeta(meta);
+      repository.store.close();
       expect(meta.locale).toBe("zh-CN");
       expect(meta.themeMode).toBe("dark");
       expect(meta.showPageSourceIds).toBe(true);
@@ -89,7 +101,7 @@ describe("appState service", () => {
       } else {
         delete process.env.CODEX_HOME;
       }
-      fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+      removeTempDir(tempDir);
     }
   });
 });

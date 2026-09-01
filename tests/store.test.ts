@@ -6,6 +6,16 @@ import { UsageStore } from "../electron/services/store";
 import type { ParsedSessionFile } from "../electron/services/parser";
 import type { SyncContext, SyncStatusDTO } from "../src/dto/dashboard";
 
+function removeTempDir(tempDir: string): void {
+  try {
+    fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+  } catch (error) {
+    if (process.platform !== "win32" || (error as NodeJS.ErrnoException).code !== "EBUSY") {
+      throw error;
+    }
+  }
+}
+
 describe("store service", () => {
   function makeStore(): { tempDir: string; store: UsageStore } {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "store-test-"));
@@ -41,7 +51,7 @@ describe("store service", () => {
       expect(store.loadSyncContext().codexHomePath).toBe("/tmp/.codex");
     } finally {
       store.close();
-      fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+      removeTempDir(tempDir);
     }
   });
 
@@ -115,7 +125,7 @@ describe("store service", () => {
       expect(dateKeys).toEqual(["2026-04-09", "2026-04-10"]);
     } finally {
       store.close();
-      fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+      removeTempDir(tempDir);
     }
   });
 });

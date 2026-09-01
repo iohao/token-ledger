@@ -103,6 +103,10 @@ jobs:
       - name: Build frontend and Electron bundle
         run: bun run build
 
+      - name: Remove development-only agent links
+        run: >-
+          bun -e 'import { rmSync } from "node:fs"; rmSync(".agents/skills", { recursive: true, force: true });'
+
       - name: Package desktop app
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
