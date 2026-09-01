@@ -415,7 +415,7 @@ function setupAutoUpdater(): void {
 }
 
 app.whenReady().then(() => {
-  if (process.platform === "darwin" && app.dock) {
+  if (process.platform === "darwin" && app.dock && !app.isPackaged) {
     const appIcon = getAppIcon();
     if (appIcon) {
       app.dock.setIcon(appIcon);
