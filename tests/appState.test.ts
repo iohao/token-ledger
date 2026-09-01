@@ -89,7 +89,7 @@ describe("appState service", () => {
       } else {
         delete process.env.CODEX_HOME;
       }
-      fs.rmSync(tempDir, { recursive: true, force: true });
+      fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
     }
   });
 });

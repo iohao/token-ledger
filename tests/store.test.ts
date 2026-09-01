@@ -41,7 +41,7 @@ describe("store service", () => {
       expect(store.loadSyncContext().codexHomePath).toBe("/tmp/.codex");
     } finally {
       store.close();
-      fs.rmSync(tempDir, { recursive: true, force: true });
+      fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
     }
   });
 
@@ -115,7 +115,7 @@ describe("store service", () => {
       expect(dateKeys).toEqual(["2026-04-09", "2026-04-10"]);
     } finally {
       store.close();
-      fs.rmSync(tempDir, { recursive: true, force: true });
+      fs.rmSync(tempDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
     }
   });
 });

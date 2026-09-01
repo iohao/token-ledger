@@ -62,6 +62,7 @@
       "dist/**/*",
       "dist-electron/**/*",
       "plugins/**/*",
+      "!.agents/**/*",
       "!node_modules/better-sqlite3/deps/**",
       "!node_modules/better-sqlite3/src/**",
       "!node_modules/better-sqlite3/docs/**",
