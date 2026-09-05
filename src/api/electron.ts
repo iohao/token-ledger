@@ -17,6 +17,7 @@ import type {
   DailyUsageSummaryDTO,
   DashboardMetaDTO,
   DashboardPayloadDTO,
+  PricingTemplateDTO,
   RelayPricingProviderDTO,
   SyncProgressDTO,
   SyncStatusDTO,
@@ -105,13 +106,14 @@ export function resetDatabasePath(): Promise<DashboardPayloadDTO> {
 
 export function updatePricingProviders(
   relayPricingProviders: RelayPricingProviderDTO[],
-  openaiUsdPerRmb: number
+  openaiUsdPerRmb: number,
+  pricingTemplates?: PricingTemplateDTO[]
 ): Promise<DashboardPayloadDTO> {
   if (isDemoMode()) {
-    return Promise.resolve(updateDemoPricingProviders(relayPricingProviders, openaiUsdPerRmb));
+    return Promise.resolve(updateDemoPricingProviders(relayPricingProviders, openaiUsdPerRmb, pricingTemplates));
   }
 
-  return getElectronAPI().setPricingProviders(relayPricingProviders, openaiUsdPerRmb);
+  return getElectronAPI().setPricingProviders(relayPricingProviders, openaiUsdPerRmb, pricingTemplates);
 }
 
 export function openSourceRepository(): Promise<void> {

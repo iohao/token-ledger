@@ -2,12 +2,14 @@ import type {
   ModelPricingRatesDTO,
   ModelUsageBreakdownDTO,
   PricingProviderDTO,
+  PricingTemplateDTO,
   ProviderModelPricingDTO,
   RelayPricingProviderDTO,
   UsageTotalsDTO
 } from "../../src/dto/dashboard";
 
 export const OPENAI_OFFICIAL_PROVIDER_ID = "openai-official";
+export const OPENAI_OFFICIAL_TEMPLATE_ID = "openai-official";
 export const MIGRATED_RELAY_PROVIDER_ID = "migrated-relay";
 export const DEFAULT_OPENAI_USD_PER_RMB = 0.14;
 
@@ -100,9 +102,35 @@ export function officialPricingFor(model: string): ModelPricingRatesDTO | null {
   }
 }
 
+export function resolveProviderModelPrices(
+  provider: RelayPricingProviderDTO,
+  templates: PricingTemplateDTO[] = []
+): ProviderModelPricingDTO[] {
+  const templateId = provider.templateId?.trim();
+  if (templateId === OPENAI_OFFICIAL_PROVIDER_ID) {
+    return OFFICIAL_MODELS.map((model) => {
+      const modelRates = officialPricingFor(model);
+      return modelRates ? { model, rates: modelRates } : null;
+    }).filter((item): item is ProviderModelPricingDTO => item !== null);
+  }
+
+  if (templateId && templateId !== "custom") {
+    const matchedTemplate = templates.find((t) => t.id === templateId);
+    if (matchedTemplate) {
+      return matchedTemplate.modelPrices.map((p) => ({
+        model: p.model,
+        rates: { ...p.rates }
+      }));
+    }
+  }
+
+  return provider.modelPrices ?? [];
+}
+
 export function pricingProviders(
   relays: RelayPricingProviderDTO[],
-  openaiUsdPerRmb: number
+  openaiUsdPerRmb: number,
+  templates: PricingTemplateDTO[] = []
 ): PricingProviderDTO[] {
   const official: PricingProviderDTO = {
     id: OPENAI_OFFICIAL_PROVIDER_ID,
@@ -124,7 +152,8 @@ export function pricingProviders(
     enabled: relay.enabled,
     rechargeRatioUsdPerRmb: relay.rechargeRatioUsdPerRmb ?? null,
     multiplier: relay.multiplier ?? 1.0,
-    modelPrices: relay.modelPrices ?? []
+    templateId: relay.templateId ?? null,
+    modelPrices: resolveProviderModelPrices(relay, templates)
   }));
 
   return [official, ...relayProviders];
@@ -144,8 +173,68 @@ function validateRates(modelRates: ModelPricingRatesDTO, model: string): void {
   }
 }
 
+export function validatePricingTemplates(
+  templates: PricingTemplateDTO[]
+): PricingTemplateDTO[] {
+  const ids = new Set<string>();
+  const names = new Set<string>();
+  const normalized: PricingTemplateDTO[] = [];
+
+  for (const template of templates ?? []) {
+    const id = template.id.trim();
+    const name = template.name.trim();
+    if (!id) {
+      throw new Error("pricing template id is required");
+    }
+    if (id === OPENAI_OFFICIAL_PROVIDER_ID) {
+      throw new Error("OpenAI official template id is reserved");
+    }
+    if (ids.has(id)) {
+      throw new Error("pricing template id must be unique");
+    }
+    ids.add(id);
+
+    if (!name) {
+      throw new Error("pricing template name is required");
+    }
+    const nameLower = name.toLowerCase();
+    if (names.has(nameLower)) {
+      throw new Error("pricing template name must be unique");
+    }
+    names.add(nameLower);
+
+    const models = new Set<string>();
+    const modelPrices: ProviderModelPricingDTO[] = [];
+    for (const price of template.modelPrices ?? []) {
+      const model = price.model.trim();
+      if (!model) {
+        throw new Error(`${name} model name is required`);
+      }
+      const identity = pricingIdentity(model);
+      if (models.has(identity)) {
+        throw new Error(`${name} has duplicate model pricing for ${model}`);
+      }
+      models.add(identity);
+      validateRates(price.rates, model);
+      modelPrices.push({
+        model,
+        rates: { ...price.rates }
+      });
+    }
+
+    normalized.push({
+      id,
+      name,
+      modelPrices
+    });
+  }
+
+  return normalized;
+}
+
 export function validateRelayPricingProviders(
-  providers: RelayPricingProviderDTO[]
+  providers: RelayPricingProviderDTO[],
+  templates: PricingTemplateDTO[] = []
 ): RelayPricingProviderDTO[] {
   const ids = new Set<string>();
   const normalized: RelayPricingProviderDTO[] = [];
@@ -185,6 +274,8 @@ export function validateRelayPricingProviders(
       throw new Error(`${name} multiplier must be a positive finite number`);
     }
 
+    const templateId = provider.templateId?.trim() || null;
+
     const models = new Set<string>();
     const modelPrices: ProviderModelPricingDTO[] = [];
     for (const price of provider.modelPrices ?? []) {
@@ -210,6 +301,7 @@ export function validateRelayPricingProviders(
       enabled: provider.enabled,
       rechargeRatioUsdPerRmb: ratio ?? null,
       multiplier,
+      templateId,
       modelPrices
     });
   }
@@ -226,7 +318,8 @@ export function validateOpenaiUsdPerRmb(value: number): number {
 
 export function generatePluginPricingTomlForProvider(
   relays: RelayPricingProviderDTO[],
-  selectedProviderId?: string | null
+  selectedProviderId?: string | null,
+  templates: PricingTemplateDTO[] = []
 ): string {
   let buffer = "# Prices are USD per one million tokens. Keep amounts quoted for Decimal parsing.\n";
   buffer += "# Managed by TokenLedger - Relay Pricing Configuration\n\n";
@@ -243,13 +336,17 @@ export function generatePluginPricingTomlForProvider(
   buffer += `name = "${providerName}"\n`;
   buffer += `multiplier = "${multiplier.toFixed(4)}"\n\n`;
 
+  const effectivePrices = activeRelay
+    ? resolveProviderModelPrices(activeRelay, templates)
+    : [];
+
   for (const model of OFFICIAL_MODELS) {
     const base = officialPricingFor(model);
     if (!base) continue;
 
     let ratesForModel: ModelPricingRatesDTO;
     if (activeRelay) {
-      const custom = activeRelay.modelPrices?.find(
+      const custom = effectivePrices.find(
         (p) => pricingIdentity(p.model) === pricingIdentity(model)
       );
       const baseRate = custom ? custom.rates : base;
@@ -273,9 +370,12 @@ export function generatePluginPricingTomlForProvider(
   return buffer;
 }
 
-export function generatePluginPricingToml(relays: RelayPricingProviderDTO[]): string {
+export function generatePluginPricingToml(
+  relays: RelayPricingProviderDTO[],
+  templates: PricingTemplateDTO[] = []
+): string {
   const firstEnabled = relays.find((p) => p.enabled)?.id ?? null;
-  return generatePluginPricingTomlForProvider(relays, firstEnabled);
+  return generatePluginPricingTomlForProvider(relays, firstEnabled, templates);
 }
 
 export function costForRates(totals: UsageTotalsDTO, pricing: ModelPricingRatesDTO): number {

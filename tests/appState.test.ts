@@ -104,4 +104,80 @@ describe("appState service", () => {
       removeTempDir(tempDir);
     }
   });
+
+  it("persists and restores pricing templates in settings.json", () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "appstate-templates-test-"));
+    const prevCodexHome = process.env.CODEX_HOME;
+    process.env.CODEX_HOME = tempDir;
+
+    try {
+      const appState = AppState.detect();
+      const templates = [
+        {
+          id: "tpl-1",
+          name: "Shared Template 1",
+          modelPrices: [
+            {
+              model: "gpt-5.4",
+              rates: {
+                inputUsdPerMillion: 2.0,
+                outputUsdPerMillion: 10.0,
+                cacheReadUsdPerMillion: 0.2,
+                cacheCreationUsdPerMillion: 2.0
+              }
+            }
+          ]
+        }
+      ];
+
+      const providers = [
+        {
+          id: "relay-1",
+          name: "Relay 1",
+          enabled: true,
+          rechargeRatioUsdPerRmb: 0.14,
+          multiplier: 1.0,
+          templateId: "tpl-1",
+          modelPrices: []
+        }
+      ];
+
+      // Save via setPricingProviders
+      appState.setPricingProviders(providers, 0.14, templates);
+
+      // Check repository meta
+      const repository = appState.repository();
+      const meta = repository.buildDashboardMeta();
+      appState.populateDashboardMeta(meta);
+      repository.store.close();
+
+      expect(meta.pricingTemplates).toHaveLength(1);
+      expect(meta.pricingTemplates?.[0].id).toBe("tpl-1");
+      expect(meta.pricingTemplates?.[0].name).toBe("Shared Template 1");
+
+      // Verify file on disk
+      const settingsPath = path.join(tempDir, ".tokenledger", "settings.json");
+      expect(fs.existsSync(settingsPath)).toBe(true);
+      const fileData = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
+      expect(fileData.pricingTemplates).toHaveLength(1);
+      expect(fileData.pricingTemplates[0].name).toBe("Shared Template 1");
+
+      // Reload AppState from disk
+      const reloadedAppState = AppState.detect();
+      const reloadedRepo = reloadedAppState.repository();
+      const reloadedMeta = reloadedRepo.buildDashboardMeta();
+      reloadedAppState.populateDashboardMeta(reloadedMeta);
+      reloadedRepo.store.close();
+
+      expect(reloadedMeta.pricingTemplates).toHaveLength(1);
+      expect(reloadedMeta.pricingTemplates?.[0].name).toBe("Shared Template 1");
+    } finally {
+      if (prevCodexHome !== undefined) {
+        process.env.CODEX_HOME = prevCodexHome;
+      } else {
+        delete process.env.CODEX_HOME;
+      }
+      removeTempDir(tempDir);
+    }
+  });
 });

@@ -32,6 +32,7 @@ import type {
   MonthlyUsageSummaryDTO,
   PricingComparisonDTO,
   PricingProviderDTO,
+  PricingTemplateDTO,
   ProviderCostComparisonDTO,
   RelayPricingProviderDTO,
   SyncPreviewDTO,
@@ -57,6 +58,7 @@ export interface UsageRepositoryConfig {
   parseVersion: number;
   relayPricingProviders: RelayPricingProviderDTO[];
   openaiUsdPerRmb: number;
+  pricingTemplates?: PricingTemplateDTO[];
 }
 
 function emptyTotals(): UsageTotalsDTO {
@@ -171,6 +173,7 @@ export class UsageRepository {
   public readonly parseVersion: number;
   private readonly relayPricingProviders: RelayPricingProviderDTO[];
   private readonly openaiUsdPerRmb: number;
+  public readonly pricingTemplates: PricingTemplateDTO[];
   public readonly store: UsageStore;
 
   constructor(config: UsageRepositoryConfig) {
@@ -180,11 +183,12 @@ export class UsageRepository {
     this.parseVersion = config.parseVersion;
     this.relayPricingProviders = config.relayPricingProviders;
     this.openaiUsdPerRmb = config.openaiUsdPerRmb;
+    this.pricingTemplates = config.pricingTemplates ?? [];
     this.store = new UsageStore(this.databasePath);
   }
 
   public getPricingProviders(): PricingProviderDTO[] {
-    return pricingProviders(this.relayPricingProviders, this.openaiUsdPerRmb);
+    return pricingProviders(this.relayPricingProviders, this.openaiUsdPerRmb, this.pricingTemplates);
   }
 
   public buildDashboardMeta(): DashboardMetaDTO {
@@ -201,7 +205,8 @@ export class UsageRepository {
       databasePathEditable: true,
       timeZone: this.timeZone,
       parseVersion: this.parseVersion,
-      pricingProviders: providers
+      pricingProviders: providers,
+      pricingTemplates: this.pricingTemplates
     };
   }
 

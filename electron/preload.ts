@@ -4,6 +4,7 @@ import type {
   DailyUsageSummaryDTO,
   DashboardMetaDTO,
   DashboardPayloadDTO,
+  PricingTemplateDTO,
   RelayPricingProviderDTO,
   SyncPreviewDTO,
   SyncProgressDTO,
@@ -28,8 +29,9 @@ const api: ElectronAPI = {
   resetDatabasePath: () => ipcRenderer.invoke("reset_database_path"),
   setPricingProviders: (
     relayPricingProviders: RelayPricingProviderDTO[],
-    openaiUsdPerRmb: number
-  ) => ipcRenderer.invoke("set_pricing_providers", relayPricingProviders, openaiUsdPerRmb),
+    openaiUsdPerRmb: number,
+    pricingTemplates?: PricingTemplateDTO[]
+  ) => ipcRenderer.invoke("set_pricing_providers", relayPricingProviders, openaiUsdPerRmb, pricingTemplates),
   getPluginConfig: () => ipcRenderer.invoke("get_plugin_config"),
   setPluginConfig: (enabled: boolean, selectedProviderId: string) =>
     ipcRenderer.invoke("set_plugin_config", enabled, selectedProviderId),

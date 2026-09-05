@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
+  Bookmark,
   CircleAlert,
   CircleDollarSign,
+  Layers,
   Plus,
   RotateCcw,
   Save,
@@ -17,6 +19,7 @@ import { useApp } from "../context/AppContext";
 import type {
   ModelPricingRatesDTO,
   PricingProviderDTO,
+  PricingTemplateDTO,
   ProviderModelPricingDTO,
   RelayPricingProviderDTO
 } from "../dto/dashboard";
@@ -48,14 +51,33 @@ export type ProviderModelPriceComparison = {
   diffPercent: string | null;
 };
 
-type DraftRelayProvider = {
+export type DraftRelayProvider = {
   id: string;
   name: string;
   enabled: boolean;
   rechargeRatioUsdPerRmb: string;
   multiplier: string;
+  templateId?: string | null;
   modelPrices: ProviderModelPricingDTO[];
 };
+
+export function resolveDraftProviderPrices(
+  provider: { templateId?: string | null; modelPrices?: ProviderModelPricingDTO[] },
+  templates: PricingTemplateDTO[],
+  officialPrices: ProviderModelPricingDTO[]
+): ProviderModelPricingDTO[] {
+  const templateId = provider.templateId?.trim();
+  if (templateId === "openai-official") {
+    return officialPrices;
+  }
+  if (templateId && templateId !== "custom") {
+    const matched = templates.find((t) => t.id === templateId);
+    if (matched) {
+      return matched.modelPrices;
+    }
+  }
+  return provider.modelPrices ?? officialPrices;
+}
 
 export function formatPrice(value: number | null | undefined, fallback = "0.0000"): string {
   if (typeof value !== "number" || !Number.isFinite(value)) {
@@ -131,8 +153,19 @@ export function mergeWithOfficialModelPrices(
 
 function toDraftProvider(
   provider: PricingProviderDTO,
-  defaultOfficialPrices: ProviderModelPricingDTO[] = []
+  defaultOfficialPrices: ProviderModelPricingDTO[] = [],
+  templates: PricingTemplateDTO[] = []
 ): DraftRelayProvider {
+  const templateId = provider.templateId ?? null;
+  let basePrices = provider.modelPrices;
+  if (templateId === "openai-official") {
+    basePrices = defaultOfficialPrices;
+  } else if (templateId && templateId !== "custom") {
+    const matched = templates.find((t) => t.id === templateId);
+    if (matched) {
+      basePrices = matched.modelPrices;
+    }
+  }
   return {
     id: provider.id,
     name: provider.name ?? "",
@@ -145,7 +178,8 @@ function toDraftProvider(
       provider.multiplier === null || provider.multiplier === undefined
         ? "1.0000"
         : formatPrice(provider.multiplier, "1.0000"),
-    modelPrices: mergeWithOfficialModelPrices(provider.modelPrices, defaultOfficialPrices)
+    templateId,
+    modelPrices: mergeWithOfficialModelPrices(basePrices, defaultOfficialPrices)
   };
 }
 
@@ -318,10 +352,19 @@ export const RelayPricingView: React.FC = () => {
   const officialPrices = officialProvider?.modelPrices ?? [];
   const officialModels = officialPrices.map((price) => price.model);
 
+  const [pricingTemplates, setPricingTemplates] = useState<PricingTemplateDTO[]>(() => {
+    return dashboard?.meta.pricingTemplates ?? [];
+  });
+  const [isTemplateManagerOpen, setIsTemplateManagerOpen] = useState(false);
+  const [editingTemplate, setEditingTemplate] = useState<PricingTemplateDTO | null>(null);
+  const [isCreatingTemplate, setIsCreatingTemplate] = useState(false);
+  const [templateInitialSource, setTemplateInitialSource] = useState<string>("openai-official");
+  const [boundProviderForNewTemplate, setBoundProviderForNewTemplate] = useState<string | null>(null);
+
   const [relayProviders, setRelayProviders] = useState<DraftRelayProvider[]>(() => {
     const list = providers
       .filter((provider) => provider.kind === "relay")
-      .map((provider) => toDraftProvider(provider, officialPrices));
+      .map((provider) => toDraftProvider(provider, officialPrices, dashboard?.meta.pricingTemplates ?? []));
     list.sort(compareRelayProvidersByPrice);
     return list;
   });
@@ -444,15 +487,16 @@ export const RelayPricingView: React.FC = () => {
       });
     }
     for (const provider of relayProviders) {
+      const effectivePrices = resolveDraftProviderPrices(provider, pricingTemplates, officialPrices);
       allProviders.push({
         id: provider.id,
         multiplier: provider.multiplier,
         rechargeRatioUsdPerRmb: provider.rechargeRatioUsdPerRmb,
-        modelPrices: provider.modelPrices
+        modelPrices: effectivePrices
       });
     }
     return computeLowestModelsByProvider(allProviders, officialProvider?.modelPrices ?? []);
-  }, [showOfficial, officialProvider, openaiRatio, relayProviders]);
+  }, [showOfficial, officialProvider, openaiRatio, relayProviders, pricingTemplates, officialPrices]);
 
   useEffect(() => {
     if (isDirty || !officialProvider) {
@@ -463,12 +507,14 @@ export const RelayPricingView: React.FC = () => {
         ? DEFAULT_OPENAI_RATIO
         : formatPrice(officialProvider.rechargeRatioUsdPerRmb, DEFAULT_OPENAI_RATIO)
     );
+    const templates = dashboard?.meta.pricingTemplates ?? [];
+    setPricingTemplates(templates);
     const relayList = providers
       .filter((provider) => provider.kind === "relay")
-      .map((provider) => toDraftProvider(provider, officialProvider.modelPrices ?? []));
+      .map((provider) => toDraftProvider(provider, officialProvider.modelPrices ?? [], templates));
     relayList.sort(compareRelayProvidersByPrice);
     setRelayProviders(relayList);
-  }, [isDirty, officialProvider, providers]);
+  }, [isDirty, officialProvider, providers, dashboard?.meta.pricingTemplates]);
 
   useEffect(() => {
     if (saveError) {
@@ -498,6 +544,7 @@ export const RelayPricingView: React.FC = () => {
         enabled: false,
         rechargeRatioUsdPerRmb: "",
         multiplier: "1.0000",
+        templateId: "openai-official",
         modelPrices: (officialProvider?.modelPrices ?? []).map((p) => ({
           model: p.model,
           rates: { ...p.rates }
@@ -510,8 +557,113 @@ export const RelayPricingView: React.FC = () => {
   const handleApplyBenchmarkRates = (providerId: string, updatedPrices: ProviderModelPricingDTO[]) => {
     updateRelay(providerId, (provider) => ({
       ...provider,
+      templateId: null,
       modelPrices: updatedPrices
     }));
+    setEditingBenchmarkProvider(null);
+  };
+
+  const handleSaveTemplate = (template: PricingTemplateDTO) => {
+    setPricingTemplates((current) => {
+      const exists = current.some((t) => t.id === template.id);
+      if (exists) {
+        return current.map((t) => (t.id === template.id ? template : t));
+      }
+      return [...current, template];
+    });
+
+    if (boundProviderForNewTemplate) {
+      setRelayProviders((current) =>
+        current.map((provider) =>
+          provider.id === boundProviderForNewTemplate
+            ? { ...provider, templateId: template.id }
+            : provider
+        )
+      );
+      setBoundProviderForNewTemplate(null);
+    }
+
+    setEditingTemplate(null);
+    setIsCreatingTemplate(false);
+    markDirty();
+  };
+
+  const handleDeleteTemplate = (templateId: string) => {
+    const tpl = pricingTemplates.find((t) => t.id === templateId);
+    if (!tpl) return;
+
+    const refCount = relayProviders.filter((p) => p.templateId === templateId).length;
+    const confirmMsg = refCount > 0
+      ? t("relayPricingTemplateDeleteConfirm", { name: tpl.name, count: refCount })
+      : t("relayPricingTemplateDeleteConfirmNoRefs", { name: tpl.name });
+
+    if (!window.confirm(confirmMsg)) {
+      return;
+    }
+
+    setRelayProviders((current) =>
+      current.map((provider) => {
+        if (provider.templateId === templateId) {
+          return {
+            ...provider,
+            templateId: null,
+            modelPrices: tpl.modelPrices.map((p) => ({
+              model: p.model,
+              rates: { ...p.rates }
+            }))
+          };
+        }
+        return provider;
+      })
+    );
+
+    setPricingTemplates((current) => current.filter((t) => t.id !== templateId));
+    if (editingTemplate?.id === templateId) {
+      setEditingTemplate(null);
+    }
+    markDirty();
+  };
+
+  const handleProviderTemplateChange = (providerId: string, newTemplateId: string) => {
+    updateRelay(providerId, (provider) => {
+      if (newTemplateId === "custom") {
+        const currentPrices = resolveDraftProviderPrices(provider, pricingTemplates, officialPrices);
+        return {
+          ...provider,
+          templateId: null,
+          modelPrices: currentPrices.map((p) => ({
+            model: p.model,
+            rates: { ...p.rates }
+          }))
+        };
+      }
+      if (newTemplateId === "openai-official") {
+        return {
+          ...provider,
+          templateId: "openai-official"
+        };
+      }
+      return {
+        ...provider,
+        templateId: newTemplateId
+      };
+    });
+  };
+
+  const handleOpenSaveAsTemplate = (name: string, prices: ProviderModelPricingDTO[]) => {
+    setEditingTemplate({
+      id: createProviderId(),
+      name,
+      modelPrices: prices.map((p) => ({
+        model: p.model,
+        rates: { ...p.rates }
+      }))
+    });
+    setIsCreatingTemplate(true);
+    setTemplateInitialSource("custom");
+    if (editingBenchmarkProvider) {
+      setBoundProviderForNewTemplate(editingBenchmarkProvider.id);
+    }
     setEditingBenchmarkProvider(null);
   };
 
@@ -546,6 +698,7 @@ export const RelayPricingView: React.FC = () => {
         enabled: provider.enabled,
         rechargeRatioUsdPerRmb: ratio,
         multiplier,
+        templateId: provider.templateId ?? null,
         modelPrices: provider.modelPrices
       });
     }
@@ -556,7 +709,7 @@ export const RelayPricingView: React.FC = () => {
     setSaveError(null);
     setSaveNotice(null);
     try {
-      await updatePricingProviders(payload, parsedOpenaiRatio);
+      await updatePricingProviders(payload, parsedOpenaiRatio, pricingTemplates);
       setIsDirty(false);
       setSaveNotice(t("relayPricingSaved"));
       await loadDashboard();
@@ -576,18 +729,32 @@ export const RelayPricingView: React.FC = () => {
         description={t("relayPricingDescription")}
         pageSourceId={RELAY_PRICING_PAGE_SOURCE_ID}
         actions={
-          <label className="settings-switch-label">
-            <span className="settings-switch-text">{t("relayPricingShowOfficial")}</span>
-            <span className="settings-switch">
-              <input
-                className="settings-switch-input"
-                type="checkbox"
-                checked={showOfficial}
-                onChange={(event) => handleToggleOfficial(event.target.checked)}
-              />
-              <span className="settings-switch-track" aria-hidden="true" />
-            </span>
-          </label>
+          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+            <button
+              className="action secondary relay-templates-btn"
+              type="button"
+              onClick={() => setIsTemplateManagerOpen(true)}
+              disabled={controlsDisabled}
+            >
+              <Layers size={15} />
+              <span>{t("relayPricingManageTemplates")}</span>
+              {pricingTemplates.length > 0 && (
+                <span className="relay-templates-count-badge">{pricingTemplates.length}</span>
+              )}
+            </button>
+            <label className="settings-switch-label">
+              <span className="settings-switch-text">{t("relayPricingShowOfficial")}</span>
+              <span className="settings-switch">
+                <input
+                  className="settings-switch-input"
+                  type="checkbox"
+                  checked={showOfficial}
+                  onChange={(event) => handleToggleOfficial(event.target.checked)}
+                />
+                <span className="settings-switch-track" aria-hidden="true" />
+              </span>
+            </label>
+          </div>
         }
       />
 
@@ -616,6 +783,7 @@ export const RelayPricingView: React.FC = () => {
           <RelayProviderCard
             key={provider.id}
             provider={provider}
+            pricingTemplates={pricingTemplates}
             officialPrices={visibleOfficialPrices}
             allOfficialPrices={officialPrices}
             modelComparisons={modelComparisonsByProvider.get(provider.id)}
@@ -628,7 +796,12 @@ export const RelayPricingView: React.FC = () => {
               setRelayProviders((current) => current.filter((item) => item.id !== provider.id));
               markDirty();
             }}
+            onTemplateChange={handleProviderTemplateChange}
             onOpenBenchmarkModal={setEditingBenchmarkProvider}
+            onOpenTemplateEditor={(tpl) => {
+              setEditingTemplate(tpl);
+              setIsCreatingTemplate(false);
+            }}
           />
         ))}
       </section>
@@ -638,12 +811,58 @@ export const RelayPricingView: React.FC = () => {
         <span>{t("relayPricingAddProvider")}</span>
       </button>
 
+      {isTemplateManagerOpen && (
+        <PricingTemplatesModal
+          templates={pricingTemplates}
+          relayProviders={relayProviders}
+          officialPrices={officialPrices}
+          onClose={() => setIsTemplateManagerOpen(false)}
+          onOpenCreate={() => {
+            setEditingTemplate(null);
+            setIsCreatingTemplate(true);
+            setTemplateInitialSource("openai-official");
+          }}
+          onEditTemplate={(tpl) => {
+            setEditingTemplate(tpl);
+            setIsCreatingTemplate(false);
+          }}
+          onDeleteTemplate={handleDeleteTemplate}
+        />
+      )}
+
+      {(editingTemplate !== null || isCreatingTemplate) && (
+        <PricingTemplateEditorModal
+          template={editingTemplate}
+          initialSourceProviderId={templateInitialSource}
+          officialPrices={officialPrices}
+          relayProviders={relayProviders}
+          referencingCount={
+            editingTemplate
+              ? relayProviders.filter((p) => p.templateId === editingTemplate.id).length
+              : 0
+          }
+          existingTemplateNames={
+            new Set(
+              pricingTemplates
+                .filter((t) => t.id !== editingTemplate?.id)
+                .map((t) => t.name.toLowerCase().trim())
+            )
+          }
+          onClose={() => {
+            setEditingTemplate(null);
+            setIsCreatingTemplate(false);
+          }}
+          onSave={handleSaveTemplate}
+        />
+      )}
+
       {editingBenchmarkProvider && (
         <RelayBenchmarkModal
           provider={editingBenchmarkProvider}
           officialPrices={officialPrices}
           onClose={() => setEditingBenchmarkProvider(null)}
           onApply={handleApplyBenchmarkRates}
+          onSaveAsTemplate={handleOpenSaveAsTemplate}
         />
       )}
     </div>
@@ -715,6 +934,7 @@ const OfficialProviderCard: React.FC<{
 
 const RelayProviderCard: React.FC<{
   provider: DraftRelayProvider;
+  pricingTemplates: PricingTemplateDTO[];
   officialPrices: Array<{ model: string; rates: ModelPricingRatesDTO }>;
   allOfficialPrices: Array<{ model: string; rates: ModelPricingRatesDTO }>;
   modelComparisons?: Map<string, ProviderModelPriceComparison>;
@@ -724,9 +944,12 @@ const RelayProviderCard: React.FC<{
   onSave: () => void;
   onUpdate: (id: string, update: (provider: DraftRelayProvider) => DraftRelayProvider) => void;
   onRemove: () => void;
+  onTemplateChange: (providerId: string, templateId: string) => void;
   onOpenBenchmarkModal: (provider: DraftRelayProvider) => void;
+  onOpenTemplateEditor: (template: PricingTemplateDTO) => void;
 }> = ({
   provider,
+  pricingTemplates,
   officialPrices,
   allOfficialPrices,
   modelComparisons,
@@ -736,21 +959,39 @@ const RelayProviderCard: React.FC<{
   onSave,
   onUpdate,
   onRemove,
-  onOpenBenchmarkModal
+  onTemplateChange,
+  onOpenBenchmarkModal,
+  onOpenTemplateEditor
 }) => {
   const { t } = useTranslation();
-  const customizedCount = countCustomizedModels(provider.modelPrices, allOfficialPrices);
+  const effectivePrices = resolveDraftProviderPrices(provider, pricingTemplates, allOfficialPrices);
+  const isTemplate = Boolean(
+    provider.templateId &&
+    provider.templateId !== "openai-official" &&
+    provider.templateId !== "custom"
+  );
+  const boundTemplate = isTemplate
+    ? pricingTemplates.find((t) => t.id === provider.templateId) ?? null
+    : null;
+  const customizedCount = countCustomizedModels(effectivePrices, allOfficialPrices);
+  const selectedTemplateValue = provider.templateId ?? (customizedCount > 0 ? "custom" : "openai-official");
 
   return (
     <article className={`relay-provider-card panel ${provider.enabled ? "is-enabled" : "is-disabled"}`}>
       <div className="relay-provider-head">
         <div className="relay-provider-head-left">
           <span className="relay-provider-type">{t("relayPricingRelay")}</span>
-          <span className={`relay-benchmark-tag ${customizedCount > 0 ? "is-customized" : "is-default"}`}>
-            {customizedCount > 0
-              ? t("relayPricingBenchmarkCustomCount", { count: customizedCount })
-              : t("relayPricingBenchmarkDefault")}
-          </span>
+          {boundTemplate ? (
+            <span className="relay-benchmark-tag is-template">
+              {t("relayPricingTemplateReferencedBadge", { name: boundTemplate.name })}
+            </span>
+          ) : (
+            <span className={`relay-benchmark-tag ${customizedCount > 0 ? "is-customized" : "is-default"}`}>
+              {customizedCount > 0
+                ? t("relayPricingBenchmarkCustomCount", { count: customizedCount })
+                : t("relayPricingBenchmarkDefault")}
+            </span>
+          )}
         </div>
         <div className="relay-provider-actions">
           <label className="settings-switch-label">
@@ -807,16 +1048,49 @@ const RelayProviderCard: React.FC<{
           onChange={(value) => onUpdate(provider.id, (item) => ({ ...item, multiplier: value }))}
         />
         <div className="relay-config-field relay-benchmark-field">
-          <span className="relay-field-label">{t("officialBenchmarkRate")}</span>
-          <button
-            className="action secondary relay-edit-benchmark-btn"
-            type="button"
-            onClick={() => onOpenBenchmarkModal(provider)}
-            disabled={controlsDisabled}
-          >
-            <SlidersHorizontal size={14} />
-            <span>{t("relayPricingEditBenchmark")}</span>
-          </button>
+          <label className="relay-field-label" htmlFor={`relay-template-${provider.id}`}>
+            {t("relayPricingBenchmarkSource")}
+          </label>
+          <div className="relay-benchmark-select-wrap">
+            <select
+              id={`relay-template-${provider.id}`}
+              className="relay-plain-select"
+              value={selectedTemplateValue}
+              onChange={(e) => onTemplateChange(provider.id, e.target.value)}
+              disabled={controlsDisabled}
+            >
+              <option value="openai-official">{t("relayPricingSourceOfficial")}</option>
+              {pricingTemplates.map((tpl) => (
+                <option key={tpl.id} value={tpl.id}>
+                  {tpl.name}
+                </option>
+              ))}
+              <option value="custom">{t("relayPricingCustomBenchmark")}</option>
+            </select>
+            {boundTemplate ? (
+              <button
+                className="action secondary relay-edit-benchmark-btn"
+                type="button"
+                onClick={() => onOpenTemplateEditor(boundTemplate)}
+                disabled={controlsDisabled}
+                title={t("relayPricingEditTemplate")}
+              >
+                <SlidersHorizontal size={14} />
+                <span>{t("relayPricingEditTemplate")}</span>
+              </button>
+            ) : (
+              <button
+                className="action secondary relay-edit-benchmark-btn"
+                type="button"
+                onClick={() => onOpenBenchmarkModal(provider)}
+                disabled={controlsDisabled}
+                title={t("relayPricingEditBenchmark")}
+              >
+                <SlidersHorizontal size={14} />
+                <span>{t("relayPricingEditBenchmark")}</span>
+              </button>
+            )}
+          </div>
         </div>
         <div className="relay-config-action">
           <button
@@ -832,7 +1106,7 @@ const RelayProviderCard: React.FC<{
       </div>
       <RelayRatePreviewTable
         officialPrices={officialPrices}
-        providerPrices={provider.modelPrices}
+        providerPrices={effectivePrices}
         multiplier={provider.multiplier}
         modelComparisons={modelComparisons}
       />
@@ -1067,6 +1341,7 @@ interface RelayBenchmarkModalProps {
   officialPrices: Array<{ model: string; rates: ModelPricingRatesDTO }>;
   onClose: () => void;
   onApply: (providerId: string, updatedPrices: ProviderModelPricingDTO[]) => void;
+  onSaveAsTemplate?: (name: string, prices: ProviderModelPricingDTO[]) => void;
 }
 
 type DraftModelPriceRow = {
@@ -1081,7 +1356,8 @@ const RelayBenchmarkModal: React.FC<RelayBenchmarkModalProps> = ({
   provider,
   officialPrices,
   onClose,
-  onApply
+  onApply,
+  onSaveAsTemplate
 }) => {
   const { t } = useTranslation();
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -1297,15 +1573,55 @@ const RelayBenchmarkModal: React.FC<RelayBenchmarkModalProps> = ({
         </div>
 
         <div className="modal-footer">
-          <button
-            className="action secondary"
-            type="button"
-            onClick={resetAllToOfficial}
-            style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
-          >
-            <RotateCcw size={14} />
-            <span>{t("relayPricingResetAllToOfficial")}</span>
-          </button>
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+            <button
+              className="action secondary"
+              type="button"
+              onClick={resetAllToOfficial}
+              style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+            >
+              <RotateCcw size={14} />
+              <span>{t("relayPricingResetAllToOfficial")}</span>
+            </button>
+            {onSaveAsTemplate && (
+              <button
+                className="action secondary"
+                type="button"
+                onClick={() => {
+                  const parsedPrices: ProviderModelPricingDTO[] = [];
+                  for (const row of draftRows) {
+                    const input = parseNonNegative(row.inputUsdPerMillion);
+                    const output = parseNonNegative(row.outputUsdPerMillion);
+                    const cacheRead = parseNonNegative(row.cacheReadUsdPerMillion);
+                    const cacheCreation = parseNonNegative(row.cacheCreationUsdPerMillion);
+
+                    if (input === null || output === null || cacheRead === null || cacheCreation === null) {
+                      setErrorMessage(t("relayPricingRateError", { model: row.model }));
+                      return;
+                    }
+
+                    parsedPrices.push({
+                      model: row.model,
+                      rates: {
+                        inputUsdPerMillion: input,
+                        outputUsdPerMillion: output,
+                        cacheReadUsdPerMillion: cacheRead,
+                        cacheCreationUsdPerMillion: cacheCreation
+                      }
+                    });
+                  }
+                  onSaveAsTemplate(
+                    provider.name ? `${provider.name} - ${t("relayPricingTemplates")}` : t("relayPricingCreateTemplate"),
+                    parsedPrices
+                  );
+                }}
+                style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+              >
+                <Bookmark size={14} />
+                <span>{t("relayPricingSaveAsTemplate")}</span>
+              </button>
+            )}
+          </div>
           <div className="modal-footer-actions">
             <button className="action secondary" type="button" onClick={onClose}>
               {t("relayPricingModalCancel")}
@@ -1319,3 +1635,497 @@ const RelayBenchmarkModal: React.FC<RelayBenchmarkModalProps> = ({
     </div>
   );
 };
+
+interface PricingTemplatesModalProps {
+  templates: PricingTemplateDTO[];
+  relayProviders: DraftRelayProvider[];
+  officialPrices: Array<{ model: string; rates: ModelPricingRatesDTO }>;
+  onClose: () => void;
+  onOpenCreate: () => void;
+  onEditTemplate: (template: PricingTemplateDTO) => void;
+  onDeleteTemplate: (templateId: string) => void;
+}
+
+const PricingTemplatesModal: React.FC<PricingTemplatesModalProps> = ({
+  templates,
+  relayProviders,
+  onClose,
+  onOpenCreate,
+  onEditTemplate,
+  onDeleteTemplate
+}) => {
+  const { t } = useTranslation();
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
+  return (
+    <div className="modal-backdrop" onClick={onClose} role="presentation">
+      <div
+        className="modal-dialog"
+        onClick={(event) => event.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="templates-modal-title"
+      >
+        <div className="modal-header">
+          <div>
+            <h2 id="templates-modal-title">{t("relayPricingTemplatesTitle")}</h2>
+            <p>{t("relayPricingTemplatesDesc")}</p>
+          </div>
+          <button
+            className="modal-close-btn"
+            type="button"
+            onClick={onClose}
+            aria-label={t("relayPricingModalCancel")}
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="modal-body">
+          <div style={{ display: "flex", justifyContent: "flex-end" }}>
+            <button
+              className="action primary"
+              type="button"
+              onClick={onOpenCreate}
+              style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+            >
+              <Plus size={16} />
+              <span>{t("relayPricingCreateTemplate")}</span>
+            </button>
+          </div>
+
+          {templates.length === 0 ? (
+            <div className="relay-templates-empty">
+              {t("relayPricingNoTemplates")}
+            </div>
+          ) : (
+            <div className="relay-templates-list">
+              {templates.map((template) => {
+                const referencing = relayProviders.filter((p) => p.templateId === template.id);
+                const refCount = referencing.length;
+                const refNames = referencing.map((p) => p.name || t("relayPricingRelay")).join(", ");
+
+                return (
+                  <div key={template.id} className="relay-template-item">
+                    <div className="relay-template-item-info">
+                      <div className="relay-template-item-title">
+                        <span>{template.name}</span>
+                        {refCount > 0 && (
+                          <span className="relay-template-ref-badge">
+                            {t("relayPricingTemplateReferencedCount", { count: refCount })}
+                          </span>
+                        )}
+                      </div>
+                      {refCount > 0 && (
+                        <div className="relay-template-item-meta">
+                          {refNames}
+                        </div>
+                      )}
+                    </div>
+                    <div className="relay-template-item-actions">
+                      <button
+                        className="action secondary"
+                        type="button"
+                        onClick={() => onEditTemplate(template)}
+                        style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+                      >
+                        <SlidersHorizontal size={14} />
+                        <span>{t("relayPricingEditTemplate")}</span>
+                      </button>
+                      <button
+                        className="relay-icon-button"
+                        type="button"
+                        onClick={() => onDeleteTemplate(template.id)}
+                        aria-label={t("relayPricingTemplateDelete")}
+                        title={t("relayPricingTemplateDelete")}
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        <div className="modal-footer">
+          <button className="action secondary" type="button" onClick={onClose}>
+            {t("relayPricingModalCancel")}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+interface PricingTemplateEditorModalProps {
+  template: PricingTemplateDTO | null;
+  initialSourceProviderId: string;
+  officialPrices: Array<{ model: string; rates: ModelPricingRatesDTO }>;
+  relayProviders: DraftRelayProvider[];
+  referencingCount: number;
+  existingTemplateNames: Set<string>;
+  onClose: () => void;
+  onSave: (template: PricingTemplateDTO) => void;
+}
+
+const PricingTemplateEditorModal: React.FC<PricingTemplateEditorModalProps> = ({
+  template,
+  initialSourceProviderId,
+  officialPrices,
+  relayProviders,
+  referencingCount,
+  existingTemplateNames,
+  onClose,
+  onSave
+}) => {
+  const { t } = useTranslation();
+  const [name, setName] = useState(template?.name ?? "");
+  const [selectedSource, setSelectedSource] = useState(initialSourceProviderId);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const officialPriceMap = useMemo(
+    () => new Map(officialPrices.map((p) => [p.model, p.rates])),
+    [officialPrices]
+  );
+
+  const getSourcePrices = (sourceId: string): Map<string, ModelPricingRatesDTO> => {
+    if (sourceId === "openai-official") {
+      return new Map(officialPrices.map((p) => [p.model, p.rates]));
+    }
+    const provider = relayProviders.find((p) => p.id === sourceId);
+    if (provider && provider.modelPrices) {
+      return new Map(provider.modelPrices.map((p) => [p.model, p.rates]));
+    }
+    return new Map(officialPrices.map((p) => [p.model, p.rates]));
+  };
+
+  const [draftRows, setDraftRows] = useState<DraftModelPriceRow[]>(() => {
+    if (template) {
+      const templateMap = new Map(template.modelPrices.map((p) => [p.model, p.rates]));
+      return (officialPrices ?? []).map((official) => {
+        const currentRates = templateMap.get(official.model) ?? official.rates;
+        return {
+          model: official.model,
+          inputUsdPerMillion: formatPrice(currentRates?.inputUsdPerMillion ?? official.rates?.inputUsdPerMillion),
+          outputUsdPerMillion: formatPrice(currentRates?.outputUsdPerMillion ?? official.rates?.outputUsdPerMillion),
+          cacheReadUsdPerMillion: formatPrice(currentRates?.cacheReadUsdPerMillion ?? official.rates?.cacheReadUsdPerMillion),
+          cacheCreationUsdPerMillion: formatPrice(currentRates?.cacheCreationUsdPerMillion ?? official.rates?.cacheCreationUsdPerMillion)
+        };
+      });
+    }
+    const sourceMap = getSourcePrices(initialSourceProviderId);
+    return (officialPrices ?? []).map((official) => {
+      const currentRates = sourceMap.get(official.model) ?? official.rates;
+      return {
+        model: official.model,
+        inputUsdPerMillion: formatPrice(currentRates?.inputUsdPerMillion ?? official.rates?.inputUsdPerMillion),
+        outputUsdPerMillion: formatPrice(currentRates?.outputUsdPerMillion ?? official.rates?.outputUsdPerMillion),
+        cacheReadUsdPerMillion: formatPrice(currentRates?.cacheReadUsdPerMillion ?? official.rates?.cacheReadUsdPerMillion),
+        cacheCreationUsdPerMillion: formatPrice(currentRates?.cacheCreationUsdPerMillion ?? official.rates?.cacheCreationUsdPerMillion)
+      };
+    });
+  });
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
+  const handleSourceChange = (newSourceId: string) => {
+    setSelectedSource(newSourceId);
+    const sourceMap = getSourcePrices(newSourceId);
+    setDraftRows(
+      (officialPrices ?? []).map((official) => {
+        const rates = sourceMap.get(official.model) ?? official.rates;
+        return {
+          model: official.model,
+          inputUsdPerMillion: formatPrice(rates?.inputUsdPerMillion ?? official.rates?.inputUsdPerMillion),
+          outputUsdPerMillion: formatPrice(rates?.outputUsdPerMillion ?? official.rates?.outputUsdPerMillion),
+          cacheReadUsdPerMillion: formatPrice(rates?.cacheReadUsdPerMillion ?? official.rates?.cacheReadUsdPerMillion),
+          cacheCreationUsdPerMillion: formatPrice(rates?.cacheCreationUsdPerMillion ?? official.rates?.cacheCreationUsdPerMillion)
+        };
+      })
+    );
+    setErrorMessage(null);
+  };
+
+  const updateField = (model: string, key: keyof ModelPricingRatesDTO, value: string) => {
+    setDraftRows((current) =>
+      current.map((row) => (row.model === model ? { ...row, [key]: value } : row))
+    );
+    setErrorMessage(null);
+  };
+
+  const resetRowToOfficial = (model: string) => {
+    const officialRate = officialPriceMap.get(model);
+    if (!officialRate) {
+      return;
+    }
+    setDraftRows((current) =>
+      current.map((row) =>
+        row.model === model
+          ? {
+              model,
+              inputUsdPerMillion: formatPrice(officialRate.inputUsdPerMillion),
+              outputUsdPerMillion: formatPrice(officialRate.outputUsdPerMillion),
+              cacheReadUsdPerMillion: formatPrice(officialRate.cacheReadUsdPerMillion),
+              cacheCreationUsdPerMillion: formatPrice(officialRate.cacheCreationUsdPerMillion)
+            }
+          : row
+      )
+    );
+    setErrorMessage(null);
+  };
+
+  const resetAllToOfficial = () => {
+    setDraftRows(
+      (officialPrices ?? []).map((official) => ({
+        model: official.model,
+        inputUsdPerMillion: formatPrice(official.rates?.inputUsdPerMillion),
+        outputUsdPerMillion: formatPrice(official.rates?.outputUsdPerMillion),
+        cacheReadUsdPerMillion: formatPrice(official.rates?.cacheReadUsdPerMillion),
+        cacheCreationUsdPerMillion: formatPrice(official.rates?.cacheCreationUsdPerMillion)
+      }))
+    );
+    setErrorMessage(null);
+  };
+
+  const handleSave = () => {
+    const trimmed = name.trim();
+    if (!trimmed) {
+      setErrorMessage(t("relayPricingTemplateNameRequired"));
+      return;
+    }
+    if (existingTemplateNames.has(trimmed.toLowerCase())) {
+      setErrorMessage(t("relayPricingTemplateDuplicateName"));
+      return;
+    }
+
+    const parsedPrices: ProviderModelPricingDTO[] = [];
+    for (const row of draftRows) {
+      const input = parseNonNegative(row.inputUsdPerMillion);
+      const output = parseNonNegative(row.outputUsdPerMillion);
+      const cacheRead = parseNonNegative(row.cacheReadUsdPerMillion);
+      const cacheCreation = parseNonNegative(row.cacheCreationUsdPerMillion);
+
+      if (input === null || output === null || cacheRead === null || cacheCreation === null) {
+        setErrorMessage(t("relayPricingRateError", { model: row.model }));
+        return;
+      }
+
+      parsedPrices.push({
+        model: row.model,
+        rates: {
+          inputUsdPerMillion: input,
+          outputUsdPerMillion: output,
+          cacheReadUsdPerMillion: cacheRead,
+          cacheCreationUsdPerMillion: cacheCreation
+        }
+      });
+    }
+
+    onSave({
+      id: template?.id ?? createProviderId(),
+      name: trimmed,
+      modelPrices: parsedPrices
+    });
+  };
+
+  return (
+    <div className="modal-backdrop" onClick={onClose} role="presentation">
+      <div
+        className="modal-dialog"
+        onClick={(event) => event.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="template-editor-modal-title"
+      >
+        <div className="modal-header">
+          <div>
+            <h2 id="template-editor-modal-title">
+              {template ? t("relayPricingEditTemplate") : t("relayPricingCreateTemplate")}
+            </h2>
+            <p>{t("relayPricingBenchmarkModalDesc")}</p>
+          </div>
+          <button
+            className="modal-close-btn"
+            type="button"
+            onClick={onClose}
+            aria-label={t("relayPricingModalCancel")}
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="modal-body">
+          {errorMessage && <div className="relay-modal-error">{errorMessage}</div>}
+
+          <div className="relay-template-form-row">
+            <div className="relay-template-form-group">
+              <label className="relay-field-label" htmlFor="template-name-input">
+                {t("relayPricingTemplateName")}
+              </label>
+              <input
+                id="template-name-input"
+                className="relay-plain-input"
+                value={name}
+                placeholder={t("relayPricingTemplateNamePlaceholder")}
+                onChange={(e) => {
+                  setName(e.target.value);
+                  setErrorMessage(null);
+                }}
+                autoFocus
+              />
+            </div>
+            {!template && (
+              <div className="relay-template-form-group">
+                <label className="relay-field-label" htmlFor="template-source-select">
+                  {t("relayPricingInitialSource")}
+                </label>
+                <select
+                  id="template-source-select"
+                  className="relay-plain-select"
+                  value={selectedSource}
+                  onChange={(e) => handleSourceChange(e.target.value)}
+                >
+                  <option value="openai-official">{t("relayPricingSourceOfficial")}</option>
+                  {relayProviders.map((provider) => (
+                    <option key={provider.id} value={provider.id}>
+                      {t("relayPricingSourceProvider", { name: provider.name || t("relayPricingRelay") })}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+
+          {referencingCount > 0 && (
+            <div className="relay-modal-notice">
+              <CircleAlert size={15} />
+              <span>{t("relayPricingTemplateInUseNotice", { count: referencingCount })}</span>
+            </div>
+          )}
+
+          <div className="relay-model-table-wrap">
+            <table className="relay-modal-table">
+              <thead>
+                <tr>
+                  <th>{t("relayPricingModel")}</th>
+                  {PRICE_FIELDS.map((field) => (
+                    <th key={field.key}>{t(field.label)}</th>
+                  ))}
+                  <th style={{ width: 90, textAlign: "center" }}>{t("relayPricingActions")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {draftRows.map((row) => {
+                  const officialRate = officialPriceMap.get(row.model);
+                  const isModified =
+                    officialRate !== undefined &&
+                    (Math.abs(Number(row.inputUsdPerMillion) - (officialRate.inputUsdPerMillion ?? 0)) > 1e-4 ||
+                      Math.abs(Number(row.outputUsdPerMillion) - (officialRate.outputUsdPerMillion ?? 0)) > 1e-4 ||
+                      Math.abs(Number(row.cacheReadUsdPerMillion) - (officialRate.cacheReadUsdPerMillion ?? 0)) > 1e-4 ||
+                      Math.abs(Number(row.cacheCreationUsdPerMillion) - (officialRate.cacheCreationUsdPerMillion ?? 0)) > 1e-4);
+
+                  return (
+                    <tr key={row.model} className={isModified ? "is-modified" : ""}>
+                      <td>
+                        <div style={{ display: "flex", alignItems: "center" }}>
+                          <code>{row.model}</code>
+                          {isModified && (
+                            <span className="relay-row-modified-badge">
+                              {t("relayPricingBenchmarkModified")}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      {PRICE_FIELDS.map((field) => {
+                        const val = row[field.key];
+                        const officialFieldVal = officialRate ? officialRate[field.key] : null;
+                        const isFieldChanged =
+                          officialFieldVal !== null &&
+                          Math.abs(Number(val) - officialFieldVal) > 1e-4;
+
+                        return (
+                          <td key={field.key}>
+                            <div className="relay-modal-input-wrap">
+                              <span className="relay-affix-label">$</span>
+                              <input
+                                className={`relay-modal-input ${isFieldChanged ? "is-changed" : ""}`}
+                                type="number"
+                                min="0"
+                                step="0.0001"
+                                inputMode="decimal"
+                                value={val}
+                                placeholder={t("relayPricingModalInputPlaceholder")}
+                                onChange={(event) =>
+                                  updateField(row.model, field.key, event.target.value)
+                                }
+                              />
+                            </div>
+                          </td>
+                        );
+                      })}
+                      <td style={{ textAlign: "center" }}>
+                        {isModified ? (
+                          <button
+                            className="relay-row-reset-btn"
+                            type="button"
+                            onClick={() => resetRowToOfficial(row.model)}
+                            title={t("relayPricingResetRow")}
+                          >
+                            <RotateCcw size={12} />
+                            <span>{t("relayPricingResetRow")}</span>
+                          </button>
+                        ) : (
+                          <span className="muted" style={{ fontSize: 12 }}>—</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="modal-footer">
+          <button
+            className="action secondary"
+            type="button"
+            onClick={resetAllToOfficial}
+            style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+          >
+            <RotateCcw size={14} />
+            <span>{t("relayPricingResetAllToOfficial")}</span>
+          </button>
+          <div className="modal-footer-actions">
+            <button className="action secondary" type="button" onClick={onClose}>
+              {t("relayPricingModalCancel")}
+            </button>
+            <button className="action primary" type="button" onClick={handleSave}>
+              {t("relayPricingSaveTemplate")}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+

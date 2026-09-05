@@ -5,9 +5,16 @@ import {
   generatePluginPricingToml,
   normalizeModel,
   pricingProviders,
+  resolveProviderModelPrices,
+  validatePricingTemplates,
   validateRelayPricingProviders
 } from "../electron/services/pricing";
-import type { ModelUsageBreakdownDTO, RelayPricingProviderDTO, UsageTotalsDTO } from "../src/dto/dashboard";
+import type {
+  ModelUsageBreakdownDTO,
+  PricingTemplateDTO,
+  RelayPricingProviderDTO,
+  UsageTotalsDTO
+} from "../src/dto/dashboard";
 
 function totals(
   inputTokens: number,
@@ -173,5 +180,173 @@ describe("pricing service", () => {
     expect(toml).toContain('[models."gpt-5.4"]');
     expect(toml).toContain('input_per_million = "1.0000"');
     expect(toml).toContain('output_per_million = "5.0000"');
+  });
+
+  describe("pricing templates", () => {
+    const template: PricingTemplateDTO = {
+      id: "tpl-standard",
+      name: "Standard Relay Base Rates",
+      modelPrices: [
+        {
+          model: "gpt-5.4",
+          rates: {
+            inputUsdPerMillion: 2.5,
+            outputUsdPerMillion: 12.5,
+            cacheReadUsdPerMillion: 0.25,
+            cacheCreationUsdPerMillion: 2.5
+          }
+        }
+      ]
+    };
+
+    it("resolves model prices from custom template", () => {
+      const relay: RelayPricingProviderDTO = {
+        id: "relay-tpl",
+        name: "Relay with Template",
+        enabled: true,
+        templateId: "tpl-standard",
+        modelPrices: []
+      };
+
+      const resolved = resolveProviderModelPrices(relay, [template]);
+      expect(resolved).toEqual(template.modelPrices);
+      const gpt54 = resolved.find((p) => p.model === "gpt-5.4");
+      expect(gpt54?.rates.inputUsdPerMillion).toBe(2.5);
+      expect(gpt54?.rates.outputUsdPerMillion).toBe(12.5);
+    });
+
+    it("resolves model prices to official when templateId is openai-official", () => {
+      const relay: RelayPricingProviderDTO = {
+        id: "relay-official-tpl",
+        name: "Relay Official",
+        enabled: true,
+        templateId: "openai-official",
+        modelPrices: [
+          {
+            model: "gpt-5.4",
+            rates: {
+              inputUsdPerMillion: 99.0,
+              outputUsdPerMillion: 99.0,
+              cacheReadUsdPerMillion: 99.0,
+              cacheCreationUsdPerMillion: 99.0
+            }
+          }
+        ]
+      };
+
+      const resolved = resolveProviderModelPrices(relay, [template]);
+      const gpt54 = resolved.find((p) => p.model === "gpt-5.4");
+      // Even if provider had custom prices in draft, openai-official template forces official base
+      expect(gpt54?.rates.inputUsdPerMillion).toBe(2.5);
+    });
+
+    it("retains provider model prices when templateId is null or missing", () => {
+      const relay: RelayPricingProviderDTO = {
+        id: "relay-custom-indep",
+        name: "Relay Independent",
+        enabled: true,
+        templateId: null,
+        modelPrices: [
+          {
+            model: "gpt-5.4",
+            rates: {
+              inputUsdPerMillion: 3.3,
+              outputUsdPerMillion: 15.0,
+              cacheReadUsdPerMillion: 0.33,
+              cacheCreationUsdPerMillion: 3.3
+            }
+          }
+        ]
+      };
+
+      const resolved = resolveProviderModelPrices(relay, [template]);
+      const gpt54 = resolved.find((p) => p.model === "gpt-5.4");
+      expect(gpt54?.rates.inputUsdPerMillion).toBe(3.3);
+    });
+
+    it("calculates provider cost using referenced template", () => {
+      const relay: RelayPricingProviderDTO = {
+        id: "relay-tpl-cost",
+        name: "Relay Tpl Cost",
+        enabled: true,
+        rechargeRatioUsdPerRmb: 0.14,
+        multiplier: 2.0,
+        templateId: "tpl-standard",
+        modelPrices: []
+      };
+
+      const providers = pricingProviders([relay], 0.14, [template]);
+      const result = costForProvider(
+        [
+          {
+            model: "gpt-5.4",
+            isFallback: false,
+            totals: totals(1_000_000, 0, 0, 0)
+          }
+        ],
+        providers[1]
+      );
+
+      // Base $2.5 * 2.0 multiplier = $5.00
+      expect(Math.abs((result.costUsd ?? 0) - 5.0)).toBeLessThan(0.000001);
+    });
+
+    it("generates plugin pricing toml using template rates", () => {
+      const relay: RelayPricingProviderDTO = {
+        id: "relay-tpl-plugin",
+        name: "Relay Plugin",
+        enabled: true,
+        rechargeRatioUsdPerRmb: 0.14,
+        multiplier: 0.5,
+        templateId: "tpl-standard",
+        modelPrices: []
+      };
+
+      const toml = generatePluginPricingToml([relay], [template]);
+      // Template base $2.5 * 0.5 multiplier = $1.2500
+      expect(toml).toContain('[models."gpt-5.4"]');
+      expect(toml).toContain('input_per_million = "1.2500"');
+      expect(toml).toContain('output_per_million = "6.2500"');
+    });
+
+    it("validates templates correctly", () => {
+      expect(() =>
+        validatePricingTemplates([
+          { id: "1", name: "T1", modelPrices: [] },
+          { id: "1", name: "T2", modelPrices: [] }
+        ])
+      ).toThrow("pricing template id must be unique");
+
+      expect(() =>
+        validatePricingTemplates([
+          { id: "1", name: "Common", modelPrices: [] },
+          { id: "2", name: "common", modelPrices: [] }
+        ])
+      ).toThrow("pricing template name must be unique");
+
+      expect(() =>
+        validatePricingTemplates([{ id: "1", name: "  ", modelPrices: [] }])
+      ).toThrow("pricing template name is required");
+
+      expect(() =>
+        validatePricingTemplates([
+          {
+            id: "1",
+            name: "Negative",
+            modelPrices: [
+              {
+                model: "gpt-5.4",
+                rates: {
+                  inputUsdPerMillion: -1,
+                  outputUsdPerMillion: 1,
+                  cacheReadUsdPerMillion: 0,
+                  cacheCreationUsdPerMillion: 0
+                }
+              }
+            ]
+          }
+        ])
+      ).toThrow("non-negative");
+    });
   });
 });

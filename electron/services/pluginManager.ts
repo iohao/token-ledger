@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { generatePluginPricingTomlForProvider } from "./pricing";
-import type { CodexPluginConfigDTO, RelayPricingProviderDTO } from "../../src/dto/dashboard";
+import type { CodexPluginConfigDTO, PricingTemplateDTO, RelayPricingProviderDTO } from "../../src/dto/dashboard";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -42,7 +42,8 @@ function resolveTokenCostScript(): string {
 export function deployPluginFiles(
   codexHome: string,
   relays: RelayPricingProviderDTO[],
-  selectedProviderId?: string | null
+  selectedProviderId?: string | null,
+  templates: PricingTemplateDTO[] = []
 ): { scriptFile: string; pricingFile: string } {
   const baseDir = pluginBaseDir(codexHome);
   const scriptsDir = path.join(baseDir, "scripts");
@@ -53,7 +54,7 @@ export function deployPluginFiles(
   fs.writeFileSync(scriptFile, scriptContent, "utf8");
 
   const pricingFile = pluginPricingPath(codexHome);
-  const tomlContent = generatePluginPricingTomlForProvider(relays, selectedProviderId);
+  const tomlContent = generatePluginPricingTomlForProvider(relays, selectedProviderId, templates);
   fs.writeFileSync(pricingFile, tomlContent, "utf8");
 
   // Also sync to dev directory if present

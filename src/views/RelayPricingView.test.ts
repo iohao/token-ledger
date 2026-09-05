@@ -7,7 +7,8 @@ import {
   formatPrice,
   getProviderEffectiveCost,
   isRateEqual,
-  mergeWithOfficialModelPrices
+  mergeWithOfficialModelPrices,
+  resolveDraftProviderPrices
 } from "./RelayPricingView";
 
 const mockOfficialPrices = [
@@ -390,6 +391,92 @@ describe("formatPrice & formatDisplayRate robustness", () => {
     expect(formatDisplayRate(undefined)).toBe("0.0000");
     expect(formatDisplayRate(null)).toBe("0.0000");
     expect(formatDisplayRate(Number.NaN)).toBe("0.0000");
+  });
+});
+
+describe("resolveDraftProviderPrices and template comparison", () => {
+  const tplPrices = [
+    {
+      model: "gpt-5.6-sol",
+      rates: {
+        inputUsdPerMillion: 10.0,
+        outputUsdPerMillion: 50.0,
+        cacheReadUsdPerMillion: 1.0,
+        cacheCreationUsdPerMillion: 10.0
+      }
+    }
+  ];
+
+  const templates = [
+    {
+      id: "tpl-1",
+      name: "Template 1",
+      modelPrices: tplPrices
+    }
+  ];
+
+  it("resolves to official prices when templateId is openai-official", () => {
+    const provider = {
+      templateId: "openai-official",
+      modelPrices: tplPrices
+    };
+    const resolved = resolveDraftProviderPrices(provider, templates, mockOfficialPrices);
+    expect(resolved).toEqual(mockOfficialPrices);
+  });
+
+  it("resolves to template prices when templateId matches", () => {
+    const provider = {
+      templateId: "tpl-1",
+      modelPrices: []
+    };
+    const resolved = resolveDraftProviderPrices(provider, templates, mockOfficialPrices);
+    expect(resolved).toEqual(tplPrices);
+  });
+
+  it("falls back to provider prices when templateId is null or custom", () => {
+    const customPrices = [
+      {
+        model: "gpt-5.6-sol",
+        rates: {
+          inputUsdPerMillion: 7.0,
+          outputUsdPerMillion: 35.0,
+          cacheReadUsdPerMillion: 0.7,
+          cacheCreationUsdPerMillion: 7.0
+        }
+      }
+    ];
+    const provider = {
+      templateId: null,
+      modelPrices: customPrices
+    };
+    const resolved = resolveDraftProviderPrices(provider, templates, mockOfficialPrices);
+    expect(resolved).toEqual(customPrices);
+  });
+
+  it("correctly compares two providers sharing the same template with different multipliers", () => {
+    const providerA = {
+      id: "relay-a",
+      multiplier: "1.0000",
+      rechargeRatioUsdPerRmb: "1.0000",
+      modelPrices: resolveDraftProviderPrices({ templateId: "tpl-1" }, templates, mockOfficialPrices)
+    };
+    const providerB = {
+      id: "relay-b",
+      multiplier: "0.5000",
+      rechargeRatioUsdPerRmb: "1.0000",
+      modelPrices: resolveDraftProviderPrices({ templateId: "tpl-1" }, templates, mockOfficialPrices)
+    };
+
+    const comparison = computeLowestModelsByProvider([providerA, providerB], tplPrices);
+    const compA = comparison.get("relay-a")?.get("gpt-5.6-sol");
+    const compB = comparison.get("relay-b")?.get("gpt-5.6-sol");
+
+    expect(compB?.isLowest).toBe(true);
+    expect(compB?.diffPercent).toBeNull();
+
+    expect(compA?.isLowest).toBe(false);
+    // (10.0 - 5.0) / 5.0 = 100%
+    expect(compA?.diffPercent).toBe("100%");
   });
 });
 

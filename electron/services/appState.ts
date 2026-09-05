@@ -13,6 +13,7 @@ import {
   MIGRATED_RELAY_PROVIDER_ID,
   OPENAI_OFFICIAL_PROVIDER_ID,
   validateOpenaiUsdPerRmb,
+  validatePricingTemplates,
   validateRelayPricingProviders
 } from "./pricing";
 import {
@@ -23,6 +24,7 @@ import {
 import type {
   CodexPluginConfigDTO,
   DashboardMetaDTO,
+  PricingTemplateDTO,
   RelayPricingProviderDTO,
   SyncPreviewDTO,
   SyncProgressDTO
@@ -44,6 +46,7 @@ export interface UiPreferencesState {
 export interface AppSettings {
   databasePath?: string | null;
   relayPricingProviders?: RelayPricingProviderDTO[];
+  pricingTemplates?: PricingTemplateDTO[];
   openaiUsdPerRmb?: number;
   modelPricingOverrides?: any[];
   pluginEnabled?: boolean;
@@ -105,14 +108,15 @@ export class AppState {
   }
 
   public repository(): UsageRepository {
-    const { relayPricingProviders, openaiUsdPerRmb } = this.pricingConfiguration();
+    const { relayPricingProviders, openaiUsdPerRmb, pricingTemplates } = this.pricingConfiguration();
     return new UsageRepository({
       codexHomePath: this.codexHomePath,
       databasePath: this.databaseConfig.path,
       timeZone: this.timeZone,
       parseVersion: this.parseVersion,
       relayPricingProviders,
-      openaiUsdPerRmb
+      openaiUsdPerRmb,
+      pricingTemplates
     });
   }
 
@@ -134,6 +138,7 @@ export class AppState {
       Array.isArray(this.settings.relayPricingVisibleModels)
         ? this.settings.relayPricingVisibleModels
         : null;
+    meta.pricingTemplates = this.settings.pricingTemplates ?? [];
   }
 
   public isSyncing(): boolean {
@@ -251,12 +256,17 @@ export class AppState {
 
   public setPricingProviders(
     relayPricingProviders: RelayPricingProviderDTO[],
-    openaiUsdPerRmb: number
+    openaiUsdPerRmb: number,
+    pricingTemplates?: PricingTemplateDTO[]
   ): void {
     if (this.syncRunning) {
       throw new Error("sync is already running");
     }
-    const validatedRelays = validateRelayPricingProviders(relayPricingProviders);
+    const validatedTemplates =
+      pricingTemplates !== undefined
+        ? validatePricingTemplates(pricingTemplates)
+        : (this.settings.pricingTemplates ?? []);
+    const validatedRelays = validateRelayPricingProviders(relayPricingProviders, validatedTemplates);
     const validatedUsdPerRmb = validateOpenaiUsdPerRmb(openaiUsdPerRmb);
 
     const selectedProviderId =
@@ -266,12 +276,14 @@ export class AppState {
       deployPluginFiles(
         this.codexHomePath,
         validatedRelays,
-        selectedProviderId
+        selectedProviderId,
+        validatedTemplates
       );
     } catch {}
 
     this.settings.relayPricingProviders = validatedRelays;
     this.settings.openaiUsdPerRmb = validatedUsdPerRmb;
+    this.settings.pricingTemplates = validatedTemplates;
     this.settings.modelPricingOverrides = [];
     this.saveSettings();
   }
@@ -292,12 +304,13 @@ export class AppState {
     enabled: boolean,
     selectedProviderId: string
   ): CodexPluginConfigDTO {
-    const { relayPricingProviders } = this.pricingConfiguration();
+    const { relayPricingProviders, pricingTemplates } = this.pricingConfiguration();
 
     deployPluginFiles(
       this.codexHomePath,
       relayPricingProviders,
-      selectedProviderId
+      selectedProviderId,
+      pricingTemplates
     );
 
     updateHooksJson(this.codexHomePath, enabled);
@@ -408,6 +421,7 @@ export class AppState {
   private pricingConfiguration(): {
     relayPricingProviders: RelayPricingProviderDTO[];
     openaiUsdPerRmb: number;
+    pricingTemplates: PricingTemplateDTO[];
   } {
     const ratio =
       typeof this.settings.openaiUsdPerRmb === "number" &&
@@ -418,7 +432,8 @@ export class AppState {
 
     return {
       relayPricingProviders: this.settings.relayPricingProviders ?? [],
-      openaiUsdPerRmb: ratio
+      openaiUsdPerRmb: ratio,
+      pricingTemplates: this.settings.pricingTemplates ?? []
     };
   }
 

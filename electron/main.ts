@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { autoUpdater } from "electron-updater";
 import { AppState } from "./services/appState";
-import type { RelayPricingProviderDTO, SyncProgressDTO } from "../src/dto/dashboard";
+import type { PricingTemplateDTO, RelayPricingProviderDTO, SyncProgressDTO } from "../src/dto/dashboard";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -302,10 +302,11 @@ function registerIpcHandlers(): void {
     async (
       _event,
       relayPricingProviders: RelayPricingProviderDTO[],
-      openaiUsdPerRmb: number
+      openaiUsdPerRmb: number,
+      pricingTemplates?: PricingTemplateDTO[]
     ) => {
       const state = getAppState();
-      state.setPricingProviders(relayPricingProviders, openaiUsdPerRmb);
+      state.setPricingProviders(relayPricingProviders, openaiUsdPerRmb, pricingTemplates);
       const repo = state.repository();
       const payload = await repo.buildDashboardPayload(false);
       state.populateDashboardMeta(payload.meta);

@@ -3,6 +3,7 @@ import type {
   DailyUsageSummaryDTO,
   DashboardMetaDTO,
   DashboardPayloadDTO,
+  PricingTemplateDTO,
   RelayPricingProviderDTO,
   SyncPreviewDTO,
   SyncProgressDTO,
@@ -38,7 +39,8 @@ export interface ElectronAPI {
   resetDatabasePath: () => Promise<DashboardPayloadDTO>;
   setPricingProviders: (
     relayPricingProviders: RelayPricingProviderDTO[],
-    openaiUsdPerRmb: number
+    openaiUsdPerRmb: number,
+    pricingTemplates?: PricingTemplateDTO[]
   ) => Promise<DashboardPayloadDTO>;
   getPluginConfig: () => Promise<CodexPluginConfigDTO>;
   setPluginConfig: (

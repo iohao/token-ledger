@@ -6,6 +6,7 @@ import type {
   MonthlyUsageSummaryDTO,
   PricingComparisonDTO,
   PricingProviderDTO,
+  PricingTemplateDTO,
   RelayPricingProviderDTO,
   SyncPreviewDTO,
   SyncProgressDTO,
@@ -73,7 +74,8 @@ const DEMO_META: DashboardMetaDTO = {
       multiplier: 0.8,
       modelPrices: []
     }
-  ]
+  ],
+  pricingTemplates: []
 };
 
 function pricingRates(values: [number, number, number, number]): ModelPricingRatesDTO {
@@ -319,19 +321,39 @@ export function resetDemoDatabasePath(): DashboardPayloadDTO {
 
 export function updateDemoPricingProviders(
   relayPricingProviders: RelayPricingProviderDTO[],
-  openaiUsdPerRmb: number
+  openaiUsdPerRmb: number,
+  pricingTemplates: PricingTemplateDTO[] = []
 ): DashboardPayloadDTO {
+  const templates = pricingTemplates ?? demoPayload.meta.pricingTemplates ?? [];
+  const official = demoPayload.meta.pricingProviders.find((p) => p.kind === "official");
+  const officialPrices = official?.modelPrices ?? [];
+
+  const resolvedRelays: PricingProviderDTO[] = relayPricingProviders.map((provider) => {
+    let effectivePrices = provider.modelPrices ?? [];
+    if (provider.templateId === "openai-official") {
+      effectivePrices = officialPrices;
+    } else if (provider.templateId && provider.templateId !== "custom") {
+      const template = templates.find((t) => t.id === provider.templateId);
+      if (template) {
+        effectivePrices = template.modelPrices;
+      }
+    }
+    return {
+      ...provider,
+      kind: "relay" as const,
+      modelPrices: effectivePrices
+    };
+  });
+
   demoPayload = {
     ...demoPayload,
     meta: {
       ...demoPayload.meta,
-      pricingProviders: demoPayload.meta.pricingProviders.map((provider) =>
-        provider.kind === "official"
-          ? { ...provider, rechargeRatioUsdPerRmb: openaiUsdPerRmb }
-          : provider
-      ).filter((provider) => provider.kind === "official").concat(
-        relayPricingProviders.map((provider) => ({ ...provider, kind: "relay" as const }))
-      )
+      pricingTemplates: templates,
+      pricingProviders: [
+        ...(official ? [{ ...official, rechargeRatioUsdPerRmb: openaiUsdPerRmb }] : []),
+        ...resolvedRelays
+      ]
     }
   };
 

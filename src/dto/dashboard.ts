@@ -36,12 +36,19 @@ export interface ProviderModelPricingDTO {
   rates: ModelPricingRatesDTO;
 }
 
+export interface PricingTemplateDTO {
+  id: string;
+  name: string;
+  modelPrices: ProviderModelPricingDTO[];
+}
+
 export interface RelayPricingProviderDTO {
   id: string;
   name: string;
   enabled: boolean;
   rechargeRatioUsdPerRmb: number | null;
   multiplier?: number | null;
+  templateId?: string | null;
   modelPrices?: ProviderModelPricingDTO[];
 }
 
@@ -129,6 +136,7 @@ export interface DashboardMetaDTO {
   timeZone: string;
   parseVersion: number;
   pricingProviders: PricingProviderDTO[];
+  pricingTemplates?: PricingTemplateDTO[];
   locale?: string | null;
   themeMode?: string | null;
   showPageSourceIds?: boolean | null;
