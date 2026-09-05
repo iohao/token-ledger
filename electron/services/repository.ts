@@ -261,6 +261,80 @@ export function matchPricingProvider(
   return null;
 }
 
+export function getActualSpendProviderPrice(item: {
+  multiplier?: string | number | null;
+  rechargeRatioUsdPerRmb?: string | number | null;
+  effectiveCost?: number | null;
+}): number | null {
+  if (item.effectiveCost !== undefined && item.effectiveCost !== null) {
+    return Number.isFinite(item.effectiveCost) && item.effectiveCost > 0
+      ? item.effectiveCost
+      : null;
+  }
+  const multiplier =
+    item.multiplier === undefined || item.multiplier === null || item.multiplier === ""
+      ? 1.0
+      : typeof item.multiplier === "number"
+        ? item.multiplier > 0 && Number.isFinite(item.multiplier)
+          ? item.multiplier
+          : null
+        : Number.parseFloat(String(item.multiplier));
+
+  const ratio =
+    typeof item.rechargeRatioUsdPerRmb === "number"
+      ? item.rechargeRatioUsdPerRmb > 0 && Number.isFinite(item.rechargeRatioUsdPerRmb)
+        ? item.rechargeRatioUsdPerRmb
+        : null
+      : Number.parseFloat(String(item.rechargeRatioUsdPerRmb ?? ""));
+
+  if (
+    multiplier === null ||
+    !Number.isFinite(multiplier) ||
+    multiplier <= 0 ||
+    ratio === null ||
+    !Number.isFinite(ratio) ||
+    ratio <= 0
+  ) {
+    return null;
+  }
+
+  const cost = multiplier / ratio;
+  return Number.isFinite(cost) && cost > 0 ? cost : null;
+}
+
+export function compareActualSpendProviders<
+  T extends {
+    providerName?: string;
+    name?: string;
+    multiplier?: string | number | null;
+    rechargeRatioUsdPerRmb?: string | number | null;
+    effectiveCost?: number | null;
+  }
+>(a: T, b: T): number {
+  const priceA = getActualSpendProviderPrice(a);
+  const priceB = getActualSpendProviderPrice(b);
+
+  const nameA = a.providerName ?? a.name ?? "";
+  const nameB = b.providerName ?? b.name ?? "";
+
+  // 价格越高的越在后面 (升序: 便宜的在前，贵的在后)
+  if (priceA !== null && priceB !== null) {
+    if (Math.abs(priceA - priceB) > 1e-9) {
+      return priceA - priceB;
+    }
+    return nameA.localeCompare(nameB);
+  }
+
+  if (priceA !== null) {
+    return -1;
+  }
+  if (priceB !== null) {
+    return 1;
+  }
+
+  return nameA.localeCompare(nameB);
+}
+
 export class UsageRepository {
   public readonly codexHomePath: string;
   public readonly databasePath: string;
@@ -832,6 +906,16 @@ export class UsageRepository {
           entry.matchedProvider?.name ??
           (codexProvider === "unknown" ? "未知渠道" : codexProvider);
 
+        const multiplier =
+          entry.matchedProvider?.multiplier ?? (entry.matchedProvider ? 1.0 : null);
+        const rechargeRatio =
+          entry.matchedProvider?.rechargeRatioUsdPerRmb ??
+          (entry.matchedProvider?.kind === "official" ? this.openaiUsdPerRmb : null);
+        const effectiveCost =
+          multiplier !== null && rechargeRatio !== null && rechargeRatio > 0
+            ? multiplier / rechargeRatio
+            : null;
+
         dailyProviders.push({
           providerId: entry.matchedProvider?.id ?? null,
           providerName,
@@ -841,11 +925,14 @@ export class UsageRepository {
           outputTokens: entry.totals.outputTokens,
           totalTokens: entry.totals.totalTokens,
           costUsd: entry.costUsd,
-          costCny: entry.costCny
+          costCny: entry.costCny,
+          multiplier,
+          rechargeRatioUsdPerRmb: rechargeRatio,
+          effectiveCost
         });
       }
 
-      dailyProviders.sort((a, b) => (b.costCny ?? 0) - (a.costCny ?? 0));
+      dailyProviders.sort(compareActualSpendProviders);
 
       return {
         dateKey,

@@ -1051,24 +1051,6 @@ const RelayProviderCard: React.FC<{
           disabled={controlsDisabled}
           onChange={(value) => onUpdate(provider.id, (item) => ({ ...item, multiplier: value }))}
         />
-        <div className="relay-config-field">
-          <label className="relay-field-label" htmlFor={`relay-codex-id-${provider.id}`}>
-            {t("relayPricingCodexProviderId")}
-          </label>
-          <div className="relay-field-input-wrap">
-            <input
-              id={`relay-codex-id-${provider.id}`}
-              type="text"
-              className="relay-plain-input"
-              value={provider.codexProviderId ?? ""}
-              placeholder={t("relayPricingCodexProviderIdPlaceholder")}
-              onChange={(event) =>
-                onUpdate(provider.id, (item) => ({ ...item, codexProviderId: event.target.value }))
-              }
-              disabled={controlsDisabled}
-            />
-          </div>
-        </div>
         <div className="relay-config-field relay-benchmark-field">
           <label className="relay-field-label" htmlFor={`relay-template-${provider.id}`}>
             {t("relayPricingBenchmarkSource")}

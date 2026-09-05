@@ -3,6 +3,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {
+  compareActualSpendProviders,
+  getActualSpendProviderPrice,
   matchPricingProvider,
   parseCodexConfigTomlProviders,
   UsageRepository
@@ -159,6 +161,11 @@ base_url = "https://www.fucheers.top/v1"
 
         // total day cost = 1.05 + 1.0 = 2.05
         expect(day0904.totalCostCny).toBeCloseTo(2.05, 2);
+
+        // Sorting check: RelayPricingView price krill (0.2 / 1 = 0.20) is cheaper than fucheers (2.1 / 10 = 0.21)
+        // 价格越高的越在后面: krill (0.20) is first, fucheers (0.21) is second
+        expect(day0904.providers[0]?.providerName).toBe("krill");
+        expect(day0904.providers[1]?.providerName).toBe("fucheers");
       }
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });

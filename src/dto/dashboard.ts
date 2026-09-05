@@ -155,6 +155,9 @@ export interface DailyProviderActualSpendDTO {
   totalTokens: number;
   costUsd: number;
   costCny: number | null;
+  multiplier?: number | null;
+  rechargeRatioUsdPerRmb?: number | null;
+  effectiveCost?: number | null;
 }
 
 export interface DailyActualSpendDTO {

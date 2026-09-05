@@ -3,20 +3,100 @@ import { ReceiptText } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useApp } from "../context/AppContext";
 import { AlignedTokenCount } from "./DailyDetailTable";
-import type { DailyActualSpendDTO } from "../dto/dashboard";
+import type { DailyActualSpendDTO, PricingProviderDTO } from "../dto/dashboard";
 import { formatCny, formatCurrency, formatDateLabel, formatInteger } from "../utils/format";
+import { getProviderEffectiveCost } from "../views/RelayPricingView";
+
+export function resolveActualSpendProviderPrice(
+  item: {
+    providerId?: string | null;
+    providerName?: string;
+    name?: string;
+    codexProvider?: string;
+    multiplier?: string | number | null;
+    rechargeRatioUsdPerRmb?: string | number | null;
+    effectiveCost?: number | null;
+  },
+  pricingProviders?: PricingProviderDTO[]
+): number | null {
+  if (pricingProviders && pricingProviders.length > 0) {
+    const matched =
+      (item.providerId ? pricingProviders.find((p) => p.id === item.providerId) : null) ??
+      pricingProviders.find(
+        (p) =>
+          p.name.trim().toLowerCase() === (item.providerName ?? item.name ?? "").trim().toLowerCase()
+      ) ??
+      (item.codexProvider
+        ? pricingProviders.find(
+            (p) =>
+              p.codexProviderId &&
+              p.codexProviderId.trim().toLowerCase() === item.codexProvider!.trim().toLowerCase()
+          )
+        : null);
+
+    if (matched) {
+      return getProviderEffectiveCost(matched);
+    }
+  }
+
+  if (item.effectiveCost !== undefined && item.effectiveCost !== null) {
+    return Number.isFinite(item.effectiveCost) && item.effectiveCost > 0
+      ? item.effectiveCost
+      : null;
+  }
+
+  return getProviderEffectiveCost(item);
+}
+
+export function compareActualSpendProviders<
+  T extends {
+    providerId?: string | null;
+    providerName?: string;
+    name?: string;
+    codexProvider?: string;
+    multiplier?: string | number | null;
+    rechargeRatioUsdPerRmb?: string | number | null;
+    effectiveCost?: number | null;
+  }
+>(a: T, b: T, pricingProviders?: PricingProviderDTO[]): number {
+  const priceA = resolveActualSpendProviderPrice(a, pricingProviders);
+  const priceB = resolveActualSpendProviderPrice(b, pricingProviders);
+
+  const nameA = a.providerName ?? a.name ?? "";
+  const nameB = b.providerName ?? b.name ?? "";
+
+  // 价格越高的越在后面 (升序: 便宜的在前端，价格越高的越在后面)
+  if (priceA !== null && priceB !== null) {
+    if (Math.abs(priceA - priceB) > 1e-9) {
+      return priceA - priceB;
+    }
+    return nameA.localeCompare(nameB);
+  }
+
+  if (priceA !== null) {
+    return -1;
+  }
+  if (priceB !== null) {
+    return 1;
+  }
+
+  return nameA.localeCompare(nameB);
+}
 
 export interface ActualSpendLedgerProps {
   rows: DailyActualSpendDTO[];
   timeZone: string;
+  pricingProviders?: PricingProviderDTO[];
 }
 
 export const ActualSpendLedger: React.FC<ActualSpendLedgerProps> = ({
   rows,
-  timeZone
+  timeZone,
+  pricingProviders
 }) => {
   const { t } = useTranslation();
-  const { locale } = useApp();
+  const { locale, dashboard } = useApp();
+  const effectivePricingProviders = pricingProviders ?? dashboard?.meta.pricingProviders ?? [];
 
   const grandTotalCny = rows.reduce((acc, row) => acc + row.totalCostCny, 0);
   const grandTotalUsd = rows.reduce((acc, row) => acc + row.totalCostUsd, 0);
@@ -27,10 +107,15 @@ export const ActualSpendLedger: React.FC<ActualSpendLedgerProps> = ({
     string,
     {
       name: string;
-      costCny: number;
+      providerId: string | null;
+      codexProvider: string;
+      costCny: number | null;
       costUsd: number;
       tokens: number;
       sessionCount: number;
+      multiplier?: number | null;
+      rechargeRatioUsdPerRmb?: number | null;
+      effectiveCost?: number | null;
     }
   >();
 
@@ -39,24 +124,35 @@ export const ActualSpendLedger: React.FC<ActualSpendLedgerProps> = ({
       const key = p.providerName || p.codexProvider;
       const existing = providerTotalsMap.get(key);
       if (existing) {
-        existing.costCny += p.costCny ?? 0;
+        if (p.costCny !== null) {
+          existing.costCny = (existing.costCny ?? 0) + p.costCny;
+        }
         existing.costUsd += p.costUsd;
         existing.tokens += p.totalTokens;
         existing.sessionCount += p.sessionCount;
+        if (!existing.providerId && p.providerId) existing.providerId = p.providerId;
+        if (p.effectiveCost !== undefined && p.effectiveCost !== null) existing.effectiveCost = p.effectiveCost;
+        if (p.multiplier !== undefined && p.multiplier !== null) existing.multiplier = p.multiplier;
+        if (p.rechargeRatioUsdPerRmb !== undefined && p.rechargeRatioUsdPerRmb !== null) existing.rechargeRatioUsdPerRmb = p.rechargeRatioUsdPerRmb;
       } else {
         providerTotalsMap.set(key, {
           name: p.providerName,
-          costCny: p.costCny ?? 0,
+          providerId: p.providerId,
+          codexProvider: p.codexProvider,
+          costCny: p.costCny,
           costUsd: p.costUsd,
           tokens: p.totalTokens,
-          sessionCount: p.sessionCount
+          sessionCount: p.sessionCount,
+          multiplier: p.multiplier,
+          rechargeRatioUsdPerRmb: p.rechargeRatioUsdPerRmb,
+          effectiveCost: p.effectiveCost
         });
       }
     }
   }
 
   const providerTotals = Array.from(providerTotalsMap.values()).sort(
-    (a, b) => b.costCny - a.costCny
+    (a, b) => compareActualSpendProviders(a, b, effectivePricingProviders)
   );
 
   return (
@@ -88,7 +184,9 @@ export const ActualSpendLedger: React.FC<ActualSpendLedgerProps> = ({
             {providerTotals.map((pt) => (
               <div key={pt.name} className="actual-spend-chip">
                 <span className="actual-spend-chip-name">{pt.name}</span>
-                <strong className="actual-spend-chip-amount">{formatCny(pt.costCny, locale)}</strong>
+                <strong className="actual-spend-chip-amount">
+                  {pt.costCny !== null ? formatCny(pt.costCny, locale) : "—"}
+                </strong>
                 <div className="actual-spend-chip-backend">
                   <span className="actual-spend-chip-backend-tag">{t("actualSpendBackendShort")}</span>
                   <span className="actual-spend-chip-backend-val">{formatCurrency(pt.costUsd, locale)}</span>
@@ -131,7 +229,9 @@ export const ActualSpendLedger: React.FC<ActualSpendLedgerProps> = ({
                   <td>
                     {hasActivity ? (
                       <div className="actual-spend-badges-wrap">
-                        {row.providers.map((p) => {
+                        {[...row.providers]
+                          .sort((a, b) => compareActualSpendProviders(a, b, effectivePricingProviders))
+                          .map((p) => {
                           const tooltipText = t("actualSpendBadgeTooltip", {
                             provider: p.providerName,
                             cny: p.costCny !== null ? formatCny(p.costCny, locale) : "—",
@@ -197,7 +297,7 @@ export const ActualSpendLedger: React.FC<ActualSpendLedgerProps> = ({
                   {providerTotals.map((pt) => (
                     <span key={pt.name} className="actual-spend-footer-chip">
                       <span className="actual-spend-footer-chip-name">{pt.name}:</span>{" "}
-                      <strong>{formatCny(pt.costCny, locale)}</strong>{" "}
+                      <strong>{pt.costCny !== null ? formatCny(pt.costCny, locale) : "—"}</strong>{" "}
                       <span className="actual-spend-footer-chip-backend">
                         ({t("actualSpendBackendShort")} {formatCurrency(pt.costUsd, locale)})
                       </span>

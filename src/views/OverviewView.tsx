@@ -180,6 +180,7 @@ export const OverviewView: React.FC = () => {
         <ActualSpendLedger
           rows={dashboard?.actualSpendHistory ?? []}
           timeZone={timeZone}
+          pricingProviders={dashboard?.meta.pricingProviders}
         />
         <DailyDetailTable
           title={t("lastSevenDaysDisplay")}
