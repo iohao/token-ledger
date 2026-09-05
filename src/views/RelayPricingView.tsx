@@ -32,6 +32,44 @@ const DEFAULT_OPENAI_RATIO = "0.1400";
 const MIGRATED_RELAY_PROVIDER_ID = "migrated-relay";
 const RELAY_PRICING_SHOW_OFFICIAL_STORAGE_KEY = "tokenledger.relayPricing.showOfficial";
 const RELAY_PRICING_VISIBLE_MODELS_STORAGE_KEY = "tokenledger.relayPricing.visibleModels";
+const RELAY_PRICING_KNOWN_MODELS_STORAGE_KEY = "tokenledger.relayPricing.knownModels";
+
+export const PREVIOUS_KNOWN_OFFICIAL_MODELS: readonly string[] = [
+  "gpt-5.6-sol",
+  "gpt-5.6-terra",
+  "gpt-5.6-luna",
+  "gpt-5.5",
+  "gpt-5.4",
+  "gpt-5.4-mini",
+  "gpt-5.3-codex",
+  "gpt-5.3-codex-spark"
+];
+
+export function reconcileVisibleModels(
+  savedVisible: string[] | null | undefined,
+  savedKnown: string[] | null | undefined,
+  officialModels: string[]
+): { visibleModels: Set<string>; knownModels: string[] } {
+  if (!savedVisible) {
+    return {
+      visibleModels: new Set(officialModels),
+      knownModels: [...officialModels]
+    };
+  }
+
+  const knownSet = new Set(savedKnown ?? PREVIOUS_KNOWN_OFFICIAL_MODELS);
+  const nextVisible = new Set(savedVisible);
+  for (const model of officialModels) {
+    if (!knownSet.has(model)) {
+      nextVisible.add(model);
+    }
+  }
+
+  return {
+    visibleModels: nextVisible,
+    knownModels: Array.from(new Set([...knownSet, ...officialModels]))
+  };
+}
 const PRICE_FIELDS: Array<{ key: keyof ModelPricingRatesDTO; label: string }> = [
   { key: "inputUsdPerMillion", label: "relayPricingInput" },
   { key: "outputUsdPerMillion", label: "relayPricingOutput" },
@@ -382,24 +420,52 @@ export const RelayPricingView: React.FC = () => {
     }
   });
   const [visibleModels, setVisibleModels] = useState<Set<string>>(() => {
+    let saved: string[] | null = null;
     if (Array.isArray(dashboard?.meta.relayPricingVisibleModels)) {
-      return new Set(dashboard.meta.relayPricingVisibleModels.map(String));
-    }
-    try {
-      const raw = localStorage.getItem(RELAY_PRICING_VISIBLE_MODELS_STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) {
-          return new Set(parsed.map(String));
+      saved = dashboard.meta.relayPricingVisibleModels.map(String);
+    } else {
+      try {
+        const raw = localStorage.getItem(RELAY_PRICING_VISIBLE_MODELS_STORAGE_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) {
+            saved = parsed.map(String);
+          }
         }
+      } catch {
+        // ignore
       }
-    } catch {
-      // ignore
+    }
+
+    if (saved && officialModels.length > 0) {
+      let savedKnown: string[] | null = null;
+      try {
+        const rawKnown = localStorage.getItem(RELAY_PRICING_KNOWN_MODELS_STORAGE_KEY);
+        if (rawKnown) {
+          const parsed = JSON.parse(rawKnown);
+          if (Array.isArray(parsed)) {
+            savedKnown = parsed.map(String);
+          }
+        }
+      } catch {
+        // ignore
+      }
+      const reconciled = reconcileVisibleModels(saved, savedKnown, officialModels);
+      try {
+        localStorage.setItem(
+          RELAY_PRICING_KNOWN_MODELS_STORAGE_KEY,
+          JSON.stringify(reconciled.knownModels)
+        );
+      } catch {
+        // ignore
+      }
+      return reconciled.visibleModels;
+    }
+
+    if (saved) {
+      return new Set(saved);
     }
     return new Set<string>();
-  });
-  const [hasInitializedVisibleModels, setHasInitializedVisibleModels] = useState(() => {
-    return Array.isArray(dashboard?.meta.relayPricingVisibleModels);
   });
   const [isDirty, setIsDirty] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -425,32 +491,60 @@ export const RelayPricingView: React.FC = () => {
   }, [dashboard?.meta.relayPricingShowOfficial]);
 
   useEffect(() => {
-    if (hasInitializedVisibleModels) {
+    if (officialModels.length === 0) {
       return;
     }
+
+    let saved: string[] | null = null;
     if (Array.isArray(dashboard?.meta.relayPricingVisibleModels)) {
-      setVisibleModels(new Set(dashboard.meta.relayPricingVisibleModels.map(String)));
-      setHasInitializedVisibleModels(true);
-      return;
-    }
-    if (officialModels.length > 0) {
+      saved = dashboard.meta.relayPricingVisibleModels.map(String);
+    } else {
       try {
         const raw = localStorage.getItem(RELAY_PRICING_VISIBLE_MODELS_STORAGE_KEY);
         if (raw) {
           const parsed = JSON.parse(raw);
           if (Array.isArray(parsed)) {
-            setVisibleModels(new Set(parsed.map(String)));
-            setHasInitializedVisibleModels(true);
-            return;
+            saved = parsed.map(String);
           }
         }
       } catch {
         // ignore
       }
-      setVisibleModels(new Set(officialModels));
-      setHasInitializedVisibleModels(true);
     }
-  }, [dashboard?.meta.relayPricingVisibleModels, officialModels, hasInitializedVisibleModels]);
+
+    let savedKnown: string[] | null = null;
+    try {
+      const rawKnown = localStorage.getItem(RELAY_PRICING_KNOWN_MODELS_STORAGE_KEY);
+      if (rawKnown) {
+        const parsed = JSON.parse(rawKnown);
+        if (Array.isArray(parsed)) {
+          savedKnown = parsed.map(String);
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    const reconciled = reconcileVisibleModels(saved, savedKnown, officialModels);
+    try {
+      localStorage.setItem(
+        RELAY_PRICING_KNOWN_MODELS_STORAGE_KEY,
+        JSON.stringify(reconciled.knownModels)
+      );
+      if (saved && reconciled.visibleModels.size !== new Set(saved).size) {
+        const modelArray = Array.from(reconciled.visibleModels);
+        localStorage.setItem(
+          RELAY_PRICING_VISIBLE_MODELS_STORAGE_KEY,
+          JSON.stringify(modelArray)
+        );
+        void updateUiPreferences({ relayPricingVisibleModels: modelArray }).catch(() => {});
+      }
+    } catch {
+      // ignore
+    }
+
+    setVisibleModels(reconciled.visibleModels);
+  }, [dashboard?.meta.relayPricingVisibleModels, officialModels]);
 
   const handleToggleModelVisibility = (model: string, visible: boolean) => {
     setVisibleModels((current) => {
@@ -465,6 +559,11 @@ export const RelayPricingView: React.FC = () => {
         localStorage.setItem(
           RELAY_PRICING_VISIBLE_MODELS_STORAGE_KEY,
           JSON.stringify(modelArray)
+        );
+        const currentKnown = new Set(officialModels);
+        localStorage.setItem(
+          RELAY_PRICING_KNOWN_MODELS_STORAGE_KEY,
+          JSON.stringify(Array.from(currentKnown))
         );
       } catch {
         // ignore

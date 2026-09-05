@@ -14,6 +14,7 @@ export const MIGRATED_RELAY_PROVIDER_ID = "migrated-relay";
 export const DEFAULT_OPENAI_USD_PER_RMB = 0.14;
 
 export const OFFICIAL_MODELS: readonly string[] = [
+  "gpt-6-astra",
   "gpt-5.6-sol",
   "gpt-5.6-terra",
   "gpt-5.6-luna",
@@ -77,11 +78,16 @@ export function pricingIdentity(model: string): string {
   if (normalized === "gpt-5.6") {
     return "gpt-5.6-sol";
   }
+  if (normalized === "gpt-6") {
+    return "gpt-6-astra";
+  }
   return normalized;
 }
 
 export function officialPricingFor(model: string): ModelPricingRatesDTO | null {
   switch (pricingIdentity(model)) {
+    case "gpt-6-astra":
+      return rates(8.0, 48.0, 0.8, 10.0);
     case "gpt-5.6-sol":
       return rates(5.0, 30.0, 0.5, 6.25);
     case "gpt-5.6-terra":

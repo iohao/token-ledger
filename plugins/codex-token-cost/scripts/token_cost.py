@@ -43,6 +43,8 @@ def normalize_model(raw_value: str) -> str:
         return "gpt-5.3-codex"
     if normalized == "gpt-5.6":
         return "gpt-5.6-sol"
+    if normalized == "gpt-6":
+        return "gpt-6-astra"
     return normalized
 
 

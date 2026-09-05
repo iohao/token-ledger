@@ -38,6 +38,7 @@ describe("pricing service", () => {
   it("normalizes models correctly", () => {
     expect(normalizeModel("openai/gpt-5.4-2026-04-01")).toBe("gpt-5.4");
     expect(normalizeModel("openrouter/openai/gpt-5.6-sol")).toBe("gpt-5.6-sol");
+    expect(normalizeModel("openai/gpt-6-astra-2026-09-01")).toBe("gpt-6-astra");
     expect(normalizeModel("gpt-5-codex")).toBe("gpt-5.3-codex");
     expect(normalizeModel("gpt-5.2-codex")).toBe("gpt-5.3-codex");
   });
@@ -49,6 +50,13 @@ describe("pricing service", () => {
     );
     // regular input: 800k * 5 = 4.0, cached: 200k * 0.5 = 0.1, output: 100k * 30 = 3.0. Total = 7.1
     expect(Math.abs(cost - 7.1)).toBeLessThan(0.000001);
+
+    const costAstra = costFor(
+      totals(1_000_000, 200_000, 0, 100_000),
+      "openai/gpt-6-astra"
+    );
+    // regular input: 800k * 8.0 = 6.4, cached: 200k * 0.8 = 0.16, output: 100k * 48.0 = 4.8. Total = 11.36
+    expect(Math.abs(costAstra - 11.36)).toBeLessThan(0.000001);
   });
 
   it("provider pricing falls back to official for missing models", () => {
