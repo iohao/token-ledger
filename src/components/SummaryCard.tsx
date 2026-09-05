@@ -10,6 +10,7 @@ import { useApp } from "../context/AppContext";
 import { AnimatedNumber } from "./AnimatedNumber";
 import {
   formatCny,
+  formatCurrency,
   formatInteger,
   formatPriceDiffPercent,
   formatTokenCount,
@@ -216,16 +217,44 @@ export const SummaryCard: React.FC<SummaryCardProps> = ({
                       </span>
                     )}
                   </div>
-                  <div className="summary-provider-cost">
+                  <div
+                    className="summary-provider-cost"
+                    title={
+                      row.isComplete && row.costCny !== null
+                        ? t("providerCostTooltip", {
+                            provider: row.provider.name,
+                            cny: formatCny(row.costCny, locale),
+                            usd: row.costUsd !== null ? formatCurrency(row.costUsd, locale) : "—"
+                          })
+                        : undefined
+                    }
+                  >
                     {row.isComplete && row.costCny !== null ? (
-                      <strong
-                        className={`summary-provider-cny${isLowest ? " is-lowest" : ""}`}
-                      >
-                        <AnimatedNumber
-                          value={row.costCny}
-                          formatter={(val) => formatCny(val, locale)}
-                        />
-                      </strong>
+                      <span className="summary-provider-prices">
+                        <strong
+                          className={`summary-provider-cny${isLowest ? " is-lowest" : ""}`}
+                        >
+                          <AnimatedNumber
+                            value={row.costCny}
+                            formatter={(val) => formatCny(val, locale)}
+                          />
+                        </strong>
+                        <span className="summary-provider-slash" aria-hidden="true">
+                          /
+                        </span>
+                        <span
+                          className={`summary-provider-usd${isLowest ? " is-lowest" : ""}`}
+                        >
+                          {row.costUsd !== null ? (
+                            <AnimatedNumber
+                              value={row.costUsd}
+                              formatter={(val) => formatCurrency(val, locale)}
+                            />
+                          ) : (
+                            "—"
+                          )}
+                        </span>
+                      </span>
                     ) : (
                       <span
                         className="summary-provider-incomplete"

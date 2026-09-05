@@ -1124,6 +1124,15 @@ select {
   font-variant-numeric: tabular-nums;
 }
 
+.summary-provider-prices {
+  display: inline-flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 3px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
 .summary-provider-cny {
   font-family: var(--mono-font);
   font-weight: 550;
@@ -1140,6 +1149,26 @@ select {
 
 [data-theme="light"] .summary-provider-cny.is-lowest {
   color: #16624c;
+}
+
+.summary-provider-slash {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  opacity: 0.55;
+  user-select: none;
+}
+
+.summary-provider-usd {
+  font-family: var(--mono-font);
+  font-weight: 500;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.summary-provider-usd.is-lowest {
+  color: var(--text-secondary);
 }
 
 .summary-provider-diff {

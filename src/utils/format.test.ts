@@ -1,5 +1,4 @@
-import { describe, expect, it } from "bun:test";
-import { formatPriceDiffPercent } from "./format";
+import { formatActualVsBackendCost, formatPriceDiffPercent } from "./format";
 
 describe("formatPriceDiffPercent", () => {
   it("returns null for invalid or negative inputs", () => {
@@ -30,5 +29,32 @@ describe("formatPriceDiffPercent", () => {
   it("returns null when cost is equal to or less than lowest cost", () => {
     expect(formatPriceDiffPercent(25.86, 25.86)).toBeNull();
     expect(formatPriceDiffPercent(20.00, 25.86)).toBeNull();
+  });
+});
+
+describe("formatActualVsBackendCost", () => {
+  it("returns null when costCny is null", () => {
+    expect(formatActualVsBackendCost(null, 5.0, "zh-CN")).toBeNull();
+  });
+
+  it("formats actual (CNY) and backend price (USD) correctly in zh-CN", () => {
+    const result = formatActualVsBackendCost(1.05, 10.5, "zh-CN");
+    expect(result).not.toBeNull();
+    expect(result?.cny).toBe("¥1.05");
+    expect(result?.usd).toBe("$10.50");
+  });
+
+  it("formats actual (CNY) and handles null costUsd gracefully", () => {
+    const result = formatActualVsBackendCost(0.68, null, "zh-CN");
+    expect(result).not.toBeNull();
+    expect(result?.cny).toBe("¥0.68");
+    expect(result?.usd).toBe("—");
+  });
+
+  it("formats actual and backend price correctly in en-US", () => {
+    const result = formatActualVsBackendCost(2.5, 25.0, "en-US");
+    expect(result).not.toBeNull();
+    expect(result?.cny).toContain("2.50");
+    expect(result?.usd).toBe("$25.00");
   });
 });

@@ -135,6 +135,20 @@ export function formatCurrency(value: number, locale: Locale): string {
   return localeCurrencyFormatter(locale).format(value);
 }
 
+export function formatActualVsBackendCost(
+  costCny: number | null,
+  costUsd: number | null,
+  locale: Locale
+): { cny: string; usd: string } | null {
+  if (costCny === null) {
+    return null;
+  }
+  return {
+    cny: formatCny(costCny, locale),
+    usd: costUsd !== null ? formatCurrency(costUsd, locale) : "—"
+  };
+}
+
 export function formatByteCount(value: number, locale: Locale): string {
   const absolute = Math.abs(value);
 
