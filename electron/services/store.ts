@@ -206,6 +206,7 @@ export class UsageStore {
       this.db.exec("DELETE FROM source_sessions");
       this.db.exec("DELETE FROM daily_usage");
       this.db.exec("DELETE FROM monthly_usage");
+      this.db.exec("DELETE FROM sync_state WHERE key = 'sync_context'");
     });
     transaction();
   }
@@ -528,6 +529,29 @@ export class UsageStore {
     });
 
     transaction();
+  }
+
+  public rebuildAllAggregates(): void {
+    const rows = this.db
+      .prepare("SELECT DISTINCT usage_date FROM session_daily_usage")
+      .all() as { usage_date: string }[];
+    if (rows.length > 0) {
+      this.rebuildAggregatesForDateKeys(rows.map((r) => r.usage_date));
+    }
+  }
+
+  public ensureAggregates(): void {
+    const dailyCount = this.db
+      .prepare("SELECT count(*) as c FROM daily_usage")
+      .get() as { c: number } | undefined;
+    if (!dailyCount || dailyCount.c === 0) {
+      const sessionCount = this.db
+        .prepare("SELECT count(*) as c FROM session_daily_usage")
+        .get() as { c: number } | undefined;
+      if (sessionCount && sessionCount.c > 0) {
+        this.rebuildAllAggregates();
+      }
+    }
   }
 
   public listDailyRowsBetween(

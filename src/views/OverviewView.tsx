@@ -7,6 +7,7 @@ import { SummaryCard } from "../components/SummaryCard";
 import { ActivityWall } from "../components/ActivityWall";
 import { DailyDetailTable } from "../components/DailyDetailTable";
 import { ActualSpendLedger } from "../components/ActualSpendLedger";
+import { SyncProgressCard } from "../components/SyncProgressCard";
 import { AUTO_SYNC_OPTIONS, type PageSourceId } from "../types";
 import { formatCountdown, formatInteger, formatTimestamp, statusLabel, statusTone } from "../utils/format";
 
@@ -120,6 +121,8 @@ export const OverviewView: React.FC = () => {
         pageSourceId={OVERVIEW_PAGE_SOURCE_ID}
         actions={syncToolbar}
       />
+
+      <SyncProgressCard />
 
       <section
         className="hero ledger-rail panel"

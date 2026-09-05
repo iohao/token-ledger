@@ -64,6 +64,7 @@ export interface UsageRepositoryConfig {
   relayPricingProviders: RelayPricingProviderDTO[];
   openaiUsdPerRmb: number;
   pricingTemplates?: PricingTemplateDTO[];
+  isSyncRunning?: () => boolean;
 }
 
 function emptyTotals(): UsageTotalsDTO {
@@ -343,6 +344,7 @@ export class UsageRepository {
   private readonly relayPricingProviders: RelayPricingProviderDTO[];
   private readonly openaiUsdPerRmb: number;
   public readonly pricingTemplates: PricingTemplateDTO[];
+  private readonly isSyncRunning?: () => boolean;
   public readonly store: UsageStore;
 
   constructor(config: UsageRepositoryConfig) {
@@ -353,6 +355,7 @@ export class UsageRepository {
     this.relayPricingProviders = config.relayPricingProviders;
     this.openaiUsdPerRmb = config.openaiUsdPerRmb;
     this.pricingTemplates = config.pricingTemplates ?? [];
+    this.isSyncRunning = config.isSyncRunning;
     this.store = new UsageStore(this.databasePath);
   }
 
@@ -408,6 +411,7 @@ export class UsageRepository {
   public async buildDashboardPayload(
     includeSyncPreview: boolean
   ): Promise<DashboardPayloadDTO> {
+    this.store.ensureAggregates();
     const status = this.currentSyncStatus();
     const periods: UsagePeriod[] = ["today", "last7Days", "monthToDate"];
     const summaries = periods.map((period) =>
@@ -434,7 +438,17 @@ export class UsageRepository {
   }
 
   public currentSyncStatus(): SyncStatusDTO {
-    return this.store.loadSyncStatus();
+    const status = this.store.loadSyncStatus();
+    if (status.state === "syncing" && this.isSyncRunning && !this.isSyncRunning()) {
+      const repairedStatus: SyncStatusDTO = {
+        ...status,
+        state: "idle",
+        errorMessage: null
+      };
+      this.store.saveSyncStatus(repairedStatus);
+      return repairedStatus;
+    }
+    return status;
   }
 
   public dailyHistoryBetween(
@@ -690,7 +704,12 @@ export class UsageRepository {
       phase: "finalizing"
     });
 
-    this.store.rebuildAggregatesForDateKeys(Array.from(affectedDateKeys));
+    if (requiresRescan) {
+      this.store.rebuildAllAggregates();
+    } else {
+      this.store.rebuildAggregatesForDateKeys(Array.from(affectedDateKeys));
+      this.store.ensureAggregates();
+    }
     this.store.saveSyncContext({
       codexHomePath: this.codexHomePath,
       timeZone: this.timeZone,

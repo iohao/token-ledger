@@ -438,7 +438,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (payload.syncPreview !== null || resetSyncPreview) {
         setSyncPreview(payload.syncPreview);
       }
-      const isCurrentlySyncing = payload.status.state === "syncing";
+      const isCurrentlySyncing = payload.status.state === "syncing" && stateRef.current.isSyncing;
       setIsSyncing(isCurrentlySyncing);
       if (!isCurrentlySyncing) {
         setSyncProgress(null);
@@ -634,11 +634,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (payload.status.state === "failed" && payload.status.errorMessage) {
         setErrorMessage(translateErrorMessage(stateRef.current.locale, payload.status.errorMessage));
       }
-      if (stateRef.current.isSyncing) {
+      const syncRunning = await isSyncRunning();
+      if (syncRunning) {
+        setIsSyncing(true);
         const progress = await fetchCurrentSyncProgress();
         setSyncProgress(progress);
         scheduleSyncStatusPoll();
       } else {
+        setIsSyncing(false);
         clearSyncStatusPoll();
         shouldRefreshSyncPreview = true;
       }

@@ -101,6 +101,13 @@ export class AppState {
       process.env.TZ?.trim() ||
       Intl.DateTimeFormat().resolvedOptions().timeZone ||
       "UTC";
+
+    // Recover from any stale/interrupted sync status on launch
+    try {
+      const repo = this.repository();
+      repo.currentSyncStatus();
+      repo.store.close();
+    } catch {}
   }
 
   public static detect(): AppState {
@@ -116,7 +123,8 @@ export class AppState {
       parseVersion: this.parseVersion,
       relayPricingProviders,
       openaiUsdPerRmb,
-      pricingTemplates
+      pricingTemplates,
+      isSyncRunning: () => this.syncRunning
     });
   }
 

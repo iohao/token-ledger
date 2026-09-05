@@ -16,21 +16,55 @@ function removeTempDir(tempDir: string): void {
 
 describe("appState service", () => {
   it("initializes and handles sync lifecycle", () => {
-    const appState = AppState.detect();
-    expect(appState.isSyncing()).toBe(false);
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "appstate-lifecycle-test-"));
+    const prevCodexHome = process.env.CODEX_HOME;
+    process.env.CODEX_HOME = tempDir;
 
-    const started = appState.tryBeginSync();
-    expect(started).toBe(true);
-    expect(appState.isSyncing()).toBe(true);
-    expect(appState.currentSyncProgress()?.phase).toBe("preparing");
+    try {
+      const appState = AppState.detect();
+      expect(appState.isSyncing()).toBe(false);
 
-    // Cannot start sync twice
-    const startedTwice = appState.tryBeginSync();
-    expect(startedTwice).toBe(false);
+      const started = appState.tryBeginSync();
+      expect(started).toBe(true);
+      expect(appState.isSyncing()).toBe(true);
+      expect(appState.currentSyncProgress()?.phase).toBe("preparing");
 
-    appState.finishSync();
-    expect(appState.isSyncing()).toBe(false);
-    expect(appState.currentSyncProgress()).toBeNull();
+      // Cannot start sync twice
+      const startedTwice = appState.tryBeginSync();
+      expect(startedTwice).toBe(false);
+
+      appState.finishSync();
+      expect(appState.isSyncing()).toBe(false);
+      expect(appState.currentSyncProgress()).toBeNull();
+
+      // Simulate a crashed sync leaving state='syncing' in the database
+      const repo = appState.repository();
+      repo.store.saveSyncStatus({
+        state: "syncing",
+        lastSyncedAt: null,
+        errorMessage: null,
+        coverageThrough: null,
+        coverageGranularity: "minute",
+        scannedFiles: 0,
+        sessionCount: 0,
+        dataSource: null
+      });
+      repo.store.close();
+
+      // Detecting new AppState when not syncing should auto-repair the status to idle
+      const restartedAppState = AppState.detect();
+      const repairedStatus = restartedAppState.repository().currentSyncStatus();
+      expect(repairedStatus.state).toBe("idle");
+      expect(restartedAppState.isSyncing()).toBe(false);
+      restartedAppState.repository().store.close();
+    } finally {
+      if (prevCodexHome !== undefined) {
+        process.env.CODEX_HOME = prevCodexHome;
+      } else {
+        delete process.env.CODEX_HOME;
+      }
+      removeTempDir(tempDir);
+    }
   });
 
   it("persists and restores UI preferences in settings.json", () => {

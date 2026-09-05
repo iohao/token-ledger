@@ -123,6 +123,21 @@ describe("store service", () => {
 
       const dateKeys = store.listDateKeysForSessions(["session-a"]);
       expect(dateKeys).toEqual(["2026-04-09", "2026-04-10"]);
+
+      // Test ensureAggregates when daily_usage is wiped
+      store["db"].exec("DELETE FROM daily_usage");
+      store["db"].exec("DELETE FROM monthly_usage");
+      expect(store.listDailyRowsBetween("2026-04-09", "2026-04-10").length).toBe(0);
+
+      store.ensureAggregates();
+      expect(store.listDailyRowsBetween("2026-04-09", "2026-04-10").length).toBe(2);
+      expect(store.listMonthlyRows().length).toBe(1);
+
+      // Test resetCache removes sync_context
+      store.saveSyncContext({ codexHomePath: "/tmp", timeZone: "UTC", parseVersion: 9 });
+      expect(store.loadSyncContext().parseVersion).toBe(9);
+      store.resetCache();
+      expect(store.loadSyncContext().parseVersion).toBeNull();
     } finally {
       store.close();
       removeTempDir(tempDir);
