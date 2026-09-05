@@ -105,4 +105,26 @@ invalid json
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
   });
+
+  it("extracts model_provider from session_meta", async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "parser-test-"));
+    try {
+      const sessionContent = `
+{"type":"session_meta","timestamp":"2026-04-09T01:00:00.000Z","payload":{"id":"test-session","model_provider":"fucheers"}}
+{"type":"turn_context","timestamp":"2026-04-09T01:00:01.000Z","payload":{"model":"gpt-5.6-sol"}}
+{"type":"event_msg","timestamp":"2026-04-09T01:02:00.000Z","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":100,"cached_input_tokens":40,"cache_creation_input_tokens":0,"output_tokens":10,"reasoning_output_tokens":0,"total_tokens":110}}}}
+`;
+      const filePath = writeSession(tempDir, "2026/04/09/fucheers-example.jsonl", sessionContent);
+      const sessionsRoot = path.join(tempDir, "sessions");
+
+      const parsed = await parseSessionFile(filePath, sessionsRoot, "Asia/Shanghai");
+
+      expect(parsed.provider).toBe("fucheers");
+      expect(parsed.usages.length).toBe(1);
+      expect(parsed.usages[0].provider).toBe("fucheers");
+      expect(parsed.usages[0].totals.inputTokens).toBe(100);
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
 });

@@ -67,7 +67,7 @@ export class AppState {
   public readonly codexHomePath: string;
   public readonly settingsPath: string;
   public readonly timeZone: string;
-  public readonly parseVersion: number = 8;
+  public readonly parseVersion: number = 9;
   public readonly databasePathLocked: boolean;
 
   private settings: AppSettings;

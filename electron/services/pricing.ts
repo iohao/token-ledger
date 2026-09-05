@@ -153,6 +153,7 @@ export function pricingProviders(
     rechargeRatioUsdPerRmb: relay.rechargeRatioUsdPerRmb ?? null,
     multiplier: relay.multiplier ?? 1.0,
     templateId: relay.templateId ?? null,
+    codexProviderId: relay.codexProviderId ?? null,
     modelPrices: resolveProviderModelPrices(relay, templates)
   }));
 
@@ -275,6 +276,7 @@ export function validateRelayPricingProviders(
     }
 
     const templateId = provider.templateId?.trim() || null;
+    const codexProviderId = provider.codexProviderId?.trim() || null;
 
     const models = new Set<string>();
     const modelPrices: ProviderModelPricingDTO[] = [];
@@ -302,6 +304,7 @@ export function validateRelayPricingProviders(
       rechargeRatioUsdPerRmb: ratio ?? null,
       multiplier,
       templateId,
+      codexProviderId,
       modelPrices
     });
   }

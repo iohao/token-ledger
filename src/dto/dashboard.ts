@@ -49,6 +49,7 @@ export interface RelayPricingProviderDTO {
   rechargeRatioUsdPerRmb: number | null;
   multiplier?: number | null;
   templateId?: string | null;
+  codexProviderId?: string | null;
   modelPrices?: ProviderModelPricingDTO[];
 }
 
@@ -144,6 +145,27 @@ export interface DashboardMetaDTO {
   relayPricingVisibleModels?: string[] | null;
 }
 
+export interface DailyProviderActualSpendDTO {
+  providerId: string | null;
+  providerName: string;
+  codexProvider: string;
+  sessionCount: number;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  costUsd: number;
+  costCny: number | null;
+}
+
+export interface DailyActualSpendDTO {
+  dateKey: string;
+  totalCostCny: number;
+  totalCostUsd: number;
+  totalTokens: number;
+  sessionCount: number;
+  providers: DailyProviderActualSpendDTO[];
+}
+
 export interface DashboardPayloadDTO {
   meta: DashboardMetaDTO;
   status: SyncStatusDTO;
@@ -153,6 +175,7 @@ export interface DashboardPayloadDTO {
   dailyHistory: DailyUsageSummaryDTO[];
   activityHistory: DailyUsageSummaryDTO[];
   monthlyHistory: MonthlyUsageSummaryDTO[];
+  actualSpendHistory?: DailyActualSpendDTO[];
   now: string;
 }
 

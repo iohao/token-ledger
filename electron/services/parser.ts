@@ -22,6 +22,7 @@ export interface DailySessionModelUsage {
   dateKey: string;
   model: string;
   isFallback: boolean;
+  provider: string | null;
   totals: UsageTotalsDTO;
 }
 
@@ -31,6 +32,7 @@ export interface ParsedSessionFile {
   fileSize: number;
   modifiedAt: Date;
   latestUsageAt: Date | null;
+  provider: string | null;
   usages: DailySessionModelUsage[];
 }
 
@@ -38,6 +40,7 @@ interface UsagePoint {
   timestamp: Date;
   model: string;
   isFallback: boolean;
+  provider: string | null;
   totals: UsageTotalsDTO;
 }
 
@@ -213,6 +216,7 @@ export async function parseSessionFile(
 
   let currentModel: string | null = null;
   let currentModelIsFallback = false;
+  let currentProvider: string | null = null;
   let previousTotalUsage: RawUsage | null = null;
   let latestUsageAt: Date | null = null;
   const points: UsagePoint[] = [];
@@ -242,6 +246,13 @@ export async function parseSessionFile(
     const timestampStr = typeof jsonValue.timestamp === "string" ? jsonValue.timestamp : null;
     const timestamp = timestampStr ? parseTimestamp(timestampStr) : null;
     const payload = jsonValue.payload ?? null;
+
+    if (entryType === "session_meta" && payload && typeof payload === "object") {
+      if (typeof payload.model_provider === "string" && payload.model_provider.trim()) {
+        currentProvider = payload.model_provider.trim();
+      }
+      continue;
+    }
 
     if (entryType === "turn_context") {
       const extractedModel = extractModel(payload);
@@ -318,6 +329,7 @@ export async function parseSessionFile(
       timestamp,
       model,
       isFallback,
+      provider: currentProvider,
       totals: {
         ...totals,
         costUSD: costFor(totals, model)
@@ -325,12 +337,12 @@ export async function parseSessionFile(
     });
   }
 
-  // Aggregate by dateKey + model + isFallback
+  // Aggregate by dateKey + model + isFallback + provider
   const aggregated = new Map<string, DailySessionModelUsage>();
 
   for (const point of points) {
     const dateKey = dateKeyFor(point.timestamp, timeZone);
-    const key = `${dateKey}\0${point.model}\0${point.isFallback ? 1 : 0}`;
+    const key = `${dateKey}\0${point.model}\0${point.isFallback ? 1 : 0}\0${point.provider ?? ""}`;
 
     const existing = aggregated.get(key);
     if (existing) {
@@ -342,6 +354,7 @@ export async function parseSessionFile(
         dateKey,
         model: point.model,
         isFallback: point.isFallback,
+        provider: point.provider,
         totals: { ...point.totals }
       });
     }
@@ -364,6 +377,7 @@ export async function parseSessionFile(
     fileSize,
     modifiedAt,
     latestUsageAt,
+    provider: currentProvider,
     usages
   };
 }

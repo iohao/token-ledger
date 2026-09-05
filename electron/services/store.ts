@@ -31,6 +31,15 @@ export interface StoredMonthlyAggregate {
   totals: UsageTotalsDTO;
 }
 
+export interface StoredDailyProviderUsage {
+  dateKey: string;
+  provider: string;
+  model: string;
+  isFallback: boolean;
+  totals: UsageTotalsDTO;
+  sessionCount: number;
+}
+
 export function idleSyncStatus(): SyncStatusDTO {
   return {
     state: "idle",
@@ -113,7 +122,8 @@ export class UsageStore {
         modified_at TEXT NOT NULL,
         parse_version INTEGER NOT NULL,
         last_synced_at TEXT NOT NULL,
-        latest_usage_at TEXT
+        latest_usage_at TEXT,
+        provider TEXT
       );
 
       CREATE TABLE IF NOT EXISTS session_daily_usage (
@@ -122,6 +132,7 @@ export class UsageStore {
         usage_date TEXT NOT NULL,
         model TEXT NOT NULL,
         is_fallback INTEGER NOT NULL,
+        provider TEXT,
         input_tokens INTEGER NOT NULL,
         cached_input_tokens INTEGER NOT NULL,
         cache_creation_input_tokens INTEGER NOT NULL DEFAULT 0,
@@ -172,6 +183,9 @@ export class UsageStore {
         value TEXT NOT NULL
       );
     `);
+
+    this.ensureColumn("source_sessions", "provider", "TEXT");
+    this.ensureColumn("session_daily_usage", "provider", "TEXT");
 
     for (const table of ["session_daily_usage", "daily_usage", "monthly_usage"]) {
       this.ensureColumn(table, "cache_creation_input_tokens", "INTEGER NOT NULL DEFAULT 0");
@@ -328,6 +342,7 @@ export class UsageStore {
         usage_date,
         model,
         is_fallback,
+        provider,
         input_tokens,
         cached_input_tokens,
         cache_creation_input_tokens,
@@ -336,7 +351,7 @@ export class UsageStore {
         total_tokens,
         request_count,
         cost_usd
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `
     );
     const insertSource = this.db.prepare(
@@ -348,15 +363,17 @@ export class UsageStore {
         modified_at,
         parse_version,
         last_synced_at,
-        latest_usage_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        latest_usage_at,
+        provider
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(session_id) DO UPDATE SET
         relative_path = excluded.relative_path,
         file_size = excluded.file_size,
         modified_at = excluded.modified_at,
         parse_version = excluded.parse_version,
         last_synced_at = excluded.last_synced_at,
-        latest_usage_at = excluded.latest_usage_at
+        latest_usage_at = excluded.latest_usage_at,
+        provider = excluded.provider
     `
     );
 
@@ -371,6 +388,7 @@ export class UsageStore {
             usage.dateKey,
             usage.model,
             usage.isFallback ? 1 : 0,
+            usage.provider,
             usage.totals.inputTokens,
             usage.totals.cachedInputTokens,
             usage.totals.cacheCreationInputTokens,
@@ -389,7 +407,8 @@ export class UsageStore {
           file.modifiedAt.toISOString(),
           parseVersion,
           syncedAt.toISOString(),
-          file.latestUsageAt ? file.latestUsageAt.toISOString() : null
+          file.latestUsageAt ? file.latestUsageAt.toISOString() : null,
+          file.provider
         );
       }
     });
@@ -550,6 +569,53 @@ export class UsageStore {
         totalTokens: r.total_tokens,
         requestCount: r.request_count,
         costUSD: r.cost_usd
+      }
+    }));
+  }
+
+  public listDailyProviderActualUsage(
+    lowerBound: string,
+    upperBound: string
+  ): StoredDailyProviderUsage[] {
+    const rows = this.db
+      .prepare(
+        `
+      SELECT
+        usage_date,
+        COALESCE(provider, 'unknown') AS provider,
+        model,
+        is_fallback,
+        SUM(input_tokens) AS input_tokens,
+        SUM(cached_input_tokens) AS cached_input_tokens,
+        SUM(cache_creation_input_tokens) AS cache_creation_input_tokens,
+        SUM(output_tokens) AS output_tokens,
+        SUM(reasoning_output_tokens) AS reasoning_output_tokens,
+        SUM(total_tokens) AS total_tokens,
+        SUM(request_count) AS request_count,
+        COUNT(DISTINCT session_id) AS session_count
+      FROM session_daily_usage
+      WHERE usage_date >= ? AND usage_date <= ?
+      GROUP BY usage_date, COALESCE(provider, 'unknown'), model, is_fallback
+      ORDER BY usage_date DESC, total_tokens DESC, model ASC
+    `
+      )
+      .all(lowerBound, upperBound) as any[];
+
+    return rows.map((r) => ({
+      dateKey: r.usage_date,
+      provider: r.provider,
+      model: r.model,
+      isFallback: r.is_fallback === 1,
+      sessionCount: r.session_count,
+      totals: {
+        inputTokens: r.input_tokens,
+        cachedInputTokens: r.cached_input_tokens,
+        cacheCreationInputTokens: r.cache_creation_input_tokens,
+        outputTokens: r.output_tokens,
+        reasoningOutputTokens: r.reasoning_output_tokens,
+        totalTokens: r.total_tokens,
+        requestCount: r.request_count,
+        costUSD: 0.0
       }
     }));
   }

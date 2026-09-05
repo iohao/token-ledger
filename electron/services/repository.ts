@@ -10,6 +10,9 @@ import {
 import {
   costFor,
   costForProvider,
+  costForRates,
+  officialPricingFor,
+  pricingIdentity,
   pricingProviders
 } from "./pricing";
 import {
@@ -25,6 +28,8 @@ import {
   type StoredMonthlyAggregate
 } from "./store";
 import type {
+  DailyActualSpendDTO,
+  DailyProviderActualSpendDTO,
   DailyUsageSummaryDTO,
   DashboardMetaDTO,
   DashboardPayloadDTO,
@@ -166,6 +171,96 @@ function removedSessionIds(
   return removed;
 }
 
+export function parseCodexConfigTomlProviders(
+  codexHomePath: string
+): Map<string, { name?: string; baseUrl?: string }> {
+  const map = new Map<string, { name?: string; baseUrl?: string }>();
+  const configPath = path.join(codexHomePath, "config.toml");
+  if (!fs.existsSync(configPath)) return map;
+
+  try {
+    const content = fs.readFileSync(configPath, "utf8");
+    const lines = content.split("\n");
+    let currentId: string | null = null;
+
+    for (const rawLine of lines) {
+      const line = rawLine.trim();
+      const sectionMatch = line.match(/^\[model_providers\.([a-zA-Z0-9_\-]+)\]$/);
+      if (sectionMatch) {
+        currentId = sectionMatch[1].toLowerCase();
+        if (!map.has(currentId)) {
+          map.set(currentId, {});
+        }
+        continue;
+      }
+      if (line.startsWith("[")) {
+        currentId = null;
+        continue;
+      }
+      if (currentId) {
+        const kvMatch = line.match(/^([a-zA-Z0-9_\-]+)\s*=\s*["']([^"']*)["']/);
+        if (kvMatch) {
+          const key = kvMatch[1];
+          const val = kvMatch[2];
+          const entry = map.get(currentId)!;
+          if (key === "name") entry.name = val;
+          if (key === "base_url") entry.baseUrl = val;
+        }
+      }
+    }
+  } catch {}
+
+  return map;
+}
+
+export function matchPricingProvider(
+  codexProvider: string,
+  providers: PricingProviderDTO[],
+  configTomlProviders?: Map<string, { name?: string; baseUrl?: string }>
+): PricingProviderDTO | null {
+  const normalized = codexProvider.trim().toLowerCase();
+
+  // 1. Explicit codexProviderId match
+  const explicit = providers.find(
+    (p) => p.codexProviderId && p.codexProviderId.trim().toLowerCase() === normalized
+  );
+  if (explicit) return explicit;
+
+  // 2. Direct name match
+  const nameMatch = providers.find(
+    (p) => p.name.trim().toLowerCase() === normalized
+  );
+  if (nameMatch) return nameMatch;
+
+  // 3. ID match
+  const idMatch = providers.find(
+    (p) => p.id.trim().toLowerCase() === normalized
+  );
+  if (idMatch) return idMatch;
+
+  // 4. Check config.toml info matching provider name
+  if (configTomlProviders && configTomlProviders.has(normalized)) {
+    const info = configTomlProviders.get(normalized)!;
+    const infoName = (info.name || "").toLowerCase();
+    const infoUrl = (info.baseUrl || "").toLowerCase();
+    const match = providers.find((p) => {
+      const pName = p.name.toLowerCase();
+      return (infoName && infoName.includes(pName)) || (infoUrl && infoUrl.includes(pName));
+    });
+    if (match) return match;
+  }
+
+  // 5. Prefix match
+  const prefixMatch = providers.find(
+    (p) =>
+      p.name.trim().toLowerCase().startsWith(normalized) ||
+      normalized.startsWith(p.name.trim().toLowerCase())
+  );
+  if (prefixMatch) return prefixMatch;
+
+  return null;
+}
+
 export class UsageRepository {
   public readonly codexHomePath: string;
   public readonly databasePath: string;
@@ -259,6 +354,7 @@ export class UsageRepository {
       dailyHistory: this.last7DayHistoryWithStatus(status),
       activityHistory: this.activityHistoryWithStatus(status),
       monthlyHistory: this.monthlyHistoryWithStatus(status),
+      actualSpendHistory: this.actualSpendHistoryLastNDays(7),
       now: formatUtcTimestamp(new Date())
     };
   }
@@ -644,6 +740,122 @@ export class UsageRepository {
   private last7DayHistoryWithStatus(status: SyncStatusDTO): DailyUsageSummaryDTO[] {
     const keys = lastNDateKeys(new Date(), this.timeZone, 7);
     return this.dailyHistoryForKeysWithStatus(keys, status);
+  }
+
+  public actualSpendHistoryLastNDays(n: number): DailyActualSpendDTO[] {
+    const keys = lastNDateKeys(new Date(), this.timeZone, n);
+    if (keys.length === 0) return [];
+
+    const lowerBound = keys[keys.length - 1] ?? "0000-01-01";
+    const upperBound = keys[0] ?? "9999-12-31";
+
+    const rows = this.store.listDailyProviderActualUsage(lowerBound, upperBound);
+    const providers = this.getPricingProviders();
+    const configTomlProviders = parseCodexConfigTomlProviders(this.codexHomePath);
+
+    const grouped = new Map<
+      string,
+      Map<
+        string,
+        {
+          totals: UsageTotalsDTO;
+          sessionCount: number;
+          matchedProvider: PricingProviderDTO | null;
+          costUsd: number;
+          costCny: number | null;
+        }
+      >
+    >();
+
+    for (const key of keys) {
+      grouped.set(key, new Map());
+    }
+
+    for (const row of rows) {
+      let dayMap = grouped.get(row.dateKey);
+      if (!dayMap) {
+        dayMap = new Map();
+        grouped.set(row.dateKey, dayMap);
+      }
+
+      const codexProvider = row.provider;
+      const matched = matchPricingProvider(codexProvider, providers, configTomlProviders);
+
+      const identity = pricingIdentity(row.model);
+      const suppliedRates = matched?.modelPrices?.find(
+        (p) => pricingIdentity(p.model) === identity
+      )?.rates;
+      const officialRates = officialPricingFor(identity);
+      const ratesToUse = suppliedRates ?? officialRates;
+      const multiplier = matched?.multiplier ?? 1.0;
+      const rechargeRatio = matched?.rechargeRatioUsdPerRmb ?? this.openaiUsdPerRmb;
+
+      const itemCostUsd = ratesToUse ? costForRates(row.totals, ratesToUse) * multiplier : 0.0;
+      const itemCostCny = rechargeRatio && rechargeRatio > 0 ? itemCostUsd / rechargeRatio : null;
+
+      let providerEntry = dayMap.get(codexProvider);
+      if (!providerEntry) {
+        providerEntry = {
+          totals: { ...row.totals },
+          sessionCount: row.sessionCount,
+          matchedProvider: matched,
+          costUsd: itemCostUsd,
+          costCny: itemCostCny
+        };
+        dayMap.set(codexProvider, providerEntry);
+      } else {
+        providerEntry.totals = addUsageTotals(providerEntry.totals, row.totals);
+        providerEntry.sessionCount += row.sessionCount;
+        providerEntry.costUsd += itemCostUsd;
+        if (itemCostCny !== null) {
+          providerEntry.costCny = (providerEntry.costCny ?? 0) + itemCostCny;
+        }
+      }
+    }
+
+    return keys.map((dateKey) => {
+      const dayMap = grouped.get(dateKey) ?? new Map();
+      const dailyProviders: DailyProviderActualSpendDTO[] = [];
+      let totalCostCny = 0.0;
+      let totalCostUsd = 0.0;
+      let totalTokens = 0;
+      let sessionCount = 0;
+
+      for (const [codexProvider, entry] of dayMap.entries()) {
+        const cny = entry.costCny ?? 0.0;
+        totalCostCny += cny;
+        totalCostUsd += entry.costUsd;
+        totalTokens += entry.totals.totalTokens;
+        sessionCount += entry.sessionCount;
+
+        const providerName =
+          entry.matchedProvider?.name ??
+          (codexProvider === "unknown" ? "未知渠道" : codexProvider);
+
+        dailyProviders.push({
+          providerId: entry.matchedProvider?.id ?? null,
+          providerName,
+          codexProvider,
+          sessionCount: entry.sessionCount,
+          inputTokens: entry.totals.inputTokens,
+          outputTokens: entry.totals.outputTokens,
+          totalTokens: entry.totals.totalTokens,
+          costUsd: entry.costUsd,
+          costCny: entry.costCny
+        });
+      }
+
+      dailyProviders.sort((a, b) => (b.costCny ?? 0) - (a.costCny ?? 0));
+
+      return {
+        dateKey,
+        totalCostCny,
+        totalCostUsd,
+        totalTokens,
+        sessionCount,
+        providers: dailyProviders
+      };
+    });
   }
 
   private activityHistoryWithStatus(status: SyncStatusDTO): DailyUsageSummaryDTO[] {

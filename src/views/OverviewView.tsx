@@ -6,6 +6,7 @@ import { PageHeader } from "../components/PageHeader";
 import { SummaryCard } from "../components/SummaryCard";
 import { ActivityWall } from "../components/ActivityWall";
 import { DailyDetailTable } from "../components/DailyDetailTable";
+import { ActualSpendLedger } from "../components/ActualSpendLedger";
 import { AUTO_SYNC_OPTIONS, type PageSourceId } from "../types";
 import { formatCountdown, formatInteger, formatTimestamp, statusLabel, statusTone } from "../utils/format";
 
@@ -176,6 +177,10 @@ export const OverviewView: React.FC = () => {
       <ActivityWall rows={dashboard?.activityHistory ?? []} timeZone={timeZone} />
 
       <section className="content-grid">
+        <ActualSpendLedger
+          rows={dashboard?.actualSpendHistory ?? []}
+          timeZone={timeZone}
+        />
         <DailyDetailTable
           title={t("lastSevenDaysDisplay")}
           rows={dashboard?.dailyHistory ?? []}

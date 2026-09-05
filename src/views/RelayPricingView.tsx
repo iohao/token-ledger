@@ -58,6 +58,7 @@ export type DraftRelayProvider = {
   rechargeRatioUsdPerRmb: string;
   multiplier: string;
   templateId?: string | null;
+  codexProviderId?: string;
   modelPrices: ProviderModelPricingDTO[];
 };
 
@@ -179,6 +180,7 @@ function toDraftProvider(
         ? "1.0000"
         : formatPrice(provider.multiplier, "1.0000"),
     templateId,
+    codexProviderId: provider.codexProviderId ?? "",
     modelPrices: mergeWithOfficialModelPrices(basePrices, defaultOfficialPrices)
   };
 }
@@ -545,6 +547,7 @@ export const RelayPricingView: React.FC = () => {
         rechargeRatioUsdPerRmb: "",
         multiplier: "1.0000",
         templateId: "openai-official",
+        codexProviderId: "",
         modelPrices: (officialProvider?.modelPrices ?? []).map((p) => ({
           model: p.model,
           rates: { ...p.rates }
@@ -699,6 +702,7 @@ export const RelayPricingView: React.FC = () => {
         rechargeRatioUsdPerRmb: ratio,
         multiplier,
         templateId: provider.templateId ?? null,
+        codexProviderId: provider.codexProviderId?.trim() || null,
         modelPrices: provider.modelPrices
       });
     }
@@ -1047,6 +1051,24 @@ const RelayProviderCard: React.FC<{
           disabled={controlsDisabled}
           onChange={(value) => onUpdate(provider.id, (item) => ({ ...item, multiplier: value }))}
         />
+        <div className="relay-config-field">
+          <label className="relay-field-label" htmlFor={`relay-codex-id-${provider.id}`}>
+            {t("relayPricingCodexProviderId")}
+          </label>
+          <div className="relay-field-input-wrap">
+            <input
+              id={`relay-codex-id-${provider.id}`}
+              type="text"
+              className="relay-plain-input"
+              value={provider.codexProviderId ?? ""}
+              placeholder={t("relayPricingCodexProviderIdPlaceholder")}
+              onChange={(event) =>
+                onUpdate(provider.id, (item) => ({ ...item, codexProviderId: event.target.value }))
+              }
+              disabled={controlsDisabled}
+            />
+          </div>
+        </div>
         <div className="relay-config-field relay-benchmark-field">
           <label className="relay-field-label" htmlFor={`relay-template-${provider.id}`}>
             {t("relayPricingBenchmarkSource")}

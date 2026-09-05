@@ -3915,3 +3915,253 @@ select {
   }
 }
 
+/* Actual Spend Ledger Styles */
+.actual-spend-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.actual-spend-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.actual-spend-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.actual-spend-title-row h3 {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 650;
+  color: var(--text);
+}
+
+.actual-spend-title-icon {
+  color: var(--primary);
+}
+
+.actual-spend-desc {
+  margin: 4px 0 0 0;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.actual-spend-summary-cards {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 12px;
+}
+
+.actual-spend-summary-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 12px 18px;
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  min-width: 180px;
+}
+
+.actual-spend-summary-primary {
+  background: linear-gradient(135deg, rgba(var(--primary-rgb, 59, 130, 246), 0.12), rgba(var(--primary-rgb, 59, 130, 246), 0.04));
+  border-color: rgba(var(--primary-rgb, 59, 130, 246), 0.28);
+}
+
+.actual-spend-card-label {
+  font-size: 0.76rem;
+  font-weight: 550;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.actual-spend-card-val {
+  font-size: 1.45rem;
+  font-weight: 700;
+  color: var(--primary-hover);
+  margin-top: 2px;
+  line-height: 1.2;
+}
+
+.actual-spend-card-sub {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.actual-spend-chips-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+}
+
+.actual-spend-chip {
+  display: flex;
+  flex-direction: column;
+  padding: 10px 14px;
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  min-width: 130px;
+}
+
+.actual-spend-chip-name {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.actual-spend-chip-amount {
+  font-size: 1.12rem;
+  font-weight: 700;
+  color: var(--text);
+  margin-top: 2px;
+}
+
+.actual-spend-chip-backend {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.72rem;
+  margin-top: 1px;
+}
+
+.actual-spend-chip-backend-tag {
+  color: var(--text-muted);
+}
+
+.actual-spend-chip-backend-val {
+  font-weight: 600;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.actual-spend-chip-sub {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.actual-spend-badges-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.actual-spend-channel-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.78rem;
+}
+
+.actual-spend-channel-badge .channel-badge-name {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.actual-spend-channel-badge .channel-badge-cost {
+  color: var(--primary-hover);
+  font-weight: 600;
+}
+
+.actual-spend-channel-badge .channel-badge-backend {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 5px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 0.72rem;
+  line-height: 1.2;
+}
+
+.actual-spend-channel-badge .channel-badge-backend-tag {
+  color: var(--text-muted);
+  font-size: 0.68rem;
+}
+
+.actual-spend-channel-badge .channel-badge-backend-val {
+  font-weight: 600;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.actual-spend-channel-badge .channel-badge-count {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.actual-spend-cell-right,
+.actual-spend-header-right {
+  text-align: right !important;
+}
+
+.actual-spend-total-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+}
+
+.actual-spend-cell-total {
+  color: var(--text);
+  font-weight: 650;
+  font-size: 0.88rem;
+}
+
+.actual-spend-cell-backend {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.actual-spend-footer-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.actual-spend-footer-chip {
+  display: inline-block;
+  font-size: 0.76rem;
+  font-weight: 550;
+  color: var(--text-secondary);
+  background: var(--surface-muted);
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.actual-spend-footer-chip-name {
+  color: var(--text);
+}
+
+.actual-spend-footer-chip-backend {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  margin-left: 2px;
+}
+
+.actual-spend-grand-total {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--primary-hover);
+}
+
+
