@@ -119,8 +119,8 @@ base_url = "https://www.fucheers.top/v1"
           id: "relay-krill",
           name: "krill",
           enabled: true,
-          multiplier: 0.2,
-          rechargeRatioUsdPerRmb: 1.0
+          multiplier: 1.0,
+          rechargeRatioUsdPerRmb: 7.3338
         }
       ];
 
@@ -155,15 +155,15 @@ base_url = "https://www.fucheers.top/v1"
         expect(fucheersEntry?.costUsd).toBeCloseTo(10.5, 2);
         expect(fucheersEntry?.costCny).toBeCloseTo(1.05, 2);
 
-        // krill: $5.0 * 0.2 = $1.0 USD / 1 = ¥1.0
-        expect(krillEntry?.costUsd).toBeCloseTo(1.0, 2);
-        expect(krillEntry?.costCny).toBeCloseTo(1.0, 2);
+        // krill: $5.0 * 1.0 = $5.0 USD / 7.3338 = ¥0.6818
+        expect(krillEntry?.costUsd).toBeCloseTo(5.0, 2);
+        expect(krillEntry?.costCny).toBeCloseTo(5.0 / 7.3338, 4);
 
-        // total day cost = 1.05 + 1.0 = 2.05
-        expect(day0904.totalCostCny).toBeCloseTo(2.05, 2);
+        // total day cost = 1.05 + 5.0 / 7.3338
+        expect(day0904.totalCostCny).toBeCloseTo(1.05 + 5.0 / 7.3338, 4);
 
-        // Sorting check: RelayPricingView price krill (0.2 / 1 = 0.20) is cheaper than fucheers (2.1 / 10 = 0.21)
-        // 价格越高的越在后面: krill (0.20) is first, fucheers (0.21) is second
+        // Sorting check: RelayPricingView price krill (1.0 / 7.3338 ≈ 0.136) is cheaper than fucheers (2.1 / 10 = 0.21)
+        // 价格越高的越在后面: krill (0.136) is first, fucheers (0.21) is second
         expect(day0904.providers[0]?.providerName).toBe("krill");
         expect(day0904.providers[1]?.providerName).toBe("fucheers");
       }
