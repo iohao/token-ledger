@@ -39,6 +39,8 @@ describe("pricing service", () => {
     expect(normalizeModel("openai/gpt-5.4-2026-04-01")).toBe("gpt-5.4");
     expect(normalizeModel("openrouter/openai/gpt-5.6-sol")).toBe("gpt-5.6-sol");
     expect(normalizeModel("openai/gpt-6-astra-2026-09-01")).toBe("gpt-6-astra");
+    expect(normalizeModel("openai/gpt-6-sol-2026-09-22")).toBe("gpt-6-sol");
+    expect(normalizeModel("openrouter/openai/gpt-6-luna")).toBe("gpt-6-luna");
     expect(normalizeModel("gpt-5-codex")).toBe("gpt-5.3-codex");
     expect(normalizeModel("gpt-5.2-codex")).toBe("gpt-5.3-codex");
   });
@@ -57,6 +59,20 @@ describe("pricing service", () => {
     );
     // regular input: 800k * 8.0 = 6.4, cached: 200k * 0.8 = 0.16, output: 100k * 48.0 = 4.8. Total = 11.36
     expect(Math.abs(costAstra - 11.36)).toBeLessThan(0.000001);
+
+    const costSol = costFor(
+      totals(1_000_000, 200_000, 0, 100_000),
+      "openai/gpt-6-sol"
+    );
+    // regular input: 800k * 2.0 = 1.6, cached: 200k * 0.2 = 0.04, output: 100k * 10.0 = 1.0. Total = 2.64
+    expect(Math.abs(costSol - 2.64)).toBeLessThan(0.000001);
+
+    const costLuna = costFor(
+      totals(1_000_000, 200_000, 0, 100_000),
+      "openai/gpt-6-luna"
+    );
+    // regular input: 800k * 0.1 = 0.08, cached: 200k * 0.01 = 0.002, output: 100k * 0.5 = 0.05. Total = 0.132
+    expect(Math.abs(costLuna - 0.132)).toBeLessThan(0.000001);
   });
 
   it("provider pricing falls back to official for missing models", () => {
@@ -161,6 +177,12 @@ describe("pricing service", () => {
     expect(toml).toContain('[models."gpt-5.6-sol"]');
     expect(toml).toContain('input_per_million = "0.7500"');
     expect(toml).toContain('output_per_million = "4.5000"');
+    expect(toml).toContain('[models."gpt-6-sol"]');
+    expect(toml).toContain('input_per_million = "0.3000"');
+    expect(toml).toContain('output_per_million = "1.5000"');
+    expect(toml).toContain('[models."gpt-6-luna"]');
+    expect(toml).toContain('input_per_million = "0.0150"');
+    expect(toml).toContain('output_per_million = "0.0750"');
   });
 
   it("generates plugin pricing toml with custom model prices", () => {

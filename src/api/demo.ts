@@ -56,6 +56,8 @@ const DEMO_META: DashboardMetaDTO = {
       multiplier: 1.0,
       modelPrices: [
         { model: "gpt-6-astra", rates: pricingRates([8, 48, 0.8, 10]) },
+        { model: "gpt-6-sol", rates: pricingRates([2, 10, 0.2, 2.5]) },
+        { model: "gpt-6-luna", rates: pricingRates([0.1, 0.5, 0.01, 0.125]) },
         { model: "gpt-5.6-sol", rates: pricingRates([5, 30, 0.5, 6.25]) },
         { model: "gpt-5.6-terra", rates: pricingRates([2, 12, 0.2, 2.5]) },
         { model: "gpt-5.6-luna", rates: pricingRates([1, 6, 0.1, 1]) },

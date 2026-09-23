@@ -390,7 +390,14 @@ export const RelayPricingView: React.FC = () => {
   const providers = dashboard?.meta.pricingProviders ?? [];
   const officialProvider = providers.find((provider) => provider.kind === "official");
   const officialPrices = officialProvider?.modelPrices ?? [];
-  const officialModels = officialPrices.map((price) => price.model);
+  const officialModels = useMemo(
+    () => officialPrices.map((price) => price.model),
+    [officialPrices]
+  );
+  const officialModelsKey = useMemo(
+    () => officialModels.join(","),
+    [officialModels]
+  );
 
   const [pricingTemplates, setPricingTemplates] = useState<PricingTemplateDTO[]>(() => {
     return dashboard?.meta.pricingTemplates ?? [];
@@ -437,7 +444,8 @@ export const RelayPricingView: React.FC = () => {
       }
     }
 
-    if (saved && officialModels.length > 0) {
+    const currentOfficialModels = officialPrices.map((price) => price.model);
+    if (currentOfficialModels.length > 0) {
       let savedKnown: string[] | null = null;
       try {
         const rawKnown = localStorage.getItem(RELAY_PRICING_KNOWN_MODELS_STORAGE_KEY);
@@ -450,7 +458,7 @@ export const RelayPricingView: React.FC = () => {
       } catch {
         // ignore
       }
-      const reconciled = reconcileVisibleModels(saved, savedKnown, officialModels);
+      const reconciled = reconcileVisibleModels(saved, savedKnown, currentOfficialModels);
       try {
         localStorage.setItem(
           RELAY_PRICING_KNOWN_MODELS_STORAGE_KEY,
@@ -474,7 +482,11 @@ export const RelayPricingView: React.FC = () => {
   const [editingBenchmarkProvider, setEditingBenchmarkProvider] = useState<DraftRelayProvider | null>(null);
   const errorSummaryRef = useRef<HTMLDivElement>(null);
 
+  const lastLocalOfficialRef = useRef<boolean | null>(null);
+  const lastSavedVisibleKeyRef = useRef<string | null>(null);
+
   const handleToggleOfficial = (enabled: boolean) => {
+    lastLocalOfficialRef.current = enabled;
     setShowOfficial(enabled);
     try {
       localStorage.setItem(RELAY_PRICING_SHOW_OFFICIAL_STORAGE_KEY, String(enabled));
@@ -486,18 +498,44 @@ export const RelayPricingView: React.FC = () => {
 
   useEffect(() => {
     if (typeof dashboard?.meta.relayPricingShowOfficial === "boolean") {
+      if (
+        lastLocalOfficialRef.current !== null &&
+        dashboard.meta.relayPricingShowOfficial !== lastLocalOfficialRef.current
+      ) {
+        return;
+      }
+      lastLocalOfficialRef.current = null;
       setShowOfficial(dashboard.meta.relayPricingShowOfficial);
     }
   }, [dashboard?.meta.relayPricingShowOfficial]);
+
+  const dashboardVisibleModels = dashboard?.meta.relayPricingVisibleModels;
+  const dashboardVisibleModelsKey = useMemo(() => {
+    return Array.isArray(dashboardVisibleModels)
+      ? dashboardVisibleModels.slice().sort().join(",")
+      : null;
+  }, [dashboardVisibleModels]);
 
   useEffect(() => {
     if (officialModels.length === 0) {
       return;
     }
 
+    if (
+      lastSavedVisibleKeyRef.current !== null &&
+      dashboardVisibleModelsKey !== null &&
+      dashboardVisibleModelsKey !== lastSavedVisibleKeyRef.current
+    ) {
+      return;
+    }
+
+    if (dashboardVisibleModelsKey === lastSavedVisibleKeyRef.current) {
+      lastSavedVisibleKeyRef.current = null;
+    }
+
     let saved: string[] | null = null;
-    if (Array.isArray(dashboard?.meta.relayPricingVisibleModels)) {
-      saved = dashboard.meta.relayPricingVisibleModels.map(String);
+    if (Array.isArray(dashboardVisibleModels)) {
+      saved = dashboardVisibleModels.map(String);
     } else {
       try {
         const raw = localStorage.getItem(RELAY_PRICING_VISIBLE_MODELS_STORAGE_KEY);
@@ -544,7 +582,7 @@ export const RelayPricingView: React.FC = () => {
     }
 
     setVisibleModels(reconciled.visibleModels);
-  }, [dashboard?.meta.relayPricingVisibleModels, officialModels]);
+  }, [dashboardVisibleModelsKey, officialModelsKey]);
 
   const handleToggleModelVisibility = (model: string, visible: boolean) => {
     setVisibleModels((current) => {
@@ -555,6 +593,7 @@ export const RelayPricingView: React.FC = () => {
         next.delete(model);
       }
       const modelArray = Array.from(next);
+      lastSavedVisibleKeyRef.current = modelArray.slice().sort().join(",");
       try {
         localStorage.setItem(
           RELAY_PRICING_VISIBLE_MODELS_STORAGE_KEY,
@@ -845,10 +884,11 @@ export const RelayPricingView: React.FC = () => {
                 <span className="relay-templates-count-badge">{pricingTemplates.length}</span>
               )}
             </button>
-            <label className="settings-switch-label">
+            <label className="settings-switch-label" htmlFor="relay-show-official-switch">
               <span className="settings-switch-text">{t("relayPricingShowOfficial")}</span>
               <span className="settings-switch">
                 <input
+                  id="relay-show-official-switch"
                   className="settings-switch-input"
                   type="checkbox"
                   checked={showOfficial}

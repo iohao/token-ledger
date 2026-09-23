@@ -481,9 +481,11 @@ describe("resolveDraftProviderPrices and template comparison", () => {
   });
 });
 
-describe("reconcileVisibleModels with new official models (e.g. gpt-6-astra)", () => {
+describe("reconcileVisibleModels with new official models (e.g. gpt-6-astra, gpt-6-sol, gpt-6-luna)", () => {
   const currentOfficialModels = [
     "gpt-6-astra",
+    "gpt-6-sol",
+    "gpt-6-luna",
     "gpt-5.6-sol",
     "gpt-5.6-terra",
     "gpt-5.6-luna",
@@ -494,9 +496,11 @@ describe("reconcileVisibleModels with new official models (e.g. gpt-6-astra)", (
     "gpt-5.3-codex-spark"
   ];
 
-  it("defaults to all official models including gpt-6-astra when no preferences are saved", () => {
+  it("defaults to all official models including gpt-6-astra, gpt-6-sol, and gpt-6-luna when no preferences are saved", () => {
     const result = reconcileVisibleModels(null, null, currentOfficialModels);
     expect(result.visibleModels.has("gpt-6-astra")).toBe(true);
+    expect(result.visibleModels.has("gpt-6-sol")).toBe(true);
+    expect(result.visibleModels.has("gpt-6-luna")).toBe(true);
     expect(result.visibleModels.size).toBe(currentOfficialModels.length);
     expect(result.knownModels).toEqual(currentOfficialModels);
   });
@@ -514,13 +518,31 @@ describe("reconcileVisibleModels with new official models (e.g. gpt-6-astra)", (
     ];
 
     const result = reconcileVisibleModels(oldSaved, null, currentOfficialModels);
-    // Newly added model gpt-6-astra is automatically visible
+    // Newly added models are automatically visible
     expect(result.visibleModels.has("gpt-6-astra")).toBe(true);
+    expect(result.visibleModels.has("gpt-6-sol")).toBe(true);
+    expect(result.visibleModels.has("gpt-6-luna")).toBe(true);
     // Deliberately hidden model gpt-5.4 remains hidden
     expect(result.visibleModels.has("gpt-5.4")).toBe(false);
     // Other models retain their visibility
     expect(result.visibleModels.has("gpt-5.6-sol")).toBe(true);
     expect(result.knownModels).toContain("gpt-6-astra");
+    expect(result.knownModels).toContain("gpt-6-sol");
+    expect(result.knownModels).toContain("gpt-6-luna");
+  });
+
+  it("automatically includes newly added gpt-6-sol and gpt-6-luna for users who already had gpt-6-astra", () => {
+    // User previously had preferences saved when gpt-6-astra was the latest model
+    const savedVisible = ["gpt-6-astra", "gpt-5.6-sol", "gpt-5.4-mini"];
+    const savedKnown = ["gpt-6-astra", "gpt-5.6-sol", "gpt-5.4-mini"];
+
+    const result = reconcileVisibleModels(savedVisible, savedKnown, currentOfficialModels);
+    expect(result.visibleModels.has("gpt-6-sol")).toBe(true);
+    expect(result.visibleModels.has("gpt-6-luna")).toBe(true);
+    expect(result.visibleModels.has("gpt-6-astra")).toBe(true);
+    expect(result.visibleModels.has("gpt-5.6-sol")).toBe(true);
+    expect(result.knownModels).toContain("gpt-6-sol");
+    expect(result.knownModels).toContain("gpt-6-luna");
   });
 
   it("respects user preference if gpt-6-astra was explicitly unchecked", () => {
@@ -531,10 +553,13 @@ describe("reconcileVisibleModels with new official models (e.g. gpt-6-astra)", (
     const result = reconcileVisibleModels(savedVisible, savedKnown, currentOfficialModels);
     expect(result.visibleModels.has("gpt-6-astra")).toBe(false);
     expect(result.visibleModels.has("gpt-5.6-sol")).toBe(true);
+    // Unseen models gpt-6-sol and gpt-6-luna default to visible
+    expect(result.visibleModels.has("gpt-6-sol")).toBe(true);
+    expect(result.visibleModels.has("gpt-6-luna")).toBe(true);
   });
 
-  it("computes lowest prices and diff correctly with gpt-6-astra benchmark rates", () => {
-    const officialWithAstra = [
+  it("computes lowest prices and diff correctly with gpt-6 series benchmark rates", () => {
+    const officialWithGpt6 = [
       {
         model: "gpt-6-astra",
         rates: {
@@ -542,6 +567,24 @@ describe("reconcileVisibleModels with new official models (e.g. gpt-6-astra)", (
           outputUsdPerMillion: 48.0,
           cacheReadUsdPerMillion: 0.8,
           cacheCreationUsdPerMillion: 10.0
+        }
+      },
+      {
+        model: "gpt-6-sol",
+        rates: {
+          inputUsdPerMillion: 2.0,
+          outputUsdPerMillion: 10.0,
+          cacheReadUsdPerMillion: 0.2,
+          cacheCreationUsdPerMillion: 2.5
+        }
+      },
+      {
+        model: "gpt-6-luna",
+        rates: {
+          inputUsdPerMillion: 0.1,
+          outputUsdPerMillion: 0.5,
+          cacheReadUsdPerMillion: 0.01,
+          cacheCreationUsdPerMillion: 0.125
         }
       }
     ];
@@ -557,15 +600,26 @@ describe("reconcileVisibleModels with new official models (e.g. gpt-6-astra)", (
       rechargeRatioUsdPerRmb: "0.1400"
     };
 
-    const comparison = computeLowestModelsByProvider([providerA, providerB], officialWithAstra);
+    const comparison = computeLowestModelsByProvider([providerA, providerB], officialWithGpt6);
     const cheapAstra = comparison.get("relay-cheap")?.get("gpt-6-astra");
     const stdAstra = comparison.get("relay-standard")?.get("gpt-6-astra");
-
     expect(cheapAstra?.isLowest).toBe(true);
     expect(cheapAstra?.diffPercent).toBeNull();
-
     expect(stdAstra?.isLowest).toBe(false);
-    // (8.0 - 6.0) / 6.0 = 33.3%
     expect(stdAstra?.diffPercent).toBe("33.3%");
+
+    const cheapSol = comparison.get("relay-cheap")?.get("gpt-6-sol");
+    const stdSol = comparison.get("relay-standard")?.get("gpt-6-sol");
+    expect(cheapSol?.isLowest).toBe(true);
+    expect(cheapSol?.diffPercent).toBeNull();
+    expect(stdSol?.isLowest).toBe(false);
+    expect(stdSol?.diffPercent).toBe("33.3%");
+
+    const cheapLuna = comparison.get("relay-cheap")?.get("gpt-6-luna");
+    const stdLuna = comparison.get("relay-standard")?.get("gpt-6-luna");
+    expect(cheapLuna?.isLowest).toBe(true);
+    expect(cheapLuna?.diffPercent).toBeNull();
+    expect(stdLuna?.isLowest).toBe(false);
+    expect(stdLuna?.diffPercent).toBe("33.3%");
   });
 });

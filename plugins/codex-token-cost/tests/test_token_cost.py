@@ -109,6 +109,8 @@ class PricingTests(unittest.TestCase):
         self.assertEqual(tc.normalize_model("openrouter/openai/gpt-5.6"), "gpt-5.6-sol")
         self.assertEqual(tc.normalize_model("openai/gpt-6-astra-2026-09-01"), "gpt-6-astra")
         self.assertEqual(tc.normalize_model("openrouter/openai/gpt-6"), "gpt-6-astra")
+        self.assertEqual(tc.normalize_model("openai/gpt-6-sol-2026-09-22"), "gpt-6-sol")
+        self.assertEqual(tc.normalize_model("openrouter/openai/gpt-6-luna"), "gpt-6-luna")
         self.assertEqual(tc.normalize_model("gpt-5-codex"), "gpt-5.3-codex")
         self.assertEqual(tc.normalize_model("azure/gpt-5.4-mini"), "gpt-5.4-mini")
 
