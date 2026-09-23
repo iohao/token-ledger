@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { dateKeyFor } from "../electron/services/dateKeys";
 import {
   compareActualSpendProviders,
   getActualSpendProviderPrice,
@@ -85,17 +86,19 @@ base_url = "https://www.fucheers.top/v1"
       const sessionsRoot = path.join(codexHome, "sessions");
       fs.mkdirSync(sessionsRoot, { recursive: true });
 
-      // Create session 1: custom (fucheers) on 2026-09-04
+      const todayKey = dateKeyFor(new Date(), "Asia/Shanghai");
+
+      // Create session 1: custom (fucheers) on todayKey
       const session1 = `
-{"type":"session_meta","timestamp":"2026-09-04T02:00:00.000Z","payload":{"id":"session-1","model_provider":"custom"}}
-{"type":"turn_context","timestamp":"2026-09-04T02:00:01.000Z","payload":{"model":"gpt-5.6-sol"}}
-{"type":"event_msg","timestamp":"2026-09-04T02:05:00.000Z","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":1000000,"cached_input_tokens":0,"cache_creation_input_tokens":0,"output_tokens":0,"reasoning_output_tokens":0,"total_tokens":1000000}}}}
+{"type":"session_meta","timestamp":"${todayKey}T02:00:00.000Z","payload":{"id":"session-1","model_provider":"custom"}}
+{"type":"turn_context","timestamp":"${todayKey}T02:00:01.000Z","payload":{"model":"gpt-5.6-sol"}}
+{"type":"event_msg","timestamp":"${todayKey}T02:05:00.000Z","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":1000000,"cached_input_tokens":0,"cache_creation_input_tokens":0,"output_tokens":0,"reasoning_output_tokens":0,"total_tokens":1000000}}}}
 `;
-      // Create session 2: krill on 2026-09-04
+      // Create session 2: krill on todayKey
       const session2 = `
-{"type":"session_meta","timestamp":"2026-09-04T10:00:00.000Z","payload":{"id":"session-2","model_provider":"krill"}}
-{"type":"turn_context","timestamp":"2026-09-04T10:00:01.000Z","payload":{"model":"gpt-5.6-sol"}}
-{"type":"event_msg","timestamp":"2026-09-04T10:05:00.000Z","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":1000000,"cached_input_tokens":0,"cache_creation_input_tokens":0,"output_tokens":0,"reasoning_output_tokens":0,"total_tokens":1000000}}}}
+{"type":"session_meta","timestamp":"${todayKey}T10:00:00.000Z","payload":{"id":"session-2","model_provider":"krill"}}
+{"type":"turn_context","timestamp":"${todayKey}T10:00:01.000Z","payload":{"model":"gpt-5.6-sol"}}
+{"type":"event_msg","timestamp":"${todayKey}T10:05:00.000Z","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":1000000,"cached_input_tokens":0,"cache_creation_input_tokens":0,"output_tokens":0,"reasoning_output_tokens":0,"total_tokens":1000000}}}}
 `;
       fs.writeFileSync(path.join(sessionsRoot, "s1.jsonl"), session1, "utf8");
       fs.writeFileSync(path.join(sessionsRoot, "s2.jsonl"), session2, "utf8");
@@ -138,14 +141,14 @@ base_url = "https://www.fucheers.top/v1"
       const actualSpend = repo.actualSpendHistoryLastNDays(7);
       expect(actualSpend.length).toBe(7);
 
-      const day0904 = actualSpend.find((d) => d.dateKey === "2026-09-04");
-      expect(day0904).toBeDefined();
-      if (day0904) {
-        expect(day0904.sessionCount).toBe(2);
-        expect(day0904.providers.length).toBe(2);
+      const dayToday = actualSpend.find((d) => d.dateKey === todayKey);
+      expect(dayToday).toBeDefined();
+      if (dayToday) {
+        expect(dayToday.sessionCount).toBe(2);
+        expect(dayToday.providers.length).toBe(2);
 
-        const fucheersEntry = day0904.providers.find((p) => p.providerName === "fucheers");
-        const krillEntry = day0904.providers.find((p) => p.providerName === "krill");
+        const fucheersEntry = dayToday.providers.find((p) => p.providerName === "fucheers");
+        const krillEntry = dayToday.providers.find((p) => p.providerName === "krill");
 
         expect(fucheersEntry).toBeDefined();
         expect(krillEntry).toBeDefined();
@@ -160,12 +163,12 @@ base_url = "https://www.fucheers.top/v1"
         expect(krillEntry?.costCny).toBeCloseTo(5.0 / 7.3338, 4);
 
         // total day cost = 1.05 + 5.0 / 7.3338
-        expect(day0904.totalCostCny).toBeCloseTo(1.05 + 5.0 / 7.3338, 4);
+        expect(dayToday.totalCostCny).toBeCloseTo(1.05 + 5.0 / 7.3338, 4);
 
         // Sorting check: RelayPricingView price krill (1.0 / 7.3338 ≈ 0.136) is cheaper than fucheers (2.1 / 10 = 0.21)
         // 价格越高的越在后面: krill (0.136) is first, fucheers (0.21) is second
-        expect(day0904.providers[0]?.providerName).toBe("krill");
-        expect(day0904.providers[1]?.providerName).toBe("fucheers");
+        expect(dayToday.providers[0]?.providerName).toBe("krill");
+        expect(dayToday.providers[1]?.providerName).toBe("fucheers");
       }
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });
