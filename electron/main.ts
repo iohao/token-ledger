@@ -12,6 +12,14 @@ const SOURCE_REPOSITORY_URL = "https://github.com/iohao/token-ledger";
 
 app.name = "TokenLedger";
 
+// Disable experimental Skia Graphite renderer which causes GPU process crashes
+// (e.g. "Graphite insertRecording failed with status 5", "Attempt to read from an uninitialized SharedImage")
+app.commandLine.appendSwitch("disable-features", "SkiaGraphite");
+
+if (process.env.TOKENLEDGER_DISABLE_GPU === "1" || process.argv.includes("--disable-gpu")) {
+  app.disableHardwareAcceleration();
+}
+
 let mainWindow: BrowserWindow | null = null;
 let appState: AppState | null = null;
 
