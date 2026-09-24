@@ -246,6 +246,26 @@ export function parsePositive(value: string): number | null {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
+export function calculateRmbRate(
+  effectivePrice: number | null | undefined,
+  rechargeRatioUsdPerRmb: string | number | null | undefined
+): number | null {
+  if (typeof effectivePrice !== "number" || !Number.isFinite(effectivePrice)) {
+    return null;
+  }
+  const ratio =
+    typeof rechargeRatioUsdPerRmb === "number"
+      ? rechargeRatioUsdPerRmb > 0 && Number.isFinite(rechargeRatioUsdPerRmb)
+        ? rechargeRatioUsdPerRmb
+        : null
+      : parsePositive(String(rechargeRatioUsdPerRmb ?? ""));
+  if (ratio === null || ratio <= 0) {
+    return null;
+  }
+  const rmbPrice = effectivePrice / ratio;
+  return Number.isFinite(rmbPrice) ? rmbPrice : null;
+}
+
 export function getProviderEffectiveCost(provider: {
   multiplier?: string | number | null;
   rechargeRatioUsdPerRmb?: string | number | null;
@@ -1251,6 +1271,7 @@ const RelayProviderCard: React.FC<{
         officialPrices={officialPrices}
         providerPrices={effectivePrices}
         multiplier={provider.multiplier}
+        rechargeRatioUsdPerRmb={provider.rechargeRatioUsdPerRmb}
         modelComparisons={modelComparisons}
       />
     </article>
@@ -1394,8 +1415,15 @@ const RelayRatePreviewTable: React.FC<{
   officialPrices: Array<{ model: string; rates: ModelPricingRatesDTO }>;
   providerPrices?: ProviderModelPricingDTO[];
   multiplier: string;
+  rechargeRatioUsdPerRmb?: string | number | null;
   modelComparisons?: Map<string, ProviderModelPriceComparison>;
-}> = ({ officialPrices, providerPrices, multiplier, modelComparisons }) => {
+}> = ({
+  officialPrices,
+  providerPrices,
+  multiplier,
+  rechargeRatioUsdPerRmb,
+  modelComparisons
+}) => {
   const { t } = useTranslation();
   const providerPriceMap = useMemo(
     () => new Map((providerPrices ?? []).map((p) => [p.model, p.rates])),
@@ -1442,10 +1470,9 @@ const RelayRatePreviewTable: React.FC<{
                 </td>
                 {PRICE_FIELDS.map((field) => {
                   const baseRate = providerRates?.[field.key] ?? officialPrice.rates?.[field.key] ?? 0;
-                  const hasMultiplier =
-                    numericMultiplier !== null && Math.abs(numericMultiplier - 1) > 0.00001;
                   const effectivePrice =
                     numericMultiplier !== null && typeof baseRate === "number" ? baseRate * numericMultiplier : null;
+                  const rmbPrice = calculateRmbRate(effectivePrice, rechargeRatioUsdPerRmb);
 
                   return (
                     <td key={field.key}>
@@ -1453,12 +1480,10 @@ const RelayRatePreviewTable: React.FC<{
                         {effectivePrice !== null && Number.isFinite(effectivePrice) ? (
                           <>
                             <strong>${formatDisplayRate(effectivePrice)} / 1M</strong>
-                            {hasMultiplier && (
+                            {rmbPrice !== null && (
                               <small className="relay-rate-subtext">
-                                <span>
-                                  {t("relayPricingRelayBase", {
-                                    price: formatDisplayRate(baseRate)
-                                  })}
+                                <span className="relay-rmb-price">
+                                  ¥{formatDisplayRate(rmbPrice)} / 1M
                                 </span>
                               </small>
                             )}

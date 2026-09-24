@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import {
+  calculateRmbRate,
   compareRelayProvidersByPrice,
   computeLowestModelsByProvider,
   countCustomizedModels,
@@ -392,6 +393,37 @@ describe("formatPrice & formatDisplayRate robustness", () => {
     expect(formatDisplayRate(undefined)).toBe("0.0000");
     expect(formatDisplayRate(null)).toBe("0.0000");
     expect(formatDisplayRate(Number.NaN)).toBe("0.0000");
+  });
+
+  it("calculates RMB rate accurately from effective price and recharge ratio", () => {
+    // 2.5 USD / 0.14 = 17.85714... RMB
+    const rmb = calculateRmbRate(2.5, "0.1400");
+    expect(rmb).not.toBeNull();
+    expect(formatDisplayRate(rmb)).toBe("17.8571");
+
+    // 0.15 USD / 0.14 = 1.071428... RMB
+    const rmb2 = calculateRmbRate(0.15, "0.1400");
+    expect(rmb2).not.toBeNull();
+    expect(formatDisplayRate(rmb2)).toBe("1.0714");
+
+    // 1:1 ratio
+    expect(calculateRmbRate(1.25, "1.0000")).toBe(1.25);
+    expect(calculateRmbRate(1.25, 1.0)).toBe(1.25);
+
+    // 0 rate
+    expect(calculateRmbRate(0, "0.1400")).toBe(0);
+  });
+
+  it("handles missing or invalid inputs gracefully in calculateRmbRate", () => {
+    expect(calculateRmbRate(null, "0.1400")).toBeNull();
+    expect(calculateRmbRate(undefined, "0.1400")).toBeNull();
+    expect(calculateRmbRate(Number.NaN, "0.1400")).toBeNull();
+
+    expect(calculateRmbRate(2.5, "")).toBeNull();
+    expect(calculateRmbRate(2.5, "0")).toBeNull();
+    expect(calculateRmbRate(2.5, "-0.14")).toBeNull();
+    expect(calculateRmbRate(2.5, null)).toBeNull();
+    expect(calculateRmbRate(2.5, undefined)).toBeNull();
   });
 });
 

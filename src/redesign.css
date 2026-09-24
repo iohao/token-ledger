@@ -2886,7 +2886,9 @@ select {
 
 .relay-rmb-price {
   color: var(--text-muted);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: 11px;
+  white-space: nowrap;
 }
 
 .relay-readonly-rate {
