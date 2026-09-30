@@ -15,6 +15,7 @@ export const DEFAULT_OPENAI_USD_PER_RMB = 0.14;
 
 export const OFFICIAL_MODELS: readonly string[] = [
   "gpt-6-astra",
+  "gpt-6.1-sol",
   "gpt-6-sol",
   "gpt-6-luna",
   "gpt-5.6-sol",
@@ -83,6 +84,9 @@ export function pricingIdentity(model: string): string {
   if (normalized === "gpt-6") {
     return "gpt-6-astra";
   }
+  if (normalized === "gpt-6.1") {
+    return "gpt-6.1-sol";
+  }
   return normalized;
 }
 
@@ -90,6 +94,8 @@ export function officialPricingFor(model: string): ModelPricingRatesDTO | null {
   switch (pricingIdentity(model)) {
     case "gpt-6-astra":
       return rates(8.0, 48.0, 0.8, 10.0);
+    case "gpt-6.1-sol":
+      return rates(2.0, 10.0, 0.1, 2.5);
     case "gpt-6-sol":
       return rates(2.0, 10.0, 0.2, 2.5);
     case "gpt-6-luna":

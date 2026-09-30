@@ -11,6 +11,12 @@ output_per_million = "48.0000"
 cached_input_per_million = "0.8000"
 cache_creation_per_million = "10.0000"
 
+[models."gpt-6.1-sol"]
+input_per_million = "2.0000"
+output_per_million = "10.0000"
+cached_input_per_million = "0.1000"
+cache_creation_per_million = "2.5000"
+
 [models."gpt-6-sol"]
 input_per_million = "2.0000"
 output_per_million = "10.0000"
