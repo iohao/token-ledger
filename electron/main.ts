@@ -197,6 +197,38 @@ function createWindow(): BrowserWindow {
   const menu = buildAppMenu(win);
   Menu.setApplicationMenu(menu);
 
+  win.webContents.on("context-menu", (_event, params) => {
+    const hasText = Boolean(params.selectionText && params.selectionText.trim().length > 0);
+    if (!params.isEditable && !hasText) {
+      return;
+    }
+
+    const template: MenuItemConstructorOptions[] = [];
+    if (params.isEditable) {
+      template.push(
+        { role: "undo" as const },
+        { role: "redo" as const },
+        { type: "separator" as const },
+        { role: "cut" as const },
+        { role: "copy" as const },
+        { role: "paste" as const },
+        { type: "separator" as const },
+        { role: "selectAll" as const }
+      );
+    } else if (hasText) {
+      template.push(
+        { role: "copy" as const },
+        { type: "separator" as const },
+        { role: "selectAll" as const }
+      );
+    }
+
+    if (template.length > 0) {
+      const contextMenu = Menu.buildFromTemplate(template);
+      contextMenu.popup({ window: win });
+    }
+  });
+
   win.once("ready-to-show", () => {
     win.maximize();
     win.show();

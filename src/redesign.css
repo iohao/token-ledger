@@ -396,9 +396,10 @@ select {
 .page-header select,
 .page-header textarea,
 .page-source-badge,
-.page-header-actions {
+.page-header-actions,
+.page-header-copy {
   -webkit-app-region: no-drag;
-  user-select: auto;
+  user-select: text;
 }
 
 .page-header-source {
@@ -416,6 +417,17 @@ select {
 
 .page-header-copy {
   max-width: 680px;
+  -webkit-app-region: no-drag;
+  user-select: text;
+  cursor: text;
+}
+
+.page-header-copy h1,
+.page-header-copy p,
+.page-header-copy .page-kicker {
+  -webkit-app-region: no-drag;
+  user-select: text;
+  cursor: text;
 }
 
 .page-kicker {
@@ -2392,11 +2404,13 @@ select {
 /* Relay pricing comparison and provider editor */
 .relay-pricing-page {
   gap: 18px;
+  user-select: text;
 }
 
 .relay-comparison,
 .relay-provider-card {
   padding: 22px;
+  user-select: text;
 }
 
 .relay-section-head,
@@ -2721,6 +2735,7 @@ select {
   width: 100%;
   min-width: 900px;
   border-collapse: collapse;
+  user-select: text;
 }
 
 .relay-model-table th,
@@ -2729,6 +2744,7 @@ select {
   border-bottom: 1px solid var(--border);
   text-align: left;
   vertical-align: top;
+  user-select: text;
 }
 
 .relay-model-table th {
@@ -2760,6 +2776,7 @@ select {
   align-items: center;
   gap: 6px;
   flex-wrap: wrap;
+  user-select: text;
 }
 
 .relay-model-lowest-badge {
@@ -2775,6 +2792,7 @@ select {
   line-height: 1.2;
   white-space: nowrap;
   letter-spacing: 0.02em;
+  user-select: none;
 }
 
 [data-theme="light"] .relay-model-lowest-badge {
@@ -2798,6 +2816,7 @@ select {
   line-height: 1.2;
   white-space: nowrap;
   letter-spacing: 0.02em;
+  user-select: none;
 }
 
 [data-theme="light"] .relay-model-diff-badge {
@@ -2814,6 +2833,7 @@ select {
 .relay-model-table code {
   color: var(--text);
   font-size: 13px;
+  user-select: text;
 }
 
 .relay-rate-input {
@@ -3157,6 +3177,14 @@ select {
 .relay-modal-table {
   width: 100%;
   border-collapse: collapse;
+  user-select: text;
+}
+
+.relay-modal-table th,
+.relay-modal-table td {
+  padding: 8px;
+  border-bottom: 1px solid var(--border);
+  user-select: text;
 }
 
 .relay-modal-table th {
@@ -3171,9 +3199,11 @@ select {
 }
 
 .relay-modal-table td {
-  padding: 8px;
-  border-bottom: 1px solid var(--border);
   vertical-align: middle;
+}
+
+.relay-modal-table code {
+  user-select: text;
 }
 
 .relay-modal-table tr:last-child td {
@@ -3234,6 +3264,7 @@ select {
   font-weight: 600;
   background: color-mix(in srgb, var(--accent) 20%, transparent);
   color: var(--accent);
+  user-select: none;
 }
 
 .relay-row-reset-btn {
