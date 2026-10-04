@@ -242,6 +242,40 @@ describe("compareRelayProvidersByPrice", () => {
     const sorted = [...providers].sort(compareRelayProvidersByPrice);
     expect(sorted.map((p) => p.name)).toEqual(["Alpha Relay", "Beta Relay"]);
   });
+
+  it("prioritizes enabled providers over disabled providers regardless of price", () => {
+    const providers = [
+      { id: "disabled-cheap", name: "Cheap Disabled", enabled: false, multiplier: "0.5000", rechargeRatioUsdPerRmb: "1.0000" }, // cost 0.5
+      { id: "enabled-expensive", name: "Expensive Enabled", enabled: true, multiplier: "2.0000", rechargeRatioUsdPerRmb: "1.0000" }, // cost 2.0
+      { id: "enabled-cheap", name: "Cheap Enabled", enabled: true, multiplier: "0.8000", rechargeRatioUsdPerRmb: "1.0000" }, // cost 0.8
+      { id: "disabled-expensive", name: "Expensive Disabled", enabled: false, multiplier: "3.0000", rechargeRatioUsdPerRmb: "1.0000" }, // cost 3.0
+    ];
+
+    const sorted = [...providers].sort(compareRelayProvidersByPrice);
+    expect(sorted.map((p) => p.id)).toEqual([
+      "enabled-cheap",
+      "enabled-expensive",
+      "disabled-cheap",
+      "disabled-expensive"
+    ]);
+  });
+
+  it("prioritizes enabled providers and keeps unconfigured disabled at the very end", () => {
+    const providers = [
+      { id: "disabled-unconfigured", name: "Unconfigured Disabled", enabled: false, multiplier: "1.0000", rechargeRatioUsdPerRmb: "" },
+      { id: "disabled-configured", name: "Configured Disabled", enabled: false, multiplier: "1.0000", rechargeRatioUsdPerRmb: "1.0000" },
+      { id: "enabled-unconfigured", name: "Unconfigured Enabled", enabled: true, multiplier: "1.0000", rechargeRatioUsdPerRmb: "" },
+      { id: "enabled-configured", name: "Configured Enabled", enabled: true, multiplier: "1.0000", rechargeRatioUsdPerRmb: "1.0000" },
+    ];
+
+    const sorted = [...providers].sort(compareRelayProvidersByPrice);
+    expect(sorted.map((p) => p.id)).toEqual([
+      "enabled-configured",
+      "enabled-unconfigured",
+      "disabled-configured",
+      "disabled-unconfigured"
+    ]);
+  });
 });
 
 describe("computeLowestModelsByProvider with custom benchmark pricing", () => {

@@ -296,11 +296,18 @@ export function getProviderEffectiveCost(provider: {
 
 export function compareRelayProvidersByPrice<
   T extends {
+    enabled?: boolean;
     name?: string;
     multiplier?: string | number | null;
     rechargeRatioUsdPerRmb?: string | number | null;
   }
 >(a: T, b: T): number {
+  const enabledA = Boolean(a.enabled);
+  const enabledB = Boolean(b.enabled);
+  if (enabledA !== enabledB) {
+    return enabledA ? -1 : 1;
+  }
+
   const costA = getProviderEffectiveCost(a);
   const costB = getProviderEffectiveCost(b);
 
@@ -874,6 +881,11 @@ export const RelayPricingView: React.FC = () => {
       await updatePricingProviders(payload, parsedOpenaiRatio, pricingTemplates);
       setIsDirty(false);
       setSaveNotice(t("relayPricingSaved"));
+      setRelayProviders(
+        payload.map((provider) =>
+          toDraftProvider({ ...provider, kind: "relay" }, officialPrices, pricingTemplates)
+        )
+      );
       await loadDashboard();
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : String(error));
