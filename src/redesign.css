@@ -2830,6 +2830,27 @@ select {
   opacity: 0.85;
 }
 
+.relay-rate-primary-row {
+  display: flex;
+  align-items: center;
+}
+
+.relay-rmb-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.relay-cell-badge {
+  font-size: 9px;
+  padding: 0 4px;
+  line-height: 1.25;
+  letter-spacing: 0;
+  height: 15px;
+  box-sizing: border-box;
+}
+
 .relay-model-table code {
   color: var(--text);
   font-size: 13px;

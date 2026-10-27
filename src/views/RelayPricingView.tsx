@@ -84,9 +84,15 @@ export type ComparableProviderInput = {
   modelPrices?: ProviderModelPricingDTO[];
 };
 
+export type ProviderFieldPriceComparison = {
+  isLowest: boolean;
+  diffPercent: string | null;
+};
+
 export type ProviderModelPriceComparison = {
   isLowest: boolean;
   diffPercent: string | null;
+  fields?: Record<keyof ModelPricingRatesDTO, ProviderFieldPriceComparison>;
 };
 
 export type DraftRelayProvider = {
@@ -372,39 +378,73 @@ export function computeLowestModelsByProvider(
     return result;
   }
 
+  const rateKeys: Array<keyof ModelPricingRatesDTO> = [
+    "inputUsdPerMillion",
+    "outputUsdPerMillion",
+    "cacheReadUsdPerMillion",
+    "cacheCreationUsdPerMillion"
+  ];
+
   for (const price of modelPrices ?? []) {
     if (!price || !price.rates) {
       continue;
     }
-    const defaultBaseRate = price.rates.inputUsdPerMillion ?? 0;
 
-    let minCostRmb = Number.POSITIVE_INFINITY;
-    const providerCosts: Array<{ id: string; costRmb: number }> = [];
-
+    const fieldComparisonsByProvider = new Map<
+      string,
+      Record<keyof ModelPricingRatesDTO, ProviderFieldPriceComparison>
+    >();
     for (const p of comparable) {
-      const providerRates = p.modelPricesMap.get(price.model);
-      const baseRate = providerRates?.inputUsdPerMillion ?? defaultBaseRate;
-      const rateToCompare = baseRate > 0 ? baseRate : (defaultBaseRate > 0 ? defaultBaseRate : 1);
+      fieldComparisonsByProvider.set(
+        p.id,
+        {} as Record<keyof ModelPricingRatesDTO, ProviderFieldPriceComparison>
+      );
+    }
 
-      const costRmb = (rateToCompare * p.multiplier) / p.rechargeRatio;
-      providerCosts.push({ id: p.id, costRmb });
-      if (costRmb < minCostRmb) {
-        minCostRmb = costRmb;
+    for (const fieldKey of rateKeys) {
+      const defaultBaseRate = price.rates[fieldKey] ?? 0;
+      let minCostRmb = Number.POSITIVE_INFINITY;
+      const providerCosts: Array<{ id: string; costRmb: number }> = [];
+
+      for (const p of comparable) {
+        const providerRates = p.modelPricesMap.get(price.model);
+        const baseRate = providerRates?.[fieldKey] ?? defaultBaseRate;
+        const rateToCompare = typeof baseRate === "number" && baseRate >= 0 ? baseRate : defaultBaseRate;
+
+        const costRmb = (rateToCompare * p.multiplier) / p.rechargeRatio;
+        providerCosts.push({ id: p.id, costRmb });
+        if (costRmb < minCostRmb) {
+          minCostRmb = costRmb;
+        }
+      }
+
+      if (!Number.isFinite(minCostRmb) || minCostRmb < 0) {
+        continue;
+      }
+
+      for (const { id, costRmb } of providerCosts) {
+        const isLowest = Math.abs(costRmb - minCostRmb) < 1e-6;
+        const diffPercent = isLowest ? null : formatPriceDiffPercent(costRmb, minCostRmb);
+        const providerFields = fieldComparisonsByProvider.get(id);
+        if (providerFields) {
+          providerFields[fieldKey] = {
+            isLowest,
+            diffPercent
+          };
+        }
       }
     }
 
-    if (!Number.isFinite(minCostRmb) || minCostRmb <= 0) {
-      continue;
-    }
-
-    for (const { id, costRmb } of providerCosts) {
-      const isLowest = Math.abs(costRmb - minCostRmb) < 1e-6;
-      const diffPercent = isLowest ? null : formatPriceDiffPercent(costRmb, minCostRmb);
-
-      result.get(id)?.set(price.model, {
-        isLowest,
-        diffPercent
-      });
+    for (const p of comparable) {
+      const fields = fieldComparisonsByProvider.get(p.id);
+      if (fields) {
+        const inputComp = fields.inputUsdPerMillion ?? { isLowest: false, diffPercent: null };
+        result.get(p.id)?.set(price.model, {
+          isLowest: inputComp.isLowest,
+          diffPercent: inputComp.diffPercent,
+          fields
+        });
+      }
     }
   }
 
@@ -1102,6 +1142,7 @@ const OfficialProviderCard: React.FC<{
         visibleModels={visibleModels}
         onToggleModelVisibility={onToggleModelVisibility}
         modelComparisons={modelComparisons}
+        openaiRatio={openaiRatio}
       />
     </article>
   );
@@ -1356,7 +1397,8 @@ const OfficialModelTable: React.FC<{
   visibleModels: Set<string>;
   onToggleModelVisibility: (model: string, visible: boolean) => void;
   modelComparisons?: Map<string, ProviderModelPriceComparison>;
-}> = ({ prices, visibleModels, onToggleModelVisibility, modelComparisons }) => {
+  openaiRatio?: string | number | null;
+}> = ({ prices, visibleModels, onToggleModelVisibility, modelComparisons, openaiRatio }) => {
   const { t } = useTranslation();
   if (prices.length === 0) {
     return <p className="relay-no-models">{t("relayPricingNoModels")}</p>;
@@ -1380,27 +1422,44 @@ const OfficialModelTable: React.FC<{
               <tr key={price.model}>
                 <td>
                   <div className="relay-model-name-cell">
-                    {comparison?.isLowest && (
-                      <span className="relay-model-lowest-badge">
-                        {t("lowestTag")}
-                      </span>
-                    )}
-                    {comparison && !comparison.isLowest && comparison.diffPercent !== null && (
-                      <span className="relay-model-diff-badge">
-                        <TrendingUp size={10} className="relay-model-diff-icon" aria-hidden="true" />
-                        <span>{comparison.diffPercent}</span>
-                      </span>
-                    )}
                     <code>{price.model}</code>
                   </div>
                 </td>
-                {PRICE_FIELDS.map((field) => (
-                  <td key={field.key}>
-                    <div className="relay-readonly-rate">
-                      <strong>${formatPrice(price.rates?.[field.key])} / 1M</strong>
-                    </div>
-                  </td>
-                ))}
+                {PRICE_FIELDS.map((field) => {
+                  const rate = price.rates?.[field.key];
+                  const rmbPrice = calculateRmbRate(rate, openaiRatio);
+                  const fieldComparison = comparison?.fields?.[field.key];
+
+                  return (
+                    <td key={field.key}>
+                      <div className="relay-readonly-rate">
+                        <div className="relay-rate-primary-row">
+                          <strong>${formatPrice(rate)} / 1M</strong>
+                        </div>
+                        {rmbPrice !== null && (
+                          <small className="relay-rate-subtext">
+                            <div className="relay-rmb-row">
+                              <span className="relay-rmb-price">
+                                ¥{formatDisplayRate(rmbPrice)} / 1M
+                              </span>
+                              {fieldComparison?.isLowest && (
+                                <span className="relay-model-lowest-badge relay-cell-badge">
+                                  {t("lowestTag")}
+                                </span>
+                              )}
+                              {fieldComparison && !fieldComparison.isLowest && fieldComparison.diffPercent !== null && (
+                                <span className="relay-model-diff-badge relay-cell-badge">
+                                  <TrendingUp size={9} className="relay-model-diff-icon" aria-hidden="true" />
+                                  <span>{fieldComparison.diffPercent}</span>
+                                </span>
+                              )}
+                            </div>
+                          </small>
+                        )}
+                      </div>
+                    </td>
+                  );
+                })}
                 <td className="relay-cell-checkbox">
                   <label className="relay-checkbox-wrap">
                     <input
@@ -1466,17 +1525,6 @@ const RelayRatePreviewTable: React.FC<{
               <tr key={officialPrice.model}>
                 <td>
                   <div className="relay-model-name-cell">
-                    {comparison?.isLowest && (
-                      <span className="relay-model-lowest-badge">
-                        {t("lowestTag")}
-                      </span>
-                    )}
-                    {comparison && !comparison.isLowest && comparison.diffPercent !== null && (
-                      <span className="relay-model-diff-badge">
-                        <TrendingUp size={10} className="relay-model-diff-icon" aria-hidden="true" />
-                        <span>{comparison.diffPercent}</span>
-                      </span>
-                    )}
                     <code>{officialPrice.model}</code>
                   </div>
                 </td>
@@ -1485,18 +1533,34 @@ const RelayRatePreviewTable: React.FC<{
                   const effectivePrice =
                     numericMultiplier !== null && typeof baseRate === "number" ? baseRate * numericMultiplier : null;
                   const rmbPrice = calculateRmbRate(effectivePrice, rechargeRatioUsdPerRmb);
+                  const fieldComparison = comparison?.fields?.[field.key];
 
                   return (
                     <td key={field.key}>
                       <div className="relay-readonly-rate">
                         {effectivePrice !== null && Number.isFinite(effectivePrice) ? (
                           <>
-                            <strong>${formatDisplayRate(effectivePrice)} / 1M</strong>
+                            <div className="relay-rate-primary-row">
+                              <strong>${formatDisplayRate(effectivePrice)} / 1M</strong>
+                            </div>
                             {rmbPrice !== null && (
                               <small className="relay-rate-subtext">
-                                <span className="relay-rmb-price">
-                                  ¥{formatDisplayRate(rmbPrice)} / 1M
-                                </span>
+                                <div className="relay-rmb-row">
+                                  <span className="relay-rmb-price">
+                                    ¥{formatDisplayRate(rmbPrice)} / 1M
+                                  </span>
+                                  {fieldComparison?.isLowest && (
+                                    <span className="relay-model-lowest-badge relay-cell-badge">
+                                      {t("lowestTag")}
+                                    </span>
+                                  )}
+                                  {fieldComparison && !fieldComparison.isLowest && fieldComparison.diffPercent !== null && (
+                                    <span className="relay-model-diff-badge relay-cell-badge">
+                                      <TrendingUp size={9} className="relay-model-diff-icon" aria-hidden="true" />
+                                      <span>{fieldComparison.diffPercent}</span>
+                                    </span>
+                                  )}
+                                </div>
                               </small>
                             )}
                           </>

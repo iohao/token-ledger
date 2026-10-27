@@ -711,4 +711,83 @@ describe("reconcileVisibleModels with new official models (e.g. gpt-6-astra, gpt
     expect(stdLuna?.isLowest).toBe(false);
     expect(stdLuna?.diffPercent).toBe("33.3%");
   });
+
+  it("computes per-column comparisons for all pricing fields independently", () => {
+    // Provider A: multiplier 1.0, ratio 8.08 (RMB factor ~0.1238)
+    // Provider B: multiplier 2.5, ratio 10.0 (RMB factor 0.2500)
+    // gpt-6-astra rates:
+    //   Provider A: input 10, output 50, cacheRead 2, cacheCreation 12.5
+    //   Provider B: input 10, output 50, cacheRead 1, cacheCreation 12.5
+    const providerA = {
+      id: "krillCard",
+      multiplier: 1.0,
+      rechargeRatioUsdPerRmb: 8.08,
+      modelPrices: [
+        {
+          model: "gpt-6-astra",
+          rates: {
+            inputUsdPerMillion: 10,
+            outputUsdPerMillion: 50,
+            cacheReadUsdPerMillion: 2,
+            cacheCreationUsdPerMillion: 12.5
+          }
+        }
+      ]
+    };
+    const providerB = {
+      id: "fucheers",
+      multiplier: 2.5,
+      rechargeRatioUsdPerRmb: 10.0,
+      modelPrices: [
+        {
+          model: "gpt-6-astra",
+          rates: {
+            inputUsdPerMillion: 10,
+            outputUsdPerMillion: 50,
+            cacheReadUsdPerMillion: 1,
+            cacheCreationUsdPerMillion: 12.5
+          }
+        }
+      ]
+    };
+
+    const modelPrices = [
+      {
+        model: "gpt-6-astra",
+        rates: {
+          inputUsdPerMillion: 10,
+          outputUsdPerMillion: 50,
+          cacheReadUsdPerMillion: 2,
+          cacheCreationUsdPerMillion: 12.5
+        }
+      }
+    ];
+
+    const result = computeLowestModelsByProvider([providerA, providerB], modelPrices);
+    const krill = result.get("krillCard")?.get("gpt-6-astra");
+    const fucheers = result.get("fucheers")?.get("gpt-6-astra");
+
+    expect(krill).toBeDefined();
+    expect(fucheers).toBeDefined();
+
+    // Input comparison: fucheers is 102% higher (2.02x)
+    expect(krill?.fields?.inputUsdPerMillion.isLowest).toBe(true);
+    expect(fucheers?.fields?.inputUsdPerMillion.isLowest).toBe(false);
+    expect(fucheers?.fields?.inputUsdPerMillion.diffPercent).toBe("102%");
+
+    // Output comparison: fucheers is 102% higher (2.02x)
+    expect(krill?.fields?.outputUsdPerMillion.isLowest).toBe(true);
+    expect(fucheers?.fields?.outputUsdPerMillion.isLowest).toBe(false);
+    expect(fucheers?.fields?.outputUsdPerMillion.diffPercent).toBe("102%");
+
+    // Cache Read comparison: krill is 0.2475 RMB, fucheers is 0.2500 RMB -> diff is only 1%!
+    expect(krill?.fields?.cacheReadUsdPerMillion.isLowest).toBe(true);
+    expect(fucheers?.fields?.cacheReadUsdPerMillion.isLowest).toBe(false);
+    expect(fucheers?.fields?.cacheReadUsdPerMillion.diffPercent).toBe("1%");
+
+    // Cache Creation comparison: fucheers is 102% higher
+    expect(krill?.fields?.cacheCreationUsdPerMillion.isLowest).toBe(true);
+    expect(fucheers?.fields?.cacheCreationUsdPerMillion.isLowest).toBe(false);
+    expect(fucheers?.fields?.cacheCreationUsdPerMillion.diffPercent).toBe("102%");
+  });
 });
