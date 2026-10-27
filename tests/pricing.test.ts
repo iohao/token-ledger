@@ -40,6 +40,7 @@ describe("pricing service", () => {
     expect(normalizeModel("openrouter/openai/gpt-5.6-sol")).toBe("gpt-5.6-sol");
     expect(normalizeModel("openai/gpt-6-astra-2026-09-01")).toBe("gpt-6-astra");
     expect(normalizeModel("openai/gpt-6.1-sol-2026-09-29")).toBe("gpt-6.1-sol");
+    expect(normalizeModel("openai/gpt-6.1-terra-2026-10-27")).toBe("gpt-6.1-terra");
     expect(normalizeModel("openai/gpt-6-sol-2026-09-22")).toBe("gpt-6-sol");
     expect(normalizeModel("openrouter/openai/gpt-6-luna")).toBe("gpt-6-luna");
     expect(normalizeModel("gpt-5-codex")).toBe("gpt-5.3-codex");
@@ -67,6 +68,13 @@ describe("pricing service", () => {
     );
     // regular input: 800k * 2.0 = 1.6, cached: 200k * 0.1 = 0.02, output: 100k * 10.0 = 1.0. Total = 2.62
     expect(Math.abs(costSol61 - 2.62)).toBeLessThan(0.000001);
+
+    const costTerra61 = costFor(
+      totals(1_000_000, 200_000, 0, 100_000),
+      "openai/gpt-6.1-terra"
+    );
+    // regular input: 800k * 1.0 = 0.8, cached: 200k * 0.05 = 0.01, output: 100k * 5.0 = 0.5. Total = 1.31
+    expect(Math.abs(costTerra61 - 1.31)).toBeLessThan(0.000001);
 
     const costSol = costFor(
       totals(1_000_000, 200_000, 0, 100_000),
@@ -183,6 +191,7 @@ describe("pricing service", () => {
 
     const toml = generatePluginPricingToml([relay]);
     expect(toml).toContain('[models."gpt-6.1-sol"]');
+    expect(toml).toContain('[models."gpt-6.1-terra"]');
     expect(toml).toContain('[models."gpt-5.6-sol"]');
     expect(toml).toContain('input_per_million = "0.7500"');
     expect(toml).toContain('output_per_million = "4.5000"');
